@@ -73,7 +73,6 @@ class PlaceViewModel : ViewModel() {
             }
         }
     }
-
     private fun processServiceCategories(places: List<Place>) {
         // Extract all distinct facility detail types from the data without adding "전체"
         val categories = places.map { it.facilityKindDetail }.distinct().filter { it.isNotEmpty() }
@@ -89,7 +88,10 @@ class PlaceViewModel : ViewModel() {
                     // Find distinct service types for this category
                     val subCategories = placesInCategory
                         .flatMap { place ->
-                            place.service1 + place.service2
+                            // Handle service2 as a List<String> and normalize each item
+                            place.service2.map { serviceName ->
+                                normalizeServiceName(serviceName)
+                            }
                         }
                         .distinct()
                         .filter { it.isNotEmpty() }
@@ -99,6 +101,23 @@ class PlaceViewModel : ViewModel() {
             }
 
         _serviceSubcategories.value = subcategoriesMap
+    }
+
+    // Helper function to normalize service names
+    private fun normalizeServiceName(serviceName: String): String {
+        // If it contains "seniorcenter" with parentheses, normalize to just "seniorcenter"
+        // Adjust these patterns to match your actual Korean text if needed
+        val seniorCenterPattern = "(노인복지관)\\s*\\([^)]*\\)".toRegex()
+        if (seniorCenterPattern.containsMatchIn(serviceName)) {
+            return "노인복지관"
+        }
+
+        // For English text if needed
+        if (serviceName.contains("seniorcenter") && serviceName.contains("(")) {
+            return "seniorcenter"
+        }
+
+        return serviceName
     }
 
     private suspend fun fetchApiData(): List<Place> {
