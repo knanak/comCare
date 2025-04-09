@@ -29,12 +29,76 @@ class PlaceViewModel : ViewModel() {
     val filteredPlaces: State<List<Place>> = _filteredPlaces
 
     // Location hierarchy
-    val cities = listOf("전체", "서울")
+    private val _cities = mutableStateOf<List<String>>(listOf("전체"))
+    val cities: State<List<String>> = _cities
 
-    val districts = mapOf(
-        "전체" to listOf("전체"),
-        "서울" to listOf("전체", "강북구", "성북구", "강남구")
-    )
+    private val _districts = mutableStateOf<Map<String, List<String>>>(mapOf("전체" to listOf("전체")))
+    val districts: State<Map<String, List<String>>> = _districts
+
+    private fun processLocationCategories(places: List<Place>) {
+        // Extract unique cities from addresses
+        val citySet = mutableSetOf<String>()
+        val districtMap = mutableMapOf<String, MutableSet<String>>()
+
+        // Always include "전체" (All) option
+        citySet.add("전체")
+        districtMap["전체"] = mutableSetOf("전체")
+
+        // Extract city and district information from places
+        places.forEach { place ->
+            // Process the address to extract city
+            val addressParts = place.address.split(" ")
+            if (addressParts.size >= 2) {
+                val city = addressParts[0] // Usually the first part is the city (e.g., "서울특별시")
+                val district = place.district // Use the district field directly
+
+                if (city.isNotEmpty()) {
+                    // Add city if not already added
+                    citySet.add(city)
+
+                    // Initialize district set for this city if needed
+                    if (!districtMap.containsKey(city)) {
+                        districtMap[city] = mutableSetOf("전체")
+                    }
+
+                    // Add district to the city's district set
+                    if (district.isNotEmpty()) {
+                        districtMap[city]?.add(district)
+                    }
+                }
+            }
+        }
+
+        // Convert sets to sorted lists for UI
+        _cities.value = citySet.toList().sorted()
+
+        // Ensure "전체" is always first in cities list
+        if (_cities.value.contains("전체")) {
+            val citiesList = _cities.value.toMutableList()
+            citiesList.remove("전체")
+            citiesList.add(0, "전체")
+            _cities.value = citiesList
+        }
+
+        // Convert district sets to sorted lists with "전체" always first
+        val districtMapSorted = mutableMapOf<String, List<String>>()
+        districtMap.forEach { (city, districts) ->
+            // Create a sorted list of districts
+            val sortedDistricts = districts.filter { it != "전체" }.sorted().toMutableList()
+
+            // Add "전체" at the beginning
+            sortedDistricts.add(0, "전체")
+
+            districtMapSorted[city] = sortedDistricts
+        }
+        _districts.value = districtMapSorted
+
+        // Log the extracted location data
+        Log.d("LocationCategories", "Extracted cities: ${_cities.value}")
+        _districts.value.forEach { (city, districts) ->
+            Log.d("LocationCategories", "City: $city, Districts: $districts")
+        }
+    }
 
     // Service hierarchy
     private val _serviceCategories = mutableStateOf<List<String>>(emptyList())
@@ -55,21 +119,28 @@ class PlaceViewModel : ViewModel() {
                 val apiData = withContext(Dispatchers.IO) {
                     fetchApiData()
                 }
-                // Process the distinct facility types from API data
+
+                // Process data to extract categories
+                processLocationCategories(apiData)
                 processServiceCategories(apiData)
+
 
                 _allPlaces.value = apiData
                 _filteredPlaces.value = apiData
                 Log.d("PlaceViewModel", "API data fetched successfully: ${apiData.size} items")
-                _allPlaces.value = apiData
-                _filteredPlaces.value = apiData
             } catch (e: Exception) {
                 Log.e("PlaceViewModel", "Error fetching API data", e)
 
                 // Fallback to sample data if API fails
                 Log.d("PlaceViewModel", "Falling back to sample data")
-                _allPlaces.value = getSampleData()
-                _filteredPlaces.value = getSampleData()
+                val sampleData = getSampleData()
+                _allPlaces.value = sampleData
+                _filteredPlaces.value = sampleData
+
+                // Process sample data as well
+                processLocationCategories(sampleData)
+                processServiceCategories(sampleData)
+
             }
         }
     }
@@ -224,10 +295,20 @@ class PlaceViewModel : ViewModel() {
         doc.documentElement.normalize()
 
         val places = mutableListOf<Place>()
+        val excludedPlaces = mutableListOf<String>()
         val rowList = doc.getElementsByTagName("row")
 
         for (i in 0 until rowList.length) {
             val rowNode = rowList.item(i) as Element
+
+            val address = getElementValue(rowNode, "FCLT_ADDR")
+            val name = getElementValue(rowNode, "FCLT_NM")
+
+            // Skip if address doesn't contain "서울" (Seoul)
+            if (!address.contains("서울")) {
+                excludedPlaces.add("$name ($address)")
+                continue
+            }
 
             val fcltKindNm = getElementValue(rowNode, "FCLT_KIND_NM")
             val service2Values = determineServiceDetails(fcltKindNm)
@@ -241,30 +322,36 @@ class PlaceViewModel : ViewModel() {
 
             val place = Place(
                 id = (i + 1).toString(),
-                name = getElementValue(rowNode, "FCLT_NM"),
+                name = name,
                 facilityCode = getElementValue(rowNode, "FCLT_CD"),
                 facilityKind = fcltKindNm,
-                facilityKindDetail = getElementValue(rowNode, "FCLT_KIND_DTL_NM"),
+                facilityKindDetail = fcltKindDetailNm,
                 district = getElementValue(rowNode, "JRSD_SGG_NM"),
-                address = getElementValue(rowNode, "FCLT_ADDR"),
+                address = address,
                 tel = getElementValue(rowNode, "FCLT_TEL_NO").ifEmpty { " 없음" },
                 zipCode = getElementValue(rowNode, "FCLT_ZIPCD"),
                 // Derived values
                 service2 = service2Values,
                 service1 = service1Values,
 
-
                 // Default values for fields not in API
-//                rating = determineRating(),
-//                rating_year = "2023",
                 full = (80..200).random().toString(),
                 now = (60..150).random().toString(),
                 wating = (0..20).random().toString(),
-                bus = determineTransportation(getElementValue(rowNode, "FCLT_ADDR"))
+                bus = determineTransportation(address)
             )
 
             places.add(place)
         }
+
+        // Log summary of excluded places
+        Log.d("ApiParser", "Excluded ${excludedPlaces.size} non-Seoul places:")
+        excludedPlaces.forEach {
+            Log.d("ApiParser", "Excluded: $it")
+        }
+
+        // Log summary of included places
+        Log.d("ApiParser", "Included ${places.size} Seoul places")
 
         // Log a summary of all service2 values
         val allService2Values = places.flatMap { it.service2 }.distinct()

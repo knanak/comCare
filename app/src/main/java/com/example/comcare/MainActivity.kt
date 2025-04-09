@@ -85,7 +85,7 @@ fun PlaceComparisonApp(
 
     // Get available districts for the selected city
     val availableDistricts = remember(selectedCity) {
-        viewModel.districts[selectedCity] ?: listOf("전체")
+        viewModel.districts.value[selectedCity] ?: listOf("전체")
     }
 
     // Get available service subcategories for the selected category
@@ -151,18 +151,18 @@ fun PlaceComparisonApp(
             // Button 1 - Long-term Care Facilities
             Button(
                 onClick = {
-                    currentSection = "longTermCare"
-                    showFilters = false
+                    currentSection = "welfareFacilities"
+                    showFilters = !showFilters  // Toggle filters visibility
                 },
                 modifier = Modifier
                     .weight(1f)
                     .padding(horizontal = 4.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if(currentSection == "longTermCare") Color(0xFF9BC95B) else Color(0xFFc6f584),
+                    containerColor = if(currentSection == "welfareFacilities") Color(0xFF9BC95B) else Color(0xFFc6f584),
                     contentColor = Color.Black
                 )
             ) {
-                Text("장기요양기관")
+                Text("시설")
             }
 
             // Button 2 - Senior Policies
@@ -179,7 +179,7 @@ fun PlaceComparisonApp(
                     contentColor = Color.Black
                 )
             ) {
-                Text("노인정책")
+                Text("정책")
             }
 
             // Button 3 - Jobs
@@ -213,7 +213,7 @@ fun PlaceComparisonApp(
                     contentColor = Color.Black
                 )
             ) {
-                Text("복지시설")
+                Text("문화")
             }
         }
 
@@ -260,7 +260,7 @@ fun PlaceComparisonApp(
                                 expanded = expandedCityMenu,
                                 onDismissRequest = { expandedCityMenu = false }
                             ) {
-                                viewModel.cities.forEach { city ->
+                                viewModel.cities.value.forEach { city ->
                                     DropdownMenuItem(
                                         text = { Text(city, color = Color(0xFFc6f584)) },
                                         onClick = {
