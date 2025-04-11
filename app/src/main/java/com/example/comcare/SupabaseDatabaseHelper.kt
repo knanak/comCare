@@ -7,6 +7,7 @@ import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.postgrest.Postgrest
 import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.postgrest.query.Count
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -56,16 +57,66 @@ class SupabaseDatabaseHelper(private val context: Context) {
         return sdf.format(Date())
     }
 
-
-    // Add this function to your SupabaseDatabaseHelper class
     suspend fun getFacilities(): List<facilities> {
         return try {
             Log.d("supabase", "Starting getFacilities")
 
             withContext(Dispatchers.IO) {
-                val facilities = supabase.postgrest["facilities"].select().decodeList<facilities>()
-                Log.d("supabase", "Retrieved ${facilities.size} facilities")
-                facilities
+                // First get the total count
+                val totalCount = supabase.postgrest["facilities"]
+                    .select(head = true, count = Count.EXACT)
+                    .count() ?: 0
+
+                Log.d("supabase", "Total count of facilities: $totalCount")
+
+                // Determine the batch size by making a test request
+                val testBatch = supabase.postgrest["facilities"]
+                    .select()
+                    .decodeList<facilities>()
+
+                // The batch size is whatever limit Supabase applied to our first request
+                val batchSize = testBatch.size
+                Log.d("supabase", "Detected batch size from Supabase: $batchSize")
+
+                // Now we know the batch size, fetch all records
+                val allFacilities = mutableListOf<facilities>()
+                // Add the first batch that we already retrieved
+                allFacilities.addAll(testBatch)
+
+                var currentStart = batchSize
+
+                // Continue fetching until we have all records
+                while (currentStart < totalCount) {
+                    val currentEnd = currentStart + batchSize - 1
+                    Log.d("supabase", "Fetching batch: $currentStart to $currentEnd")
+
+                    // Fetch a batch using range
+                    val batch = supabase.postgrest["facilities"]
+                        .select(filter = {
+                            range(from = currentStart.toLong(), to = currentEnd.toLong())
+                        })
+                        .decodeList<facilities>()
+
+                    Log.d("supabase", "Fetched batch size: ${batch.size}")
+                    allFacilities.addAll(batch)
+
+                    // If we got an empty batch or fewer items than requested, we might be done
+                    if (batch.isEmpty() || batch.size < batchSize) {
+                        break
+                    }
+
+                    // Move to next batch
+                    currentStart += batchSize
+                }
+
+                Log.d("supabase", "Retrieved ${allFacilities.size} facilities out of $totalCount total")
+
+                // Verify we got all records
+                if (allFacilities.size < totalCount) {
+                    Log.w("supabase", "Warning: Retrieved fewer records than expected (${allFacilities.size} vs $totalCount)")
+                }
+
+                allFacilities
             }
         } catch (e: Exception) {
             Log.e("supabase", "Error fetching facilities: ${e.message}")

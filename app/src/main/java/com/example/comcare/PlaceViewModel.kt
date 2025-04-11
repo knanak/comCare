@@ -439,7 +439,7 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
                 id = (i + 1).toString(),
                 name = name,
                 facilityCode = getElementValue(rowNode, "FCLT_CD"),
-                facilityKind = fcltKindNm,
+                facilityKind = service2Values.firstOrNull() ?: "",
                 facilityKindDetail = fcltKindDetailNm,
                 district = getElementValue(rowNode, "JRSD_SGG_NM"),
                 address = address,
@@ -449,7 +449,7 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
                 service2 = service2Values,
                 service1 = service1Values,
 
-                // Default values for fields not in API
+//                 Default values for fields not in API
                 full = (80..200).random().toString(),
                 now = (60..150).random().toString(),
                 wating = (0..20).random().toString(),
