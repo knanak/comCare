@@ -19,10 +19,7 @@ import kotlin.Exception
 
 import com.example.comcare.OPEN_API_KEY
 
-
-
-
-class PlaceViewModel : ViewModel() {
+class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewModel() {
     // Using MutableState for the places list
     private val _allPlaces = mutableStateOf<List<Place>>(emptyList())
     private val _filteredPlaces = mutableStateOf<List<Place>>(emptyList())
@@ -34,6 +31,154 @@ class PlaceViewModel : ViewModel() {
 
     private val _districts = mutableStateOf<Map<String, List<String>>>(mapOf("전체" to listOf("전체")))
     val districts: State<Map<String, List<String>>> = _districts
+
+    // Service hierarchy
+    private val _serviceCategories = mutableStateOf<List<String>>(emptyList())
+    val serviceCategories: State<List<String>> = _serviceCategories
+
+    private val _serviceSubcategories = mutableStateOf<Map<String, List<String>>>(emptyMap())
+    val serviceSubcategories: State<Map<String, List<String>>> = _serviceSubcategories
+
+    init {
+        // Fetch data when ViewModel is initialized
+        fetchPlacesData()
+    }
+
+    private fun fetchPlacesData() {
+        viewModelScope.launch {
+            try {
+                Log.d("PlaceViewModel", "Starting data fetch")
+
+                // First try to get API data
+                val apiData = withContext(Dispatchers.IO) {
+                    fetchApiData()
+                }
+
+                // Then get Supabase data
+                val supabaseData = withContext(Dispatchers.IO) {
+                    fetchSupabaseData()
+                }
+
+                // Combine both datasets
+                val combinedData = apiData + supabaseData
+
+                // Process the combined data
+                processLocationCategories(combinedData)
+                processServiceCategories(combinedData)
+
+                _allPlaces.value = combinedData
+                _filteredPlaces.value = combinedData
+
+                Log.d("PlaceViewModel", "Data fetch complete: ${combinedData.size} total items " +
+                        "(${apiData.size} API, ${supabaseData.size} Supabase)")
+
+            } catch (e: Exception) {
+                Log.e("PlaceViewModel", "Error fetching data", e)
+
+                // Fallback to sample data if everything fails
+                Log.d("PlaceViewModel", "Falling back to sample data")
+                val sampleData = getSampleData()
+                _allPlaces.value = sampleData
+                _filteredPlaces.value = sampleData
+
+                // Process sample data
+                processLocationCategories(sampleData)
+                processServiceCategories(sampleData)
+            }
+        }
+    }
+
+    private suspend fun fetchSupabaseData(): List<Place> {
+        return try {
+            Log.d("PlaceViewModel", "Starting Supabase data fetch")
+
+            val supabaseFacilities = supabaseHelper.getFacilities()
+            Log.d("PlaceViewModel", "Supabase getFacilities returned ${supabaseFacilities.size} items")
+
+            if (supabaseFacilities.isEmpty()) {
+                Log.d("PlaceViewModel", "Supabase returned empty list")
+                return emptyList()
+            }
+
+            // This is where you put the mapping code
+            val places = supabaseFacilities.map { facility ->
+                try {
+                    Log.d("PlaceViewModel", "Converting facility: ${facility.id} - ${facility.name}")
+
+                    // Parse service1 to extract service2 if needed
+                    val originalService2 = facility.service2
+                    val (newService1, newService2) = if (originalService2.contains("치매")) {
+                        // Find the index of "치매"
+                        val dementiaIndex = originalService2.indexOf("치매")
+
+                        // Split the string at that index
+                        var service1Part = originalService2.substring(0, dementiaIndex).trim()
+                        if (service1Part.endsWith("내")) {
+                            service1Part = service1Part.substring(0, service1Part.length - 1)
+                        }
+                        var service2Part = originalService2.substring(dementiaIndex).trim()
+
+                        Pair(service1Part, service2Part)
+                    } else {
+                        // If there's no "치매", use the original string for service1 and empty for service2
+                        Pair(originalService2, facility.service2 ?: "")
+                    }
+
+                    Place(
+                        id = facility.id.toString(),
+                        name = facility.name,
+                        facilityCode = "", // No direct equivalent in Supabase model
+                        facilityKind = originalService2,
+                        facilityKindDetail = "장기요양기관",
+                        district = extractDistrict(facility.address),
+                        address = facility.address,
+                        tel = facility.tel,
+                        zipCode = "",
+                        service1 = listOf("장기요양기관"),
+                        service2 = listOf(newService1),
+                        rating = facility.rating,
+                        rating_year = facility.rating_year,
+                        full = facility.full,
+                        now = facility.now,
+                        wating = facility.wating,
+                        bus = facility.bus
+                    )
+                } catch (e: Exception) {
+                    Log.e("PlaceViewModel", "Error converting facility: ${facility.id}", e)
+                    null
+                }
+            }.filterNotNull()
+
+            Log.d("PlaceViewModel", "Supabase data fetch complete: ${places.size} items")
+            places
+
+        } catch (e: Exception) {
+            Log.e("PlaceViewModel", "Error fetching Supabase data", e)
+            emptyList()
+        }
+    }
+
+    // Helper function to extract district from address
+    private fun extractDistrict(address: String): String {
+        val addressParts = address.split(" ")
+        return if (addressParts.size >= 2) {
+            // Try to get district part (usually second part of Korean address)
+            val districtPart = addressParts[1]
+
+            // Make sure it ends with "구" if it's a district
+            if (districtPart.endsWith("구")) {
+                districtPart
+            } else if (districtPart.contains("구")) {
+                // Extract just the district part if it contains "구" with other text
+                val districtMatch = "(.+구)".toRegex().find(districtPart)
+                districtMatch?.groupValues?.get(1) ?: districtPart
+            } else {
+                districtPart
+            }
+        } else {
+            "" // Return empty string if address format is unexpected
+        }
+    }
 
     private fun processLocationCategories(places: List<Place>) {
         // Extract unique cities from addresses
@@ -100,57 +245,20 @@ class PlaceViewModel : ViewModel() {
         }
     }
 
-    // Service hierarchy
-    private val _serviceCategories = mutableStateOf<List<String>>(emptyList())
-    val serviceCategories: State<List<String>> = _serviceCategories
-
-    private val _serviceSubcategories = mutableStateOf<Map<String, List<String>>>(emptyMap())
-    val serviceSubcategories: State<Map<String, List<String>>> = _serviceSubcategories
-
-    init {
-        // Fetch data when ViewModel is initialized
-        fetchPlacesFromApi()
-    }
-
-    private fun fetchPlacesFromApi() {
-        viewModelScope.launch {
-            try {
-                Log.d("PlaceViewModel", "Starting API data fetch")
-                val apiData = withContext(Dispatchers.IO) {
-                    fetchApiData()
-                }
-
-                // Process data to extract categories
-                processLocationCategories(apiData)
-                processServiceCategories(apiData)
-
-
-                _allPlaces.value = apiData
-                _filteredPlaces.value = apiData
-                Log.d("PlaceViewModel", "API data fetched successfully: ${apiData.size} items")
-            } catch (e: Exception) {
-                Log.e("PlaceViewModel", "Error fetching API data", e)
-
-                // Fallback to sample data if API fails
-                Log.d("PlaceViewModel", "Falling back to sample data")
-                val sampleData = getSampleData()
-                _allPlaces.value = sampleData
-                _filteredPlaces.value = sampleData
-
-                // Process sample data as well
-                processLocationCategories(sampleData)
-                processServiceCategories(sampleData)
-
-            }
-        }
-    }
     private fun processServiceCategories(places: List<Place>) {
-        // Extract all distinct facility detail types from the data without adding "전체"
-        val categories = places.map { it.facilityKindDetail }.distinct().filter { it.isNotEmpty() }
-        _serviceCategories.value = categories
+        // Extract all distinct facility detail types from the data
+        val allCategories = places.map { it.facilityKindDetail }.distinct().filter { it.isNotEmpty() }
 
-        // Create subcategories map without "전체"
+        // Add "전체" (All) at the beginning
+        val categoriesList = mutableListOf("전체")
+        categoriesList.addAll(allCategories)
+        _serviceCategories.value = categoriesList
+
+        // Create subcategories map
         val subcategoriesMap = mutableMapOf<String, List<String>>()
+
+        // Add "전체" entry for all categories
+        subcategoriesMap["전체"] = listOf("전체")
 
         // Group facilities by their detail type to create subcategories
         places.groupBy { it.facilityKindDetail }
@@ -166,8 +274,13 @@ class PlaceViewModel : ViewModel() {
                         }
                         .distinct()
                         .filter { it.isNotEmpty() }
+                        .sorted()
 
-                    subcategoriesMap[category] = subCategories
+                    // Add "전체" at the beginning
+                    val fullSubcategories = mutableListOf("전체")
+                    fullSubcategories.addAll(subCategories)
+
+                    subcategoriesMap[category] = fullSubcategories
                 }
             }
 
@@ -192,6 +305,7 @@ class PlaceViewModel : ViewModel() {
     }
 
     private suspend fun fetchApiData(): List<Place> {
+        // Keep your existing fetchApiData method unchanged
         return withContext(Dispatchers.IO) {
             try {
                 // Define API parameters as variables
@@ -289,6 +403,7 @@ class PlaceViewModel : ViewModel() {
     }
 
     private fun parseApiResponse(xmlResponse: String): List<Place> {
+        // Keep your existing parseApiResponse method unchanged
         val dbFactory = DocumentBuilderFactory.newInstance()
         val dBuilder = dbFactory.newDocumentBuilder()
         val doc = dBuilder.parse(xmlResponse.byteInputStream())
@@ -402,11 +517,6 @@ class PlaceViewModel : ViewModel() {
         return listOf(facilityKindNM)
     }
 
-//    private fun determineRating(): String {
-//        // Randomly assign ratings for demo purposes
-//        return listOf("A", "B", "C").random()
-//    }
-
     private fun determineTransportation(address: String): String {
         // Create some demo transportation info based on address
         val districts = listOf("강남", "강북", "강서", "강동", "서초", "성북", "중랑")
@@ -449,7 +559,7 @@ class PlaceViewModel : ViewModel() {
                 zipCode = "",
                 service1 = listOf("노인-복지관"),
                 service2 = listOf("노인-여가복지"),
-//                rating = "A",
+                rating = "A",
                 rating_year = "2023",
                 full = "100",
                 now = "85",
@@ -468,7 +578,7 @@ class PlaceViewModel : ViewModel() {
                 zipCode = "",
                 service1 = listOf("노인-복지관"),
                 service2 = listOf("노인-여가복지"),
-//                rating = "A",
+                rating = "A",
                 rating_year = "2023",
                 full = "150",
                 now = "120",

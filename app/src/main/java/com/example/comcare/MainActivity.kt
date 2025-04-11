@@ -17,6 +17,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
@@ -24,11 +26,28 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import kotlin.math.ceil
 
-
-
 class MainActivity : ComponentActivity() {
+
+    // Add this nested class inside MainActivity
+    class PlaceViewModelFactory(private val supabaseHelper: SupabaseDatabaseHelper) : ViewModelProvider.Factory {
+        override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+            if (modelClass.isAssignableFrom(PlaceViewModel::class.java)) {
+                @Suppress("UNCHECKED_CAST")
+                return PlaceViewModel(supabaseHelper) as T
+            }
+            throw IllegalArgumentException("Unknown ViewModel class")
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Initialize Supabase helper
+        val supabaseHelper = SupabaseDatabaseHelper(this)
+
+        // Create ViewModel factory
+        val viewModelFactory = PlaceViewModelFactory(supabaseHelper)
+
         setContent {
             PlaceComparisonTheme {
                 Surface(
@@ -36,7 +55,9 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     val navController = rememberNavController()
-                    val viewModel: PlaceViewModel = viewModel()
+
+                    // Use factory to create ViewModel with Supabase dependency
+                    val viewModel: PlaceViewModel = viewModel(factory = viewModelFactory)
 
                     NavHost(
                         navController = navController,
@@ -65,7 +86,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun PlaceComparisonApp(
     navController: NavController,
-    viewModel: PlaceViewModel = viewModel()
+    viewModel: PlaceViewModel
 ) {
     var selectedCity by remember { mutableStateOf("전체") }
     var selectedDistrict by remember { mutableStateOf("전체") }
@@ -251,8 +272,8 @@ fun PlaceComparisonApp(
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text("$selectedCity", color = Color(0xFFc6f584))
-                                    Text("▼", style = MaterialTheme.typography.bodyMedium, color = Color(0xFFc6f584))
+                                    Text("$selectedCity", color = Color(0xFF4A7C25))
+                                    Text("▼", style = MaterialTheme.typography.bodyMedium, color = Color(0xFF4A7C25))
                                 }
                             }
 
@@ -262,7 +283,7 @@ fun PlaceComparisonApp(
                             ) {
                                 viewModel.cities.value.forEach { city ->
                                     DropdownMenuItem(
-                                        text = { Text(city, color = Color(0xFFc6f584)) },
+                                        text = { Text(city) },
                                         onClick = {
                                             selectedCity = city
                                             expandedCityMenu = false
@@ -283,8 +304,8 @@ fun PlaceComparisonApp(
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text("$selectedDistrict", color = Color(0xFFc6f584))
-                                    Text("▼", style = MaterialTheme.typography.bodyMedium, color = Color(0xFFc6f584))
+                                    Text("$selectedDistrict", color = Color(0xFF4A7C25))
+                                    Text("▼", style = MaterialTheme.typography.bodyMedium, color = Color(0xFF4A7C25))
                                 }
                             }
 
@@ -294,7 +315,7 @@ fun PlaceComparisonApp(
                             ) {
                                 availableDistricts.forEach { district ->
                                     DropdownMenuItem(
-                                        text = { Text(district, color = Color(0xFFc6f584)) },
+                                        text = { Text(district) },
                                         onClick = {
                                             selectedDistrict = district
                                             expandedDistrictMenu = false
@@ -332,8 +353,8 @@ fun PlaceComparisonApp(
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text("$selectedServiceCategory", color = Color(0xFFc6f584))
-                                    Text("▼", style = MaterialTheme.typography.bodyMedium, color = Color(0xFFc6f584))
+                                    Text("$selectedServiceCategory", color = Color(0xFF4A7C25))
+                                    Text("▼", style = MaterialTheme.typography.bodyMedium, color = Color(0xFF4A7C25))
                                 }
                             }
 
@@ -343,7 +364,7 @@ fun PlaceComparisonApp(
                             ) {
                                 viewModel.serviceCategories.value.forEach { category ->
                                     DropdownMenuItem(
-                                        text = { Text(category, color = Color(0xFFc6f584)) },
+                                        text = { Text(category) },
                                         onClick = {
                                             selectedServiceCategory = category
                                             expandedServiceMenu = false
@@ -364,8 +385,8 @@ fun PlaceComparisonApp(
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text("$selectedServiceSubcategory", color = Color(0xFFc6f584))
-                                    Text("▼", style = MaterialTheme.typography.bodyMedium, color = Color(0xFFc6f584))
+                                    Text("$selectedServiceSubcategory", color = Color(0xFF4A7C25))
+                                    Text("▼", style = MaterialTheme.typography.bodyMedium, color = Color(0xFF4A7C25))
                                 }
                             }
 
@@ -375,7 +396,7 @@ fun PlaceComparisonApp(
                             ) {
                                 availableServiceSubcategories.forEach { subcategory ->
                                     DropdownMenuItem(
-                                        text = { Text(subcategory, color = Color(0xFFc6f584)) },
+                                        text = { Text(subcategory) },
                                         onClick = {
                                             selectedServiceSubcategory = subcategory
                                             expandedServiceSubcategoryMenu = false
@@ -535,6 +556,8 @@ fun PlaceComparisonApp(
     }
 }
 
+// Add these Composable functions to the end of your MainActivity.kt file
+
 @Composable
 fun SearchResultsScreen(
     viewModel: PlaceViewModel,
@@ -565,7 +588,6 @@ fun SearchResultsScreen(
         }
 
         Divider()
-
 
         // Results list
         val itemsPerPage = 5
@@ -666,7 +688,6 @@ fun SearchResultsScreen(
                 Text("검색 결과가 없습니다. 다른 조건으로 검색해보세요.")
             }
         }
-
     }
 }
 
@@ -691,28 +712,32 @@ fun PlaceCard(place: Place) {
                     fontWeight = FontWeight.Bold
                 )
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "평가등급: ",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Text(
-                        place.rating,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = when(place.rating) {
-                            "A" -> Color(0xFF4CAF50)
-                            "B" -> Color(0xFF2196F3)
-                            "C" -> Color(0xFFFFC107)
-                            "D" -> Color(0xFFFF9800)
-                            "E" -> Color(0xFFF44336)
-                            else -> MaterialTheme.colorScheme.onSurface
+                if (place.rating.isNotEmpty()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "평가등급: ",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Text(
+                            place.rating,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = when(place.rating) {
+                                "A" -> Color(0xFF4CAF50)
+                                "B" -> Color(0xFF2196F3)
+                                "C" -> Color(0xFFFFC107)
+                                "D" -> Color(0xFFFF9800)
+                                "E" -> Color(0xFFF44336)
+                                else -> MaterialTheme.colorScheme.onSurface
+                            }
+                        )
+                        if (place.rating_year.isNotEmpty()) {
+                            Text(
+                                " (${place.rating_year})",
+                                style = MaterialTheme.typography.bodySmall
+                            )
                         }
-                    )
-                    Text(
-                        " (${place.rating_year})",
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                    }
                 }
             }
 
@@ -726,23 +751,17 @@ fun PlaceCard(place: Place) {
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            // Phone
-//            Text(
-//                "전화: ${place.tel}",
-//                style = MaterialTheme.typography.bodyMedium
-//            )
-//
-//            Spacer(modifier = Modifier.height(8.dp))
-
             // Services
-            Text(
-                "시설 종류: ${place.service1.joinToString(", ")}",
-                style = MaterialTheme.typography.bodySmall
-            )
+            if (place.service1.isNotEmpty()) {
+                Text(
+                    "시설 종류: ${place.service1.joinToString(", ")}",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
 
             if (place.service2.isNotEmpty()) {
                 Text(
-                    "시설 유형: ${place.service2.joinToString(", ")}",
+                    "시설 유형: ${place.facilityKind}",
                     style = MaterialTheme.typography.bodySmall
                 )
             }
@@ -769,14 +788,6 @@ fun PlaceCard(place: Place) {
             }
 
             Spacer(modifier = Modifier.height(8.dp))
-
-            // Transportation
-//            Text(
-//                "교통: ${place.bus}",
-//                style = MaterialTheme.typography.bodySmall
-//            )
-//
-//            Spacer(modifier = Modifier.height(8.dp))
 
             // Button
             Button(
