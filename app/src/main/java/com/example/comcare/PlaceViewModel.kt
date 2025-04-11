@@ -450,9 +450,9 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
                 service1 = service1Values,
 
 //                 Default values for fields not in API
-                full = (80..200).random().toString(),
-                now = (60..150).random().toString(),
-                wating = (0..20).random().toString(),
+//                full = (80..200).random().toString(),
+//                now = (60..150).random().toString(),
+//                wating = (0..20).random().toString(),
                 bus = determineTransportation(address)
             )
 

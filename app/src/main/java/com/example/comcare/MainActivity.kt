@@ -768,26 +768,28 @@ fun PlaceCard(place: Place) {
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Capacity
-            Row(modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    "정원: ${place.full}명",
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.weight(1f)
-                )
-                Text(
-                    "현재: ${place.now}명",
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.weight(1f)
-                )
-                Text(
-                    "대기: ${place.wating}명",
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.weight(1f)
-                )
-            }
+            // Capacity - only show if values are not all zeros
+            if (place.full != "0" || place.now != "0" || place.wating != "0") {
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        "정원: ${place.full}명",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        "현재: ${place.now}명",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        "대기: ${place.wating}명",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
 
-            Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(8.dp))
+            }
 
             // Button
             Button(
