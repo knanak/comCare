@@ -946,11 +946,11 @@ fun ChatScreen(activity: MainActivity, navController: NavController) {
                         messageText = ""
 
                         // Add a "waiting" message that will be replaced by the real response
-                        messages = messages + ChatMessage(
-                            text = "...",
-                            isFromUser = false,
-                            isWaiting = true
-                        )
+//                        messages = messages + ChatMessage(
+//                            text = "",
+//                            isFromUser = false,
+//                            isWaiting = true
+//                        )
                     }
                 },
                 colors = ButtonDefaults.buttonColors(

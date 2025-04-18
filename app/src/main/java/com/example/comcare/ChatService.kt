@@ -39,6 +39,9 @@ class ChatService {
             override fun onFailure(call: Call, e: IOException) {
                 // Handle failure
                 e.printStackTrace()
+                Handler(Looper.getMainLooper()).post {
+                    responseCallback?.invoke("연결 오류: ${e.message}")
+                }
             }
 
             override fun onResponse(call: Call, response: Response) {
@@ -53,12 +56,52 @@ class ChatService {
                             val jsonArray = JSONArray(responseBody)
                             Log.d("ChatService", "Successfully parsed as JSONArray")
 
-                            val mainObject = jsonArray.getJSONObject(0)
-                            Log.d("ChatService", "First object in array: $mainObject")
+                            // Process the first object in the array
+                            if (jsonArray.length() > 0) {
+                                val mainObject = jsonArray.getJSONObject(0)
+                                Log.d("ChatService", "First object in array: $mainObject")
 
-                            // Process the response...
+                                // Extract action and response
+                                val action = mainObject.optString("action", "")
+
+                                if (action == "parse" && mainObject.has("response")) {
+                                    val responseObject = mainObject.getJSONObject("response")
+
+                                    if (responseObject.has("output")) {
+                                        val outputObject = responseObject.getJSONObject("output")
+                                        val state = outputObject.optString("state", "")
+
+                                        if (state == "성공" && outputObject.has("content")) {
+                                            // Extract content array
+                                            val contentArray = outputObject.getJSONArray("content")
+                                            Log.d("ChatService", "contentArray: $contentArray")
+
+                                            // Combine all content items into a single string
+                                            val contentBuilder = StringBuilder()
+                                            for (i in 0 until contentArray.length()) {
+                                                if (i > 0) contentBuilder.append("\n")
+                                                contentBuilder.append(contentArray.getString(i))
+                                            }
+
+                                            // Return the formatted content
+                                            Handler(Looper.getMainLooper()).post {
+                                                responseCallback?.invoke(contentBuilder.toString())
+                                            }
+                                            return
+                                        } else {
+                                            Log.e("ChatService", "Invalid state or missing content: $outputObject")
+                                        }
+                                    } else {
+                                        Log.e("ChatService", "Missing output object: $responseObject")
+                                    }
+                                } else {
+                                    Log.e("ChatService", "Unexpected action or missing response: $mainObject")
+                                }
+                            } else {
+                                Log.e("ChatService", "Empty JSON array in response")
+                            }
                         } else {
-                            // Handle object response
+                            // Handle object response (error case)
                             val jsonObject = JSONObject(responseBody)
                             Log.e("ChatService", "Received object instead of array: $jsonObject")
 
@@ -76,13 +119,16 @@ class ChatService {
                                 Handler(Looper.getMainLooper()).post {
                                     responseCallback?.invoke("서버 오류 ($errorCode): $errorMessage")
                                 }
-                            } else {
-                                Log.w("ChatService", "Unexpected response format: $jsonObject")
-                                Handler(Looper.getMainLooper()).post {
-                                    responseCallback?.invoke("서버 응답을 처리할 수 없습니다.")
-                                }
+                                return
                             }
                         }
+
+                        // If we reach here, something unexpected happened with the response format
+                        Log.w("ChatService", "Unexpected response format: $responseBody")
+                        Handler(Looper.getMainLooper()).post {
+                            responseCallback?.invoke("서버 응답을 처리할 수 없습니다.")
+                        }
+
                     } catch (e: Exception) {
                         // Log the exception with stack trace
                         Log.e("ChatService", "Exception while processing response", e)
