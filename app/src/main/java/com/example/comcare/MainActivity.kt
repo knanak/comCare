@@ -1,6 +1,7 @@
 package com.example.comcare
 
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
@@ -24,10 +25,24 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import java.util.*
 import kotlin.math.ceil
 
 class MainActivity : ComponentActivity() {
 
+    val chatService = ChatService()
+    private var currentUserId: String = "guest" // Default value
+
+    fun onMessageSent(message: String, sessionId: String) {
+        // Save message to local database, display in UI, etc.
+
+        // Then trigger the n8n workflow
+        chatService.sendChatMessageToWorkflow(
+            currentUserId,
+            message,
+            sessionId
+        )
+    }
     // Add this nested class inside MainActivity
     class PlaceViewModelFactory(private val supabaseHelper: SupabaseDatabaseHelper) : ViewModelProvider.Factory {
         override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
@@ -74,6 +89,10 @@ class MainActivity : ComponentActivity() {
                                 viewModel = viewModel,
                                 navController = navController
                             )
+                        }
+                        // Add chat screen to navigation
+                        composable("chat") {
+                            ChatScreen(activity = this@MainActivity, navController = navController)
                         }
                     }
                 }
@@ -236,6 +255,20 @@ fun PlaceComparisonApp(
             ) {
                 Text("문화")
             }
+        }
+
+        // Add Chat button
+        Button(
+            onClick = { navController.navigate("chat") },
+            modifier = Modifier
+                .align(Alignment.End)
+                .padding(horizontal = 16.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFFc6f584),
+                contentColor = Color.Black
+            )
+        ) {
+            Text("채팅 문의")
         }
 
         // Show filters only when button 4 is pressed and showFilters is true
@@ -556,8 +589,6 @@ fun PlaceComparisonApp(
     }
 }
 
-// Add these Composable functions to the end of your MainActivity.kt file
-
 @Composable
 fun SearchResultsScreen(
     viewModel: PlaceViewModel,
@@ -805,3 +836,138 @@ fun PlaceCard(place: Place) {
         }
     }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ChatScreen(activity: MainActivity, navController: NavController) {
+    var messageText by remember { mutableStateOf("") }
+    var messages by remember { mutableStateOf(listOf<ChatMessage>()) }
+    val sessionId = remember { UUID.randomUUID().toString().replace("-", "") }
+
+    // Set up the callback to receive responses from n8n
+    LaunchedEffect(Unit) {
+        activity.chatService.responseCallback = { aiResponse ->
+            Log.d("ChatScreen", "Received AI response: $aiResponse")
+            // Add the AI response to the messages list
+            messages = messages + ChatMessage(
+                text = aiResponse,
+                isFromUser = false
+            )
+        }
+    }
+
+    // Clean up callback when leaving the screen
+    DisposableEffect(Unit) {
+        onDispose {
+            activity.chatService.responseCallback = null
+        }
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Top Bar with back button
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = { navController.navigateUp() }) {
+                Icon(
+                    imageVector = Icons.Default.ArrowBack,
+                    contentDescription = "Back"
+                )
+            }
+
+            Text(
+                text = "채팅 문의",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(start = 8.dp)
+            )
+        }
+
+        Divider()
+
+        // Messages list
+        LazyColumn(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            items(messages) { message ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                        .align(if (message.isFromUser) Alignment.End else Alignment.Start),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (message.isFromUser) Color(0xFFc6f584) else Color(0xFFE0E0E0)
+                    )
+                ) {
+                    Text(
+                        text = message.text,
+                        modifier = Modifier.padding(12.dp),
+                        color = Color.Black
+                    )
+                }
+            }
+        }
+
+        // Input field and send button
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedTextField(
+                value = messageText,
+                onValueChange = { messageText = it },
+                modifier = Modifier.weight(1f),
+                placeholder = { Text("메시지를 입력하세요...") }
+            )
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Button(
+                onClick = {
+                    if (messageText.isNotEmpty()) {
+                        // Add user message to the list
+                        val newMessage = ChatMessage(
+                            text = messageText,
+                            isFromUser = true
+                        )
+                        messages = messages + newMessage
+
+                        // Send message to n8n webhook
+                        activity.onMessageSent(messageText, sessionId)
+
+                        // Clear input field
+                        messageText = ""
+
+                        // Add a "waiting" message that will be replaced by the real response
+                        messages = messages + ChatMessage(
+                            text = "...",
+                            isFromUser = false,
+                            isWaiting = true
+                        )
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFc6f584),
+                    contentColor = Color.Black
+                )
+            ) {
+                Text("전송")
+            }
+        }
+    }
+}
+
+// Update ChatMessage class to include an isWaiting flag
+data class ChatMessage(
+    val text: String,
+    val isFromUser: Boolean,
+    val timestamp: Long = System.currentTimeMillis(),
+    val isWaiting: Boolean = false
+)
