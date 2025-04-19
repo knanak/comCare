@@ -50,6 +50,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.filled.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.delay
 
@@ -103,7 +104,7 @@ class MainActivity : ComponentActivity() {
 
                     NavHost(
                         navController = navController,
-                        startDestination = "home"
+                        startDestination = "chat" // Changed from "home" to "chat"
                     ) {
                         composable("home") {
                             PlaceComparisonApp(
@@ -117,9 +118,13 @@ class MainActivity : ComponentActivity() {
                                 navController = navController
                             )
                         }
-                        // Add chat screen to navigation
+                        // Chat screen is now the start destination
                         composable("chat") {
-                            ChatScreen(activity = this@MainActivity, navController = navController)
+                            ChatScreen(
+                                activity = this@MainActivity,
+                                navController = navController,
+                                showBackButton = false // Add this parameter to hide back button
+                            )
                         }
                     }
                 }
@@ -865,7 +870,11 @@ fun PlaceCard(place: Place) {
 }
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatScreen(activity: MainActivity, navController: NavController) {
+fun ChatScreen(
+    activity: MainActivity,
+    navController: NavController,
+    showBackButton: Boolean = true // Default to showing back button
+) {
     // Use rememberSaveable to persist state across recompositions
     var messageText by rememberSaveable { mutableStateOf("") }
     var messages by rememberSaveable { mutableStateOf(listOf<ChatMessage>()) }
@@ -897,7 +906,7 @@ fun ChatScreen(activity: MainActivity, navController: NavController) {
         if (messages.isEmpty()) {
             messages = listOf(
                 ChatMessage(
-                    text = "안녕하세요! 무엇을 도와드릴까요?",
+                    text = "안녕하세요! 실버 놀이터입니다. 노인복지 시설, 정책, 일자리에 관해 무엇이든 물어보세요!",
                     isFromUser = false
                 )
             )
@@ -995,217 +1004,260 @@ fun ChatScreen(activity: MainActivity, navController: NavController) {
         }
     }
 
-    // Main layout structure
-    Column(modifier = Modifier.fillMaxSize()) {
-        // Top Bar
-        TopAppBar(
-            title = { Text("채팅 문의") },
-            navigationIcon = {
-                IconButton(onClick = { navController.navigateUp() }) {
-                    Icon(
-                        imageVector = Icons.Default.ArrowBack,
-                        contentDescription = "Back"
-                    )
-                }
-            },
-            colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = MaterialTheme.colorScheme.surface
-            )
-        )
-
-        Divider()
-
-        // Messages area - takes all available space between top bar and input area
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
+    // Fixed layout structure with appropriate behavior
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.SpaceBetween
         ) {
-            LazyColumn(
-                state = listState,
+            // Top bar
+            TopAppBar(
+                title = { Text("실버 놀이터 AI 도우미") },
+                navigationIcon = {
+                    if (showBackButton) {
+                        IconButton(onClick = { navController.navigateUp() }) {
+                            Icon(
+                                imageVector = Icons.Default.ArrowBack,
+                                contentDescription = "Back"
+                            )
+                        }
+                    }
+                },
+                actions = {
+                    // Add a button to navigate to the main home screen
+                    if (!showBackButton) {
+                        IconButton(onClick = { navController.navigate("home") }) {
+                            Icon(
+                                imageVector = Icons.Default.Home,
+                                contentDescription = "Home"
+                            )
+                        }
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color(0xFFc6f584),
+                    titleContentColor = Color.Black,
+                    navigationIconContentColor = Color.Black,
+                    actionIconContentColor = Color.Black
+                )
+            )
+
+            Divider()
+
+            // Messages list - this stays fixed in position
+            Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 16.dp),
-                contentPadding = PaddingValues(top = 16.dp, bottom = 16.dp)
+                    .weight(1f)
+                    .fillMaxWidth()
             ) {
-                itemsIndexed(messages) { index, message ->
-                    MessageItem(message = message)
-
-                    // Add spacing between messages
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
-
-                // Add extra space at the end to ensure the last message is not cut off
-                item {
-                    Spacer(modifier = Modifier.height(40.dp))
-                }
-            }
-
-            // Speech recognition indicator
-            if (isListening) {
-                Box(
+                LazyColumn(
+                    state = listState,
                     modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 80.dp)
-                        .background(
-                            color = Color(0x80000000),
-                            shape = RoundedCornerShape(8.dp)
-                        )
-                        .padding(16.dp)
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp),
+                    contentPadding = PaddingValues(top = 16.dp, bottom = 16.dp)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
+                    itemsIndexed(messages) { index, message ->
+                        MessageItem(message = message)
+
+                        // Add spacing between messages
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+
+                    // Add extra space at the end
+                    item {
+                        Spacer(modifier = Modifier.height(40.dp))
+                    }
+                }
+
+                // Speech recognition indicator
+                if (isListening) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 80.dp)
+                            .background(
+                                color = Color(0x80000000),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                            .padding(16.dp)
                     ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            color = Color.White,
-                            strokeWidth = 2.dp
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            "듣고 있습니다...",
-                            color = Color.White
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                color = Color.White,
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "듣고 있습니다...",
+                                color = Color.White
+                            )
+                        }
                     }
                 }
             }
-        }
 
-        // Message input area
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = MaterialTheme.colorScheme.surface,
-            shadowElevation = 4.dp
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
+            // Message input area with fixed position
+// Message input area with fixed position
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.surface,
+                shadowElevation = 4.dp
             ) {
-                // Microphone button for speech-to-text
-                IconButton(
-                    onClick = {
-                        if (speechRecognizer == null) {
-                            Toast.makeText(context, "음성 인식을 사용할 수 없습니다", Toast.LENGTH_SHORT).show()
-                            return@IconButton
-                        }
+                // Set a fixed height for the input area but make it large enough
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 72.dp) // Minimum height instead of fixed height
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Microphone button
+                        IconButton(
+                            onClick = {
+                                if (speechRecognizer == null) {
+                                    Toast.makeText(context, "음성 인식을 사용할 수 없습니다", Toast.LENGTH_SHORT).show()
+                                    return@IconButton
+                                }
 
-                        if (ContextCompat.checkSelfPermission(
-                                context,
-                                Manifest.permission.RECORD_AUDIO
-                            ) == PackageManager.PERMISSION_GRANTED
+                                if (ContextCompat.checkSelfPermission(
+                                        context,
+                                        Manifest.permission.RECORD_AUDIO
+                                    ) == PackageManager.PERMISSION_GRANTED
+                                ) {
+                                    // Permission already granted, start listening
+                                    speechRecognizer.startListening(speechRecognizerIntent)
+                                    isListening = true
+                                } else {
+                                    // Request permission
+                                    launcher.launch(Manifest.permission.RECORD_AUDIO)
+                                }
+                            },
+                            modifier = Modifier
+                                .background(
+                                    color = if (isListening) Color(0xFFFF5722) else Color(0xFFF0F0F0),
+                                    shape = CircleShape
+                                )
+                                .size(40.dp)
                         ) {
-                            // Permission already granted, start listening
-                            speechRecognizer.startListening(speechRecognizerIntent)
-                            isListening = true
-                        } else {
-                            // Request permission
-                            launcher.launch(Manifest.permission.RECORD_AUDIO)
-                        }
-                    },
-                    modifier = Modifier
-                        .background(
-                            color = if (isListening) Color(0xFFFF5722) else Color(0xFFF0F0F0),
-                            shape = CircleShape
-                        )
-                        .size(40.dp)
-                ) {
-                    // Using alternative icon since Mic is not available
-                    Icon(
-                        imageVector = Icons.Default.KeyboardVoice,
-                        contentDescription = "Voice Input",
-                        tint = if (isListening) Color.White else Color.Black
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(8.dp))
-
-                OutlinedTextField(
-                    value = messageText,
-                    onValueChange = { messageText = it },
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 48.dp),
-                    placeholder = { Text("메시지를 입력하세요...") },
-                    keyboardOptions = KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Send),
-                    keyboardActions = KeyboardActions(
-                        onSend = {
-                            if (messageText.isNotEmpty()) {
-                                // Create user message
-                                val userMessage = ChatMessage(
-                                    text = messageText,
-                                    isFromUser = true
-                                )
-
-                                // Create waiting message for AI response
-                                val waitingMessage = ChatMessage(
-                                    text = "",
-                                    isFromUser = false,
-                                    isWaiting = true
-                                )
-
-                                // Update the messages list first
-                                messages = messages + userMessage + waitingMessage
-
-                                // Then send the message to the backend
-                                activity.onMessageSent(messageText, sessionId)
-
-                                // Clear the input
-                                messageText = ""
-                            }
-                        }
-                    ),
-                    maxLines = 3
-                )
-
-                Spacer(modifier = Modifier.width(8.dp))
-
-                IconButton(
-                    onClick = {
-                        if (messageText.isNotEmpty()) {
-                            // Create user message
-                            val userMessage = ChatMessage(
-                                text = messageText,
-                                isFromUser = true
+                            Icon(
+                                imageVector = Icons.Default.KeyboardVoice,
+                                contentDescription = "Voice Input",
+                                tint = if (isListening) Color.White else Color.Black
                             )
-
-                            // Create waiting message for AI response
-                            val waitingMessage = ChatMessage(
-                                text = "",
-                                isFromUser = false,
-                                isWaiting = true
-                            )
-
-                            // Update the messages list first
-                            messages = messages + userMessage + waitingMessage
-
-                            // Then send the message to the backend
-                            activity.onMessageSent(messageText, sessionId)
-
-                            // Clear the input
-                            messageText = ""
                         }
-                    },
-                    modifier = Modifier
-                        .background(
-                            color = Color(0xFFc6f584),
-                            shape = CircleShape
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        // Text field with improved placeholder handling
+                        OutlinedTextField(
+                            value = messageText,
+                            onValueChange = { messageText = it },
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp),
+                            placeholder = {
+                                Text(
+                                    "메시지를 입력하세요...",
+                                    maxLines = 1, // Keep placeholder to one line
+                                    overflow = TextOverflow.Ellipsis // Use ellipsis for long text
+                                )
+                            },
+                            keyboardOptions = KeyboardOptions(
+                                imeAction = androidx.compose.ui.text.input.ImeAction.Send,
+                                autoCorrect = false
+                            ),
+                            keyboardActions = KeyboardActions(
+                                onSend = {
+                                    if (messageText.isNotEmpty()) {
+                                        sendMessage(
+                                            messageText,
+                                            activity,
+                                            sessionId,
+                                            messages
+                                        ) { newMessages ->
+                                            messages = newMessages
+                                        }
+                                        messageText = ""
+                                    }
+                                }
+                            ),
+                            maxLines = 3, // Allow more lines for input text
+                            singleLine = false
                         )
-                        .size(40.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Send,
-                        contentDescription = "Send",
-                        tint = Color.Black
-                    )
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        // Send button
+                        IconButton(
+                            onClick = {
+                                if (messageText.isNotEmpty()) {
+                                    sendMessage(
+                                        messageText,
+                                        activity,
+                                        sessionId,
+                                        messages
+                                    ) { newMessages ->
+                                        messages = newMessages
+                                    }
+                                    messageText = ""
+                                }
+                            },
+                            modifier = Modifier
+                                .background(
+                                    color = Color(0xFFc6f584),
+                                    shape = CircleShape
+                                )
+                                .size(40.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Send,
+                                contentDescription = "Send",
+                                tint = Color.Black
+                            )
+                        }
+                    }
                 }
             }
         }
     }
 }
 
+// Helper function to send a message
+private fun sendMessage(
+    messageText: String,
+    activity: MainActivity,
+    sessionId: String,
+    currentMessages: List<ChatMessage>,
+    updateMessages: (List<ChatMessage>) -> Unit
+) {
+    // Create user message
+    val userMessage = ChatMessage(
+        text = messageText,
+        isFromUser = true
+    )
+
+    // Create waiting message for AI response
+    val waitingMessage = ChatMessage(
+        text = "",
+        isFromUser = false,
+        isWaiting = true
+    )
+
+    // Update the messages list first
+    updateMessages(currentMessages + userMessage + waitingMessage)
+
+    // Then send the message to the backend
+    activity.onMessageSent(messageText, sessionId)
+}
 @Composable
 fun MessageItem(message: ChatMessage) {
     Box(
