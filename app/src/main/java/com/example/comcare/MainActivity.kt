@@ -9,6 +9,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
@@ -16,6 +19,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.SemanticsProperties.ImeAction
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
@@ -27,6 +31,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import java.util.*
 import kotlin.math.ceil
+
+
 
 class MainActivity : ComponentActivity() {
 
@@ -836,7 +842,6 @@ fun PlaceCard(place: Place) {
         }
     }
 }
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(activity: MainActivity, navController: NavController) {
@@ -844,12 +849,26 @@ fun ChatScreen(activity: MainActivity, navController: NavController) {
     var messages by remember { mutableStateOf(listOf<ChatMessage>()) }
     val sessionId = remember { UUID.randomUUID().toString().replace("-", "") }
 
+    // Create a lazy list state to control scrolling
+    val lazyListState = rememberLazyListState()
+
+    // Auto-scroll to bottom when new messages arrive
+    LaunchedEffect(messages.size) {
+        if (messages.isNotEmpty()) {
+            lazyListState.animateScrollToItem(messages.size - 1)
+        }
+    }
+
     // Set up the callback to receive responses from n8n
     LaunchedEffect(Unit) {
         activity.chatService.responseCallback = { aiResponse ->
             Log.d("ChatScreen", "Received AI response: $aiResponse")
+
+            // Remove any waiting messages first
+            val messagesWithoutWaiting = messages.filter { !it.isWaiting }
+
             // Add the AI response to the messages list
-            messages = messages + ChatMessage(
+            messages = messagesWithoutWaiting + ChatMessage(
                 text = aiResponse,
                 isFromUser = false
             )
@@ -887,28 +906,52 @@ fun ChatScreen(activity: MainActivity, navController: NavController) {
 
         Divider()
 
-        // Messages list
+        // Messages list with LazyListState to control scrolling
         LazyColumn(
+            state = lazyListState, // Use the state here for scrolling control
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
             items(messages) { message ->
-                Card(
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 4.dp)
-                        .align(if (message.isFromUser) Alignment.End else Alignment.Start),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (message.isFromUser) Color(0xFFc6f584) else Color(0xFFE0E0E0)
-                    )
+                        .padding(vertical = 4.dp),
+                    contentAlignment = if (message.isFromUser) Alignment.CenterEnd else Alignment.CenterStart
                 ) {
-                    Text(
-                        text = message.text,
-                        modifier = Modifier.padding(12.dp),
-                        color = Color.Black
-                    )
+                    Card(
+                        modifier = Modifier
+                            .widthIn(max = 280.dp) // Limit width for better readability
+                            .wrapContentWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (message.isFromUser) Color(0xFFc6f584) else Color(0xFFE0E0E0)
+                        )
+                    ) {
+                        if (message.isWaiting) {
+                            // Show loading indicator for waiting messages
+                            Box(
+                                modifier = Modifier
+                                    .padding(16.dp)
+                                    .size(24.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(24.dp),
+                                    color = Color(0xFF4A7C25),
+                                    strokeWidth = 2.dp
+                                )
+                            }
+                        } else {
+                            // Show message text
+                            Text(
+                                text = message.text,
+                                modifier = Modifier.padding(12.dp),
+                                color = Color.Black
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -937,20 +980,22 @@ fun ChatScreen(activity: MainActivity, navController: NavController) {
                             text = messageText,
                             isFromUser = true
                         )
-                        messages = messages + newMessage
+
+                        // Add waiting message
+                        val waitingMessage = ChatMessage(
+                            text = "",
+                            isFromUser = false,
+                            isWaiting = true
+                        )
+
+                        // Update messages list
+                        messages = messages + newMessage + waitingMessage
 
                         // Send message to n8n webhook
                         activity.onMessageSent(messageText, sessionId)
 
                         // Clear input field
                         messageText = ""
-
-                        // Add a "waiting" message that will be replaced by the real response
-//                        messages = messages + ChatMessage(
-//                            text = "",
-//                            isFromUser = false,
-//                            isWaiting = true
-//                        )
                     }
                 },
                 colors = ButtonDefaults.buttonColors(
@@ -963,7 +1008,6 @@ fun ChatScreen(activity: MainActivity, navController: NavController) {
         }
     }
 }
-
 // Update ChatMessage class to include an isWaiting flag
 data class ChatMessage(
     val text: String,
