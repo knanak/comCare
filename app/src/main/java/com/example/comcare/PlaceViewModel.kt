@@ -88,6 +88,19 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
         }
     }
 
+    // 주소에서 도시와 구/군 정보를 추출하는 함수들
+    private fun extractCity(address: String): String {
+        // 주소에서 첫 번째 단어를 도시로 추출 (예: "Seoul Yeongdeungpo-gu"에서 "Seoul")
+        val parts = address.trim().split(" ")
+        return if (parts.isNotEmpty()) parts[0] else ""
+    }
+
+    private fun extractDistrict(address: String): String {
+        // 주소에서 두 번째 단어를 구/군으로 추출 (예: "Seoul Yeongdeungpo-gu"에서 "Yeongdeungpo-gu")
+        val parts = address.trim().split(" ")
+        return if (parts.size > 1) parts[1] else ""
+    }
+
     private suspend fun fetchSupabaseData(): List<Place> {
         return try {
             Log.d("PlaceViewModel", "Starting Supabase data fetch")
@@ -100,12 +113,15 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
                 return emptyList()
             }
 
-            // This is where you put the mapping code
+            // 시설 데이터 매핑
             val places = supabaseFacilities.map { facility ->
                 try {
-                    Log.d("PlaceViewModel", "Converting facility: ${facility.id} - ${facility.name}")
+                    // 도시와 구/군 정보 추출
+                    val city = extractCity(facility.address)
+                    val district = extractDistrict(facility.address)
 
-                    // Parse service1 to extract service2 if needed
+                    Log.d("PlaceViewModel", "Converting facility: ${facility.id} - ${facility.name} - ${facility.service1} - ${facility.service2} - $district")
+                    // 서비스 정보 처리
                     val originalService2 = facility.service2
                     val (newService1, newService2) = if (originalService2.contains("치매")) {
                         // Find the index of "치매"
@@ -130,7 +146,8 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
                         facilityCode = "", // No direct equivalent in Supabase model
                         facilityKind = originalService2,
                         facilityKindDetail = "장기요양기관",
-                        district = extractDistrict(facility.address),
+//                        city = city, // 추출한 도시 정보 저장
+                        district = district, // 추출한 구/군 정보 저장
                         address = facility.address,
                         tel = facility.tel,
                         zipCode = "",
@@ -159,26 +176,26 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
     }
 
     // Helper function to extract district from address
-    private fun extractDistrict(address: String): String {
-        val addressParts = address.split(" ")
-        return if (addressParts.size >= 2) {
-            // Try to get district part (usually second part of Korean address)
-            val districtPart = addressParts[1]
-
-            // Make sure it ends with "구" if it's a district
-            if (districtPart.endsWith("구")) {
-                districtPart
-            } else if (districtPart.contains("구")) {
-                // Extract just the district part if it contains "구" with other text
-                val districtMatch = "(.+구)".toRegex().find(districtPart)
-                districtMatch?.groupValues?.get(1) ?: districtPart
-            } else {
-                districtPart
-            }
-        } else {
-            "" // Return empty string if address format is unexpected
-        }
-    }
+//    private fun extractDistrict(address: String): String {
+//        val addressParts = address.split(" ")
+//        return if (addressParts.size >= 2) {
+//            // Try to get district part (usually second part of Korean address)
+//            val districtPart = addressParts[1]
+//
+//            // Make sure it ends with "구" if it's a district
+//            if (districtPart.endsWith("구")) {
+//                districtPart
+//            } else if (districtPart.contains("구")) {
+//                // Extract just the district part if it contains "구" with other text
+//                val districtMatch = "(.+구)".toRegex().find(districtPart)
+//                districtMatch?.groupValues?.get(1) ?: districtPart
+//            } else {
+//                districtPart
+//            }
+//        } else {
+//            "" // Return empty string if address format is unexpected
+//        }
+//    }
 
     private fun processLocationCategories(places: List<Place>) {
         // Extract unique cities from addresses

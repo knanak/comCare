@@ -46,9 +46,11 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.filled.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.core.content.ContextCompat
@@ -186,39 +188,39 @@ fun PlaceComparisonApp(
 
     Column(modifier = Modifier.fillMaxSize()) {
         // App Bar with rounded corners
-        Box(
-            modifier = Modifier
-                .padding(horizontal = 2.dp, vertical = 8.dp)
-                .fillMaxWidth()
-        ) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(1.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = Color(0xFFc6f584)
-                )
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(2.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "실버 놀이터",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = Color.Black
-                    )
-                }
-            }
-        }
+        // App Bar with Silverland card - changed color to #cacdca
+//        Box(
+//            modifier = Modifier
+//                .padding(horizontal = 0.dp, vertical = 0.dp)  // Removed spacing
+//                .fillMaxWidth()
+//        ) {
+//            Card(
+//                modifier = Modifier.fillMaxWidth(),
+//                shape = RectangleShape,  // Made rectangular
+//                colors = CardDefaults.cardColors(
+//                    containerColor = Color(0xFFcacdca)  // New color #cacdca
+//                )
+//            ) {
+//                Box(
+//                    modifier = Modifier
+//                        .fillMaxWidth()
+//                        .padding(2.dp),
+//                    contentAlignment = Alignment.Center
+//                ) {
+//                    Text(
+//                        text = "실버랜드",
+//                        style = MaterialTheme.typography.titleLarge,
+//                        color = Color.Black
+//                    )
+//                }
+//            }
+//        }
 
-        // Navigation buttons row
+// Navigation buttons row with borders and full width - immediately follows the card
         Row(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween
+                .fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly
         ) {
             // Button 1 - Long-term Care Facilities
             Button(
@@ -228,13 +230,18 @@ fun PlaceComparisonApp(
                 },
                 modifier = Modifier
                     .weight(1f)
-                    .padding(horizontal = 4.dp),
+                    .border(width = 1.dp, color = Color.Black, shape = RectangleShape),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if(currentSection == "welfareFacilities") Color(0xFF9BC95B) else Color(0xFFc6f584),
+                    containerColor = if(currentSection == "welfareFacilities") Color(0xFFcacdca) else Color(0xFFcacdca),
                     contentColor = Color.Black
-                )
+                ),
+                shape = RectangleShape
             ) {
-                Text("시설")
+                Text(
+                    "시설",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
             }
 
             // Button 2 - Senior Policies
@@ -245,13 +252,18 @@ fun PlaceComparisonApp(
                 },
                 modifier = Modifier
                     .weight(1f)
-                    .padding(horizontal = 4.dp),
+                    .border(width = 1.dp, color = Color.Black, shape = RectangleShape),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if(currentSection == "seniorPolicies") Color(0xFF9BC95B) else Color(0xFFc6f584),
+                    containerColor = if(currentSection == "seniorPolicies") Color(0xFFcacdca) else Color(0xFFcacdca),
                     contentColor = Color.Black
-                )
+                ),
+                shape = RectangleShape
             ) {
-                Text("정책")
+                Text(
+                    "정책",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
             }
 
             // Button 3 - Jobs
@@ -262,13 +274,18 @@ fun PlaceComparisonApp(
                 },
                 modifier = Modifier
                     .weight(1f)
-                    .padding(horizontal = 4.dp),
+                    .border(width = 1.dp, color = Color.Black, shape = RectangleShape),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if(currentSection == "jobs") Color(0xFF9BC95B) else Color(0xFFc6f584),
+                    containerColor = if(currentSection == "jobs") Color(0xFFcacdca) else Color(0xFFcacdca),
                     contentColor = Color.Black
-                )
+                ),
+                shape = RectangleShape
             ) {
-                Text("일자리")
+                Text(
+                    "고용",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
             }
 
             // Button 4 - Welfare Facilities
@@ -279,33 +296,60 @@ fun PlaceComparisonApp(
                 },
                 modifier = Modifier
                     .weight(1f)
-                    .padding(horizontal = 4.dp),
+                    .border(width = 1.dp, color = Color.Black, shape = RectangleShape),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if(currentSection == "welfareFacilities") Color(0xFF9BC95B) else Color(0xFFc6f584),
+                    containerColor = if(currentSection == "welfareFacilities") Color(0xFFcacdca) else Color(0xFFcacdca),
                     contentColor = Color.Black
-                )
+                ),
+                shape = RectangleShape
             ) {
-                Text("문화")
+                Text(
+                    "문화",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
 
-        // Add Chat button
+// Add Chat button - now directly below the navigation buttons
         Button(
             onClick = { navController.navigate("chat") },
             modifier = Modifier
-                .align(Alignment.End)
-                .padding(horizontal = 16.dp),
+                .fillMaxWidth()  // Make button full width
+                .padding(horizontal = 0.dp, vertical = 0.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = Color(0xFFc6f584),
                 contentColor = Color.Black
-            )
+            ),
+            shape = RectangleShape  // Make rectangular
         ) {
-            Text("채팅 문의")
+            Text(
+                "오비서에게 물어보기",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
         }
+
+        // Add Chat button
+//        Button(
+//            onClick = { navController.navigate("chat") },
+//            modifier = Modifier
+//                .align(Alignment.End)
+//                .padding(horizontal = 16.dp),
+//            colors = ButtonDefaults.buttonColors(
+//                containerColor = Color(0xFFc6f584),
+//                contentColor = Color.Black
+//            )
+//        ) {
+//            Text("채팅 문의")
+//        }
 
         // Show filters only when button 4 is pressed and showFilters is true
         if (showFilters && currentSection == "welfareFacilities") {
             // Filters Section
+
+            // 필터 섹션의 텍스트 크기를 증가한 코드
+// Filters Section
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -316,11 +360,12 @@ fun PlaceComparisonApp(
                     // Location Filters (City and District side by side)
                     Text(
                         "위치:",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium
+                        style = MaterialTheme.typography.headlineSmall, // 크게 증가
+                        fontWeight = FontWeight.Bold,  // 더 두껍게
+                        color = Color(0xFFffffff)  // 더 어둡게
                     )
 
-                    Spacer(modifier = Modifier.height(1.dp))
+                    Spacer(modifier = Modifier.height(8.dp))  // 간격 증가
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -337,8 +382,17 @@ fun PlaceComparisonApp(
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text("$selectedCity", color = Color(0xFF4A7C25))
-                                    Text("▼", style = MaterialTheme.typography.bodyMedium, color = Color(0xFF4A7C25))
+                                    Text(
+                                        "$selectedCity",
+                                        style = MaterialTheme.typography.titleLarge, // 크기 증가
+                                        color = Color(0xFFffffff), // 더 어둡게
+                                        fontWeight = FontWeight.Bold // 두껍게
+                                    )
+                                    Text(
+                                        "▼",
+                                        style = MaterialTheme.typography.titleLarge, // 크기 증가
+                                        color = Color(0xFFffffff) // 더 어둡게
+                                    )
                                 }
                             }
 
@@ -348,7 +402,14 @@ fun PlaceComparisonApp(
                             ) {
                                 viewModel.cities.value.forEach { city ->
                                     DropdownMenuItem(
-                                        text = { Text(city) },
+                                        text = {
+                                            Text(
+                                                city,
+                                                style = MaterialTheme.typography.titleLarge, // 크기 증가
+                                                color = Color(0xFFffffff), // 더 어둡게
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                        },
                                         onClick = {
                                             selectedCity = city
                                             expandedCityMenu = false
@@ -369,8 +430,17 @@ fun PlaceComparisonApp(
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text("$selectedDistrict", color = Color(0xFF4A7C25))
-                                    Text("▼", style = MaterialTheme.typography.bodyMedium, color = Color(0xFF4A7C25))
+                                    Text(
+                                        "$selectedDistrict",
+                                        style = MaterialTheme.typography.titleLarge, // 크기 증가
+                                        color = Color(0xFFffffff), // 더 어둡게
+                                        fontWeight = FontWeight.Bold // 두껍게
+                                    )
+                                    Text(
+                                        "▼",
+                                        style = MaterialTheme.typography.titleLarge, // 크기 증가
+                                        color = Color(0xFFffffff) // 더 어둡게
+                                    )
                                 }
                             }
 
@@ -380,7 +450,14 @@ fun PlaceComparisonApp(
                             ) {
                                 availableDistricts.forEach { district ->
                                     DropdownMenuItem(
-                                        text = { Text(district) },
+                                        text = {
+                                            Text(
+                                                district,
+                                                style = MaterialTheme.typography.titleLarge, // 크기 증가
+                                                color = Color(0xFFffffff), // 더 어둡게
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                        },
                                         onClick = {
                                             selectedDistrict = district
                                             expandedDistrictMenu = false
@@ -392,16 +469,17 @@ fun PlaceComparisonApp(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(3.dp))
+                    Spacer(modifier = Modifier.height(16.dp))  // 간격 증가
 
                     // Service Filters (Category and Subcategory side by side)
                     Text(
                         "서비스:",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium
+                        style = MaterialTheme.typography.headlineSmall, // 크게 증가
+                        fontWeight = FontWeight.Bold,  // 더 두껍게
+                        color = Color(0xFFffffff)  // 더 어둡게
                     )
 
-                    Spacer(modifier = Modifier.height(1.dp))
+                    Spacer(modifier = Modifier.height(8.dp))  // 간격 증가
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -418,8 +496,17 @@ fun PlaceComparisonApp(
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text("$selectedServiceCategory", color = Color(0xFF4A7C25))
-                                    Text("▼", style = MaterialTheme.typography.bodyMedium, color = Color(0xFF4A7C25))
+                                    Text(
+                                        "$selectedServiceCategory",
+                                        style = MaterialTheme.typography.titleLarge, // 크기 증가
+                                        color = Color(0xFFffffff), // 더 어둡게
+                                        fontWeight = FontWeight.Bold // 두껍게
+                                    )
+                                    Text(
+                                        "▼",
+                                        style = MaterialTheme.typography.titleLarge, // 크기 증가
+                                        color = Color(0xFFffffff) // 더 어둡게
+                                    )
                                 }
                             }
 
@@ -429,7 +516,14 @@ fun PlaceComparisonApp(
                             ) {
                                 viewModel.serviceCategories.value.forEach { category ->
                                     DropdownMenuItem(
-                                        text = { Text(category) },
+                                        text = {
+                                            Text(
+                                                category,
+                                                style = MaterialTheme.typography.titleLarge, // 크기 증가
+                                                color = Color(0xFFffffff), // 더 어둡게
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                        },
                                         onClick = {
                                             selectedServiceCategory = category
                                             expandedServiceMenu = false
@@ -450,8 +544,17 @@ fun PlaceComparisonApp(
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text("$selectedServiceSubcategory", color = Color(0xFF4A7C25))
-                                    Text("▼", style = MaterialTheme.typography.bodyMedium, color = Color(0xFF4A7C25))
+                                    Text(
+                                        "$selectedServiceSubcategory",
+                                        style = MaterialTheme.typography.titleLarge, // 크기 증가
+                                        color = Color(0xFFffffff), // 더 어둡게
+                                        fontWeight = FontWeight.Bold // 두껍게
+                                    )
+                                    Text(
+                                        "▼",
+                                        style = MaterialTheme.typography.titleLarge, // 크기 증가
+                                        color = Color(0xFFffffff) // 더 어둡게
+                                    )
                                 }
                             }
 
@@ -461,7 +564,14 @@ fun PlaceComparisonApp(
                             ) {
                                 availableServiceSubcategories.forEach { subcategory ->
                                     DropdownMenuItem(
-                                        text = { Text(subcategory) },
+                                        text = {
+                                            Text(
+                                                subcategory,
+                                                style = MaterialTheme.typography.titleLarge, // 크기 증가
+                                                color = Color(0xFFffffff), // 더 어둡게
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                        },
                                         onClick = {
                                             selectedServiceSubcategory = subcategory
                                             expandedServiceSubcategoryMenu = false
@@ -478,7 +588,7 @@ fun PlaceComparisonApp(
                         }
                     }
 
-                    // Add search button
+                    // Add search button (기존 스타일 유지)
                     Spacer(modifier = Modifier.height(24.dp))
 
                     Button(
@@ -499,10 +609,15 @@ fun PlaceComparisonApp(
                             contentColor = Color.Black
                         )
                     ) {
-                        Text("검색하기")
+                        Text(
+                            "검색하기",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }
+
         }
 
         // Content based on the current section
@@ -568,54 +683,54 @@ fun PlaceComparisonApp(
             }
             "welfareFacilities" -> {
                 // Welfare facilities content
-                Text(
-                    "복지시설 정보",
-                    modifier = Modifier.padding(16.dp),
-                    style = MaterialTheme.typography.titleMedium
-                )
+//                Text(
+//                    "복지시설 정보",
+//                    modifier = Modifier.padding(16.dp),
+//                    style = MaterialTheme.typography.titleMedium
+//                )
 
                 // If filters are shown, display facilities after applying filters
-                if (!showFilters) {
-                    if (places.isNotEmpty()) {
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 16.dp)
-                        ) {
-                            items(places) { place ->
-                                PlaceCard(place = place)
-                                Spacer(modifier = Modifier.height(8.dp))
-                            }
-                        }
-                    } else {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("선택한 조건에 맞는 시설이 없습니다.")
-                        }
-                    }
-                } else {
-                    // Show prompt to use filters
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("복지시설을 검색하려면 필터를 사용하세요.")
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Button(
-                                onClick = { showFilters = true },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFFc6f584),
-                                    contentColor = Color.Black
-                                )
-                            ) {
-                                Text("필터 보기")
-                            }
-                        }
-                    }
-                }
+//                if (!showFilters) {
+//                    if (places.isNotEmpty()) {
+//                        LazyColumn(
+//                            modifier = Modifier
+//                                .fillMaxSize()
+//                                .padding(horizontal = 16.dp)
+//                        ) {
+//                            items(places) { place ->
+//                                PlaceCard(place = place)
+//                                Spacer(modifier = Modifier.height(8.dp))
+//                            }
+//                        }
+//                    } else {
+//                        Box(
+//                            modifier = Modifier.fillMaxSize(),
+//                            contentAlignment = Alignment.Center
+//                        ) {
+//                            Text("선택한 조건에 맞는 시설이 없습니다.")
+//                        }
+//                    }
+//                } else {
+//                    // Show prompt to use filters
+//                    Box(
+//                        modifier = Modifier.fillMaxSize(),
+//                        contentAlignment = Alignment.Center
+//                    ) {
+//                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+//                            Text("복지시설을 검색하려면 필터를 사용하세요.")
+//                            Spacer(modifier = Modifier.height(16.dp))
+//                            Button(
+//                                onClick = { showFilters = true },
+//                                colors = ButtonDefaults.buttonColors(
+//                                    containerColor = Color(0xFFc6f584),
+//                                    contentColor = Color.Black
+//                                )
+//                            ) {
+//                                Text("필터 보기")
+//                            }
+//                        }
+//                    }
+//                }
             }
         }
     }
@@ -868,6 +983,8 @@ fun PlaceCard(place: Place) {
         }
     }
 }
+
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
@@ -898,6 +1015,7 @@ fun ChatScreen(
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ko-KR")  // Korean language
             putExtra(RecognizerIntent.EXTRA_PROMPT, "말씀해주세요...")
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true) // Enable partial results for real-time transcription
         }
     }
 
@@ -906,13 +1024,13 @@ fun ChatScreen(
         if (messages.isEmpty()) {
             messages = listOf(
                 ChatMessage(
-                    text = "안녕하세요! 실버 놀이터입니다. 노인복지 시설, 정책, 일자리에 관해 무엇이든 물어보세요!",
+                    text = "안녕하세요! 오비서입니다. 시니어에 관련된 정책, 일자리, 복지시설에 관해 무엇이든 물어보세요!",
                     isFromUser = false
                 )
             )
         }
 
-        // Set up the speech recognizer listener
+        // Set up the speech recognizer listener with real-time transcription
         speechRecognizer?.setRecognitionListener(object : RecognitionListener {
             override fun onResults(results: Bundle?) {
                 val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
@@ -921,6 +1039,15 @@ fun ChatScreen(
                     messageText = recognizedText
                 }
                 isListening = false
+            }
+
+            // Handle partial results for real-time transcription
+            override fun onPartialResults(partialResults: Bundle?) {
+                val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                if (!matches.isNullOrEmpty()) {
+                    val partialText = matches[0]
+                    messageText = partialText
+                }
             }
 
             override fun onReadyForSpeech(params: Bundle?) {}
@@ -932,7 +1059,6 @@ fun ChatScreen(
                 Log.e("SpeechRecognition", "Error code: $error")
                 isListening = false
             }
-            override fun onPartialResults(partialResults: Bundle?) {}
             override fun onEvent(eventType: Int, params: Bundle?) {}
         })
     }
@@ -1012,7 +1138,7 @@ fun ChatScreen(
         ) {
             // Top bar
             TopAppBar(
-                title = { Text("실버 놀이터 AI 도우미") },
+                title = { Text("실버랜드 오비서") },
                 navigationIcon = {
                     if (showBackButton) {
                         IconButton(onClick = { navController.navigateUp() }) {
@@ -1069,50 +1195,19 @@ fun ChatScreen(
                         Spacer(modifier = Modifier.height(40.dp))
                     }
                 }
-
-                // Speech recognition indicator
-                if (isListening) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(bottom = 80.dp)
-                            .background(
-                                color = Color(0x80000000),
-                                shape = RoundedCornerShape(8.dp)
-                            )
-                            .padding(16.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(24.dp),
-                                color = Color.White,
-                                strokeWidth = 2.dp
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                "듣고 있습니다...",
-                                color = Color.White
-                            )
-                        }
-                    }
-                }
             }
 
             // Message input area with fixed position
-// Message input area with fixed position
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 color = MaterialTheme.colorScheme.surface,
                 shadowElevation = 4.dp
             ) {
-                // Set a fixed height for the input area but make it large enough
+                // Set a minimum height for the input area
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 72.dp) // Minimum height instead of fixed height
+                        .heightIn(min = 72.dp)
                 ) {
                     Row(
                         modifier = Modifier
@@ -1120,7 +1215,7 @@ fun ChatScreen(
                             .padding(horizontal = 16.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Microphone button
+                        // Microphone button with visual feedback for active state
                         IconButton(
                             onClick = {
                                 if (speechRecognizer == null) {
@@ -1128,17 +1223,24 @@ fun ChatScreen(
                                     return@IconButton
                                 }
 
-                                if (ContextCompat.checkSelfPermission(
-                                        context,
-                                        Manifest.permission.RECORD_AUDIO
-                                    ) == PackageManager.PERMISSION_GRANTED
-                                ) {
-                                    // Permission already granted, start listening
-                                    speechRecognizer.startListening(speechRecognizerIntent)
-                                    isListening = true
+                                if (isListening) {
+                                    // Stop listening if already active
+                                    speechRecognizer.stopListening()
+                                    isListening = false
                                 } else {
-                                    // Request permission
-                                    launcher.launch(Manifest.permission.RECORD_AUDIO)
+                                    // Start listening if not active
+                                    if (ContextCompat.checkSelfPermission(
+                                            context,
+                                            Manifest.permission.RECORD_AUDIO
+                                        ) == PackageManager.PERMISSION_GRANTED
+                                    ) {
+                                        // Permission already granted, start listening
+                                        speechRecognizer.startListening(speechRecognizerIntent)
+                                        isListening = true
+                                    } else {
+                                        // Request permission
+                                        launcher.launch(Manifest.permission.RECORD_AUDIO)
+                                    }
                                 }
                             },
                             modifier = Modifier
@@ -1146,18 +1248,19 @@ fun ChatScreen(
                                     color = if (isListening) Color(0xFFFF5722) else Color(0xFFF0F0F0),
                                     shape = CircleShape
                                 )
-                                .size(40.dp)
+                                .size(48.dp) // Slightly larger for better visibility
                         ) {
                             Icon(
-                                imageVector = Icons.Default.KeyboardVoice,
-                                contentDescription = "Voice Input",
-                                tint = if (isListening) Color.White else Color.Black
+                                imageVector = if (isListening) Icons.Default.Mic else Icons.Default.KeyboardVoice,
+                                contentDescription = if (isListening) "음성 입력 중지" else "음성 입력",
+                                tint = if (isListening) Color.White else Color.Black,
+                                modifier = Modifier.size(24.dp)
                             )
                         }
 
                         Spacer(modifier = Modifier.width(8.dp))
 
-                        // Text field with improved placeholder handling
+                        // Text field with improved placeholder and real-time transcription
                         OutlinedTextField(
                             value = messageText,
                             onValueChange = { messageText = it },
@@ -1166,9 +1269,10 @@ fun ChatScreen(
                                 .heightIn(min = 48.dp),
                             placeholder = {
                                 Text(
-                                    "메시지를 입력하세요...",
-                                    maxLines = 1, // Keep placeholder to one line
-                                    overflow = TextOverflow.Ellipsis // Use ellipsis for long text
+                                    if (isListening) "듣고 있습니다..." else "메시지를 입력하세요...",
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    color = if (isListening) Color(0xFFFF5722) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                                 )
                             },
                             keyboardOptions = KeyboardOptions(
@@ -1190,16 +1294,27 @@ fun ChatScreen(
                                     }
                                 }
                             ),
-                            maxLines = 3, // Allow more lines for input text
-                            singleLine = false
+                            maxLines = 3,
+                            singleLine = false,
+                            // Change border color when listening
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = if (isListening) Color(0xFFFF5722) else MaterialTheme.colorScheme.primary,
+                                unfocusedBorderColor = if (isListening) Color(0xFFFF5722).copy(alpha = 0.5f) else MaterialTheme.colorScheme.outline
+                            )
                         )
 
                         Spacer(modifier = Modifier.width(8.dp))
 
-                        // Send button
+                        // Send button - enabled only when there's text to send
                         IconButton(
                             onClick = {
                                 if (messageText.isNotEmpty()) {
+                                    // Stop listening if active before sending
+                                    if (isListening) {
+                                        speechRecognizer?.stopListening()
+                                        isListening = false
+                                    }
+
                                     sendMessage(
                                         messageText,
                                         activity,
@@ -1213,15 +1328,16 @@ fun ChatScreen(
                             },
                             modifier = Modifier
                                 .background(
-                                    color = Color(0xFFc6f584),
+                                    color = if (messageText.isNotEmpty()) Color(0xFFc6f584) else Color(0xFFE0E0E0),
                                     shape = CircleShape
                                 )
-                                .size(40.dp)
+                                .size(48.dp) // Match size with mic button
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Send,
                                 contentDescription = "Send",
-                                tint = Color.Black
+                                tint = if (messageText.isNotEmpty()) Color.Black else Color.Gray,
+                                modifier = Modifier.size(24.dp)
                             )
                         }
                     }

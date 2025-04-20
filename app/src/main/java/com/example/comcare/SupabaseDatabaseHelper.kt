@@ -167,6 +167,7 @@ class SupabaseDatabaseHelper(private val context: Context) {
 
 
             Pair(service1Part, service2Part)
+
         } else {
             // If there's no "치매", use the original string for service1 and empty for service2
             Pair(originalService2, this.service2 ?: "")  // Use empty string if service2 is null
