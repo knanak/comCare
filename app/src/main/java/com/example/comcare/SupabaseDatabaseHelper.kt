@@ -251,7 +251,7 @@ class SupabaseDatabaseHelper(private val context: Context) {
                     // First get the total count
                     val totalCount = supabase.postgrest["job"]
                         .select(head = true, count = Count.EXACT)
-                        .count() ?: 0
+                        .count() ?: 0L
 
                     Log.d("supabase", "Total count of jobs: $totalCount")
 
@@ -260,8 +260,8 @@ class SupabaseDatabaseHelper(private val context: Context) {
                         return@withContext emptyList<Job>()
                     }
 
-                    // Determine the batch size - similar to getFacilities
-                    val batchSize = 100 // Starting with a reasonable batch size
+                    // Determine the batch size
+                    val batchSize = 100
                     val allJobs = mutableListOf<Job>()
 
                     // Fetch in batches
@@ -278,7 +278,41 @@ class SupabaseDatabaseHelper(private val context: Context) {
                                 .decodeList<Job>()
 
                             Log.d("supabase", "Fetched batch of ${batch.size} jobs")
-                            allJobs.addAll(batch)
+
+                            // Clean the WorkingHours field for each job before adding to the list
+                            val cleanedBatch = batch.map { job ->
+                                var cleanedHours = job.WorkingHours
+
+                                // Skip processing if WorkingHours is null
+                                if (cleanedHours != null) {
+                                    // Remove "주 소정근로시간" if present
+                                    if (cleanedHours.contains("주 소정근로시간")) {
+                                        val parts = cleanedHours.split("주 소정근로시간")
+                                        cleanedHours = if (parts.isNotEmpty() && parts[0].isNotEmpty()) {
+                                            parts[0].trim()
+                                        } else {
+                                            // If no text before "주 소정근로시간", check after it
+                                            if (parts.size > 1) parts[1].trim() else cleanedHours
+                                        }
+                                    }
+
+                                    // Remove "(근무시간) " if present
+                                    if (cleanedHours.contains("(근무시간) ")) {
+                                        cleanedHours = cleanedHours.replace("(근무시간) ", "").trim()
+                                    }
+
+                                    // Remove "* 상세 근무시간" and everything after it if present
+                                    if (cleanedHours.contains("* 상세 근무시간")) {
+                                        val parts = cleanedHours.split("* 상세 근무시간")
+                                        cleanedHours = parts[0].trim()
+                                    }
+                                }
+
+                                // Create a copy of the job with the cleaned hours
+                                job.copy(WorkingHours = cleanedHours)
+                            }
+
+                            allJobs.addAll(cleanedBatch)
 
                             // If we got an empty batch or fewer items than requested, we might be done
                             if (batch.isEmpty() || batch.size < batchSize) {
@@ -302,6 +336,7 @@ class SupabaseDatabaseHelper(private val context: Context) {
                         Log.d("supabase", "Sample job: id=${sample.id}, " +
                                 "title=${sample.JobTitle}, " +
                                 "category=${sample.JobCategory}, " +
+                                "hours=${sample.WorkingHours}, " +
                                 "deadline=${sample.Deadline}")
                     }
 
@@ -318,9 +353,5 @@ class SupabaseDatabaseHelper(private val context: Context) {
             emptyList()
         }
     }
-
-
-
-
 
 }

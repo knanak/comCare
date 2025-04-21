@@ -667,8 +667,10 @@ fun PlaceComparisonApp(
                 }
             }
 
+// Replace the existing "jobs" case in your PlaceComparisonApp with this implementation
+
             "jobs" -> {
-                // Jobs content
+                // Jobs content with pagination
                 Column(modifier = Modifier.fillMaxSize()) {
                     // Section header
                     Row(
@@ -693,36 +695,117 @@ fun PlaceComparisonApp(
 
                     Divider(modifier = Modifier.padding(horizontal = 16.dp))
 
-                    // Jobs list
+                    // Jobs list with pagination
                     val jobs = viewModel.jobs.value
 
                     if (jobs.isNotEmpty()) {
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 16.dp),
-                            contentPadding = PaddingValues(vertical = 8.dp)
+                        // Pagination state
+                        var currentPage by remember { mutableStateOf(0) }
+                        val itemsPerPage = 5
+                        val totalPages = ceil(jobs.size.toFloat() / itemsPerPage).toInt()
+
+                        // Calculate current page items
+                        val startIndex = currentPage * itemsPerPage
+                        val endIndex = minOf(startIndex + itemsPerPage, jobs.size)
+                        val currentPageItems = jobs.subList(startIndex, endIndex)
+
+                        Column(
+                            modifier = Modifier.fillMaxSize()
                         ) {
-                            items(jobs) { job ->
-                                JobCard(job = job)
-                                Spacer(modifier = Modifier.height(8.dp))
+                            // Main content area - shows jobs for current page
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth()
+                            ) {
+                                LazyColumn(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = 16.dp),
+                                    contentPadding = PaddingValues(vertical = 8.dp)
+                                ) {
+                                    items(currentPageItems) { job ->
+                                        JobCard(job = job)
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                    }
+                                }
                             }
-                        }
-                    } else {
-                        // Loading or empty state
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(200.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (viewModel.isLoading) {
-                                CircularProgressIndicator(color = Color(0xFF4A7C25))
-                            } else {
-                                Text("일자리 정보가 없습니다")
+
+                            // Pagination controls
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp, horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Calculate which page numbers to show
+                                val pageGroupSize = 4
+                                val startPage = (currentPage / pageGroupSize) * pageGroupSize
+                                val endPage = minOf(startPage + pageGroupSize, totalPages)
+
+                                // Page numbers
+                                for (i in startPage until endPage) {
+                                    val pageNumber = i + 1
+                                    Text(
+                                        text = pageNumber.toString(),
+                                        modifier = Modifier
+                                            .clickable { currentPage = i }
+                                            .padding(horizontal = 12.dp, vertical = 4.dp),
+                                        color = if (currentPage == i) Color(0xFF4A7C25) else Color(0xFF757575),
+                                        fontWeight = if (currentPage == i) FontWeight.Bold else FontWeight.Normal,
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                }
+
+                                // "다음" (next) button if there are more pages
+                                if (endPage < totalPages) {
+                                    Text(
+                                        text = "다음",
+                                        modifier = Modifier
+                                            .clickable { currentPage = endPage }
+                                            .padding(horizontal = 12.dp, vertical = 4.dp),
+                                        color = Color(0xFF4A7C25),
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
                             }
                         }
                     }
+                    //                    else if (viewModel.isLoading) {
+//                        // Show loading indicator
+//                        Box(
+//                            modifier = Modifier.fillMaxSize(),
+//                            contentAlignment = Alignment.Center
+//                        ) {
+//                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+//                                CircularProgressIndicator(color = Color(0xFF4A7C25))
+//                                Spacer(modifier = Modifier.height(16.dp))
+//                                Text("일자리 정보를 불러오는 중...")
+//                            }
+//                        }
+//                    } else {
+//                        // Show message when no data
+//                        Box(
+//                            modifier = Modifier.fillMaxSize(),
+//                            contentAlignment = Alignment.Center
+//                        ) {
+//                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+//                                Text("일자리 정보가 없습니다")
+//                                Spacer(modifier = Modifier.height(16.dp))
+//                                Button(
+//                                    onClick = { viewModel.reloadJobsData() },
+//                                    colors = ButtonDefaults.buttonColors(
+//                                        containerColor = Color(0xFFc6f584),
+//                                        contentColor = Color.Black
+//                                    )
+//                                ) {
+//                                    Text("새로고침")
+//                                }
+//                            }
+//                        }
+//                    }
                 }
             }
             "welfareFacilities" -> {
@@ -1052,23 +1135,24 @@ fun JobCard(job: SupabaseDatabaseHelper.Job) {
                 text = job.JobTitle ?: "제목 없음",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
+                color = Color.Yellow,
                 modifier = Modifier.fillMaxWidth()
             )
 
             Spacer(modifier = Modifier.height(8.dp))
 
             // Job Category
-            Row {
-                Text(
-                    "유형: ",
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    job.JobCategory ?: "정보 없음",
-                    style = MaterialTheme.typography.bodyLarge
-                )
-            }
+//            Row {
+//                Text(
+//                    "유형: ",
+//                    style = MaterialTheme.typography.bodyLarge,
+//                    fontWeight = FontWeight.Bold
+//                )
+//                Text(
+//                    job.JobCategory ?: "정보 없음",
+//                    style = MaterialTheme.typography.bodyLarge
+//                )
+//            }
 
             Spacer(modifier = Modifier.height(4.dp))
 
@@ -1076,12 +1160,12 @@ fun JobCard(job: SupabaseDatabaseHelper.Job) {
             Row {
                 Text(
                     "근무형태: ",
-                    style = MaterialTheme.typography.bodyLarge,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
                     job.WorkingType ?: "정보 없음",
-                    style = MaterialTheme.typography.bodyLarge
+                    style = MaterialTheme.typography.titleMedium
                 )
             }
 
@@ -1091,12 +1175,27 @@ fun JobCard(job: SupabaseDatabaseHelper.Job) {
             Row {
                 Text(
                     "근무시간: ",
-                    style = MaterialTheme.typography.bodyLarge,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
                     job.WorkingHours ?: "정보 없음",
-                    style = MaterialTheme.typography.bodyLarge
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Salary Row
+            Row {
+                Text(
+                    "급여: ",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    job.Salary ?: "정보 없음",
+                    style = MaterialTheme.typography.titleMedium
                 )
             }
 
@@ -1108,7 +1207,7 @@ fun JobCard(job: SupabaseDatabaseHelper.Job) {
                     "마감일: $it",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF4A7C25),
+//                    color = Color(0xFF4A7C25),
                     modifier = Modifier.align(Alignment.End)
                 )
             }
