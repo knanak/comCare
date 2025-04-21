@@ -31,9 +31,10 @@ class SupabaseDatabaseHelper(private val context: Context) {
         supabaseKey = SUPABASE_KEY
     ) {
         install(Postgrest)
+
     }
 
-
+    // 1. facilities data
     @Serializable
     data class facilities(
         val id: Int,
@@ -97,7 +98,7 @@ class SupabaseDatabaseHelper(private val context: Context) {
                         })
                         .decodeList<facilities>()
 
-                    Log.d("supabase", "Fetched batch size: ${batch.size}")
+//                    Log.d("supabase", "Fetched batch size: ${batch.size}")
                     allFacilities.addAll(batch)
 
                     // If we got an empty batch or fewer items than requested, we might be done
@@ -217,4 +218,109 @@ class SupabaseDatabaseHelper(private val context: Context) {
             "" // Return empty string if address format is unexpected
         }
     }
+
+    // 2. job data
+    @Serializable
+    data class Job(
+        val id: Int,
+        val JobTitle: String? = null,
+        val DateOfRegistration: String? = null,
+        val Deadline: String? = null,
+        val JobCategory: String? = null,
+        val ExperienceRequired: String? = null,
+        val EmploymentType: String? = null,
+        val Salary: String? = null,
+        val SocialEnsurance: String? = null,
+        val RetirementBenefit: String? = null,
+        val Location: String? = null,
+        val WorkingHours: String? = null,
+        val WorkingType: String? = null,
+        val CompanyName: String? = null,
+        val JobDescription: String? = null,
+        val ApplicationMethod: String? = null,
+        val ApplicationType: String? = null,
+        val document: String? = null
+    )
+
+    suspend fun getJobs(): List<Job> {
+        return try {
+            Log.d("supabase", "Starting getJobs")
+
+            withContext(Dispatchers.IO) {
+                try {
+                    // First get the total count
+                    val totalCount = supabase.postgrest["job"]
+                        .select(head = true, count = Count.EXACT)
+                        .count() ?: 0
+
+                    Log.d("supabase", "Total count of jobs: $totalCount")
+
+                    if (totalCount == 0L) {
+                        Log.d("supabase", "No jobs found in the 'job' table")
+                        return@withContext emptyList<Job>()
+                    }
+
+                    // Determine the batch size - similar to getFacilities
+                    val batchSize = 100 // Starting with a reasonable batch size
+                    val allJobs = mutableListOf<Job>()
+
+                    // Fetch in batches
+                    var currentStart = 0
+                    while (currentStart < totalCount) {
+                        val currentEnd = currentStart + batchSize - 1
+                        Log.d("supabase", "Fetching jobs batch: $currentStart to $currentEnd")
+
+                        try {
+                            val batch = supabase.postgrest["job"]
+                                .select(filter = {
+                                    range(from = currentStart.toLong(), to = currentEnd.toLong())
+                                })
+                                .decodeList<Job>()
+
+                            Log.d("supabase", "Fetched batch of ${batch.size} jobs")
+                            allJobs.addAll(batch)
+
+                            // If we got an empty batch or fewer items than requested, we might be done
+                            if (batch.isEmpty() || batch.size < batchSize) {
+                                break
+                            }
+
+                            // Move to next batch
+                            currentStart += batchSize
+                        } catch (e: Exception) {
+                            Log.e("supabase", "Error fetching jobs batch $currentStart-$currentEnd: ${e.message}", e)
+                            // Continue to next batch despite error
+                            currentStart += batchSize
+                        }
+                    }
+
+                    Log.d("supabase", "Retrieved ${allJobs.size} jobs out of $totalCount total")
+
+                    // Log a sample job for debugging
+                    if (allJobs.isNotEmpty()) {
+                        val sample = allJobs.first()
+                        Log.d("supabase", "Sample job: id=${sample.id}, " +
+                                "title=${sample.JobTitle}, " +
+                                "category=${sample.JobCategory}, " +
+                                "deadline=${sample.Deadline}")
+                    }
+
+                    allJobs
+                } catch (e: Exception) {
+                    Log.e("supabase", "Error in getJobs inner block: ${e.message}", e)
+                    e.printStackTrace()
+                    emptyList()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("supabase", "Error in getJobs: ${e.message}", e)
+            e.printStackTrace()
+            emptyList()
+        }
+    }
+
+
+
+
+
 }

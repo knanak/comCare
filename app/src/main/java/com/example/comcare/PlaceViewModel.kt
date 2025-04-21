@@ -20,6 +20,7 @@ import kotlin.Exception
 import com.example.comcare.OPEN_API_KEY
 
 class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewModel() {
+    // 1. facilities data
     // Using MutableState for the places list
     private val _allPlaces = mutableStateOf<List<Place>>(emptyList())
     private val _filteredPlaces = mutableStateOf<List<Place>>(emptyList())
@@ -39,11 +40,20 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
     private val _serviceSubcategories = mutableStateOf<Map<String, List<String>>>(emptyMap())
     val serviceSubcategories: State<Map<String, List<String>>> = _serviceSubcategories
 
-    init {
-        // Fetch data when ViewModel is initialized
-        fetchPlacesData()
-    }
+    private val _jobs = mutableStateOf<List<SupabaseDatabaseHelper.Job>>(emptyList<SupabaseDatabaseHelper.Job>())
+    val jobs: State<List<SupabaseDatabaseHelper.Job>> = _jobs
 
+    private val _isLoading = mutableStateOf<Boolean>(false)
+    val isLoading: Boolean
+        get() = _isLoading.value
+
+    init {
+        // Fetch places data when ViewModel is initialized
+        fetchPlacesData()
+
+        // Fetch jobs data
+        fetchJobsData()
+    }
     private fun fetchPlacesData() {
         viewModelScope.launch {
             try {
@@ -120,7 +130,6 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
                     val city = extractCity(facility.address)
                     val district = extractDistrict(facility.address)
 
-                    Log.d("PlaceViewModel", "Converting facility: ${facility.id} - ${facility.name} - ${facility.service1} - ${facility.service2} - $district")
                     // 서비스 정보 처리
                     val originalService2 = facility.service2
                     val (newService1, newService2) = if (originalService2.contains("치매")) {
@@ -140,6 +149,10 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
                         Pair(originalService2, facility.service2 ?: "")
                     }
 
+                    // facility.rating에서 개행문자 제거
+                    val cleanRating = facility.rating.replace("\n", " ")
+
+                    Log.d("PlaceViewModel", "Converting facility: ${facility.id} - ${facility.name} - ${facility.service1} - ${facility.service2} - ${facility.address}")
                     Place(
                         id = facility.id.toString(),
                         name = facility.name,
@@ -153,7 +166,7 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
                         zipCode = "",
                         service1 = listOf("장기요양기관"),
                         service2 = listOf(newService1),
-                        rating = facility.rating,
+                        rating = cleanRating,
                         rating_year = facility.rating_year,
                         full = facility.full,
                         now = facility.now,
@@ -658,4 +671,64 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
             cityMatch && districtMatch && serviceMatch
         }
     }
-}
+
+    // 2. job data
+    // Add these properties to your PlaceViewModel class
+
+
+    private fun fetchJobsData() {
+        viewModelScope.launch {
+            try {
+                Log.d("PlaceViewModel", "Starting jobs data fetch")
+                _isLoading.value = true
+
+                val jobsData = withContext(Dispatchers.IO) {
+                    try {
+                        val jobs = supabaseHelper.getJobs()
+                        Log.d("PlaceViewModel", "Supabase getJobs returned ${jobs.size} items")
+
+                        if (jobs.isEmpty()) {
+                            Log.d("PlaceViewModel", "Supabase jobs returned empty list")
+                        } else {
+                            // Log first job for debugging
+                            val firstJob = jobs.firstOrNull()
+                            if (firstJob != null) {
+                                Log.d(
+                                    "PlaceViewModel", "Sample job data: id=${firstJob.id}, " +
+                                            "title=${firstJob.JobTitle}, " +
+                                            "category=${firstJob.JobCategory}"
+                                )
+                            }
+                        }
+
+                        jobs
+                    } catch (e: Exception) {
+                        Log.e(
+                            "PlaceViewModel",
+                            "Error in getJobs Dispatchers.IO block: ${e.message}",
+                            e
+                        )
+                        emptyList()
+                    }
+                }
+
+                // Update the jobs value with the fetched data
+                _jobs.value = jobsData
+
+                Log.d("PlaceViewModel", "Jobs data fetch complete: ${jobsData.size} items")
+            } catch (e: Exception) {
+                Log.e("PlaceViewModel", "Error fetching jobs data: ${e.message}", e)
+                // Set to empty list if there's an error
+                if (_jobs != null) {  // Null check before accessing
+                    _jobs.value = emptyList()
+                }
+            } finally {
+                if (_isLoading != null) {  // Null check before accessing
+                    _isLoading.value = false
+                }
+            }
+        }
+
+        // Modify your init block to include fetchJobsData()
+    }
+    }

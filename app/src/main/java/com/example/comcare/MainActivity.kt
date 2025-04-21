@@ -348,8 +348,8 @@ fun PlaceComparisonApp(
         if (showFilters && currentSection == "welfareFacilities") {
             // Filters Section
 
-            // 필터 섹션의 텍스트 크기를 증가한 코드
-// Filters Section
+
+            // Filters Section
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -666,19 +666,63 @@ fun PlaceComparisonApp(
                     Text("노인정책 정보 섹션")
                 }
             }
+
             "jobs" -> {
                 // Jobs content
-                Text(
-                    "노인 일자리 정보",
-                    modifier = Modifier.padding(16.dp),
-                    style = MaterialTheme.typography.titleMedium
-                )
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // Section header
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "노인 일자리 정보",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
 
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("노인 일자리 정보 섹션")
+                        Text(
+                            text = "총 ${viewModel.jobs.value.size}개",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = Color(0xFF4A7C25)
+                        )
+                    }
+
+                    Divider(modifier = Modifier.padding(horizontal = 16.dp))
+
+                    // Jobs list
+                    val jobs = viewModel.jobs.value
+
+                    if (jobs.isNotEmpty()) {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 16.dp),
+                            contentPadding = PaddingValues(vertical = 8.dp)
+                        ) {
+                            items(jobs) { job ->
+                                JobCard(job = job)
+                                Spacer(modifier = Modifier.height(8.dp))
+                            }
+                        }
+                    } else {
+                        // Loading or empty state
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(200.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (viewModel.isLoading) {
+                                CircularProgressIndicator(color = Color(0xFF4A7C25))
+                            } else {
+                                Text("일자리 정보가 없습니다")
+                            }
+                        }
+                    }
                 }
             }
             "welfareFacilities" -> {
@@ -868,7 +912,6 @@ fun SearchResultsScreen(
         }
     }
 }
-
 @Composable
 fun PlaceCard(place: Place) {
     Card(
@@ -878,107 +921,196 @@ fun PlaceCard(place: Place) {
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            // Top row with name and rating
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    place.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
+            // 이름이 12자 이상일 경우 줄바꿈 처리
+            val formattedName = if (place.name.length > 12) {
+                val midPoint = place.name.length / 2
+                // 중간 지점에서 가장 가까운 공백 찾기
+                var breakIndex = place.name.lastIndexOf(" ", midPoint)
 
-                if (place.rating.isNotEmpty()) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "평가등급: ",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Text(
-                            place.rating,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = when(place.rating) {
-                                "A" -> Color(0xFF4CAF50)
-                                "B" -> Color(0xFF2196F3)
-                                "C" -> Color(0xFFFFC107)
-                                "D" -> Color(0xFFFF9800)
-                                "E" -> Color(0xFFF44336)
-                                else -> MaterialTheme.colorScheme.onSurface
-                            }
-                        )
-                        if (place.rating_year.isNotEmpty()) {
-                            Text(
-                                " (${place.rating_year})",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                    }
+                // 공백이 없거나 너무 앞쪽에 있는 경우 그냥 12자리에서 자르기
+                if (breakIndex == -1 || breakIndex < 4) {
+                    breakIndex = 12
                 }
+
+                val firstLine = place.name.substring(0, breakIndex)
+                val secondLine = place.name.substring(breakIndex).trimStart()
+                "$firstLine\n$secondLine"
+            } else {
+                place.name
             }
+
+            // 이름만 상단에 표시
+            Text(
+                formattedName,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.fillMaxWidth()
+            )
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Address
+            if (place.rating.isNotEmpty()) {
+                val gradeText = "평가등급: ${place.rating}"
+
+                // 등급에 따라 다른 색상 적용
+                val gradeColor = when {
+                    place.rating.contains("A") -> Color(0xFF4CAF50)  // 녹색 (A 포함)
+                    place.rating.contains("B") -> Color(0xFF2196F3)  // 파란색 (B 포함)
+                    place.rating.contains("C") -> Color(0xFFFFC107)  // 노란색 (C 포함)
+                    place.rating.contains("D") -> Color(0xFFFF9800)  // 주황색 (D 포함)
+                    place.rating.contains("E") -> Color(0xFFF44336)  // 빨간색 (E 포함)
+                    else -> Color.Black
+                }
+                Text(
+                    text = gradeText,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = gradeColor
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+            }
+
+            // 주소
             Text(
                 "주소: ${place.address}",
-                style = MaterialTheme.typography.bodyMedium
+                style = MaterialTheme.typography.titleMedium
             )
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            // Services
+            // 서비스 정보
             if (place.service1.isNotEmpty()) {
                 Text(
                     "시설 종류: ${place.service1.joinToString(", ")}",
-                    style = MaterialTheme.typography.bodySmall
+                    style = MaterialTheme.typography.bodyLarge
                 )
             }
 
             if (place.service2.isNotEmpty()) {
                 Text(
                     "시설 유형: ${place.facilityKind}",
-                    style = MaterialTheme.typography.bodySmall
+                    style = MaterialTheme.typography.bodyLarge
                 )
             }
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Capacity - only show if values are not all zeros
+            // 수용 인원 정보 - 0이 아닌 경우에만 표시
             if (place.full != "0" || place.now != "0" || place.wating != "0") {
                 Row(modifier = Modifier.fillMaxWidth()) {
                     Text(
                         "정원: ${place.full}명",
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.weight(1f)
                     )
                     Text(
                         "현재: ${place.now}명",
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.weight(1f)
                     )
                     Text(
                         "대기: ${place.wating}명",
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.weight(1f)
                     )
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(4.dp))
             }
 
-            // Button
-            Button(
-                onClick = { /* Open comparison view */ },
-                modifier = Modifier.align(Alignment.End),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFFc6f584),
-                    contentColor = Color.Black
+            // 상세정보 버튼
+//            Button(
+//                onClick = { /* Open comparison view */ },
+//                modifier = Modifier.align(Alignment.End),
+//                colors = ButtonDefaults.buttonColors(
+//                    containerColor = Color(0xFFc6f584),
+//                    contentColor = Color.Black
+//                ),
+//                shape = RectangleShape
+//            ) {
+//                Text(
+//                    "상세정보",
+//                    style = MaterialTheme.typography.titleMedium,
+//                    fontWeight = FontWeight.Bold
+//                )
+//            }
+        }
+    }
+}
+
+@Composable
+fun JobCard(job: SupabaseDatabaseHelper.Job) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Job Title
+            Text(
+                text = job.JobTitle ?: "제목 없음",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Job Category
+            Row {
+                Text(
+                    "유형: ",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold
                 )
-            ) {
-                Text("상세정보")
+                Text(
+                    job.JobCategory ?: "정보 없음",
+                    style = MaterialTheme.typography.bodyLarge
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Working Type
+            Row {
+                Text(
+                    "근무형태: ",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    job.WorkingType ?: "정보 없음",
+                    style = MaterialTheme.typography.bodyLarge
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Working Hours
+            Row {
+                Text(
+                    "근무시간: ",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    job.WorkingHours ?: "정보 없음",
+                    style = MaterialTheme.typography.bodyLarge
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Deadline
+            job.Deadline?.let {
+                Text(
+                    "마감일: $it",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF4A7C25),
+                    modifier = Modifier.align(Alignment.End)
+                )
             }
         }
     }
