@@ -288,17 +288,18 @@ fun PlaceComparisonApp(
                 )
             }
 
-            // Button 4 - Welfare Facilities
+            // Button 4 - Culture
             Button(
                 onClick = {
-                    currentSection = "welfareFacilities"
-                    showFilters = !showFilters  // Toggle filters visibility
+                    currentSection = "culture"
+                    // Fetch lecture data when this button is clicked
+                    viewModel.fetchLectureData()
                 },
                 modifier = Modifier
                     .weight(1f)
                     .border(width = 1.dp, color = Color.Black, shape = RectangleShape),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if(currentSection == "welfareFacilities") Color(0xFFcacdca) else Color(0xFFcacdca),
+                    containerColor = if(currentSection == "culture") Color(0xFFcacdca) else Color(0xFFcacdca),
                     contentColor = Color.Black
                 ),
                 shape = RectangleShape
@@ -696,7 +697,7 @@ fun PlaceComparisonApp(
                     Divider(modifier = Modifier.padding(horizontal = 16.dp))
 
                     // Jobs list with pagination
-                    val jobs = viewModel.jobs.value
+                    val jobs = viewModel.jobs.value.sortedByDescending { it.id }
 
                     if (jobs.isNotEmpty()) {
                         // Pagination state
@@ -743,6 +744,21 @@ fun PlaceComparisonApp(
                                 val pageGroupSize = 4
                                 val startPage = (currentPage / pageGroupSize) * pageGroupSize
                                 val endPage = minOf(startPage + pageGroupSize, totalPages)
+
+                                if (startPage > 0) {
+                                    Text(
+                                        text = "이전",
+                                        modifier = Modifier
+                                            .clickable {
+                                                // Go to last page of previous group
+                                                currentPage = startPage - 1
+                                            }
+                                            .padding(horizontal = 12.dp, vertical = 4.dp),
+                                        color = Color(0xFF4A7C25),
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
 
                                 // Page numbers
                                 for (i in startPage until endPage) {
@@ -808,56 +824,158 @@ fun PlaceComparisonApp(
 //                    }
                 }
             }
-            "welfareFacilities" -> {
-                // Welfare facilities content
-//                Text(
-//                    "복지시설 정보",
-//                    modifier = Modifier.padding(16.dp),
-//                    style = MaterialTheme.typography.titleMedium
-//                )
+            "culture" -> {
+                // Lectures content with pagination
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // Section header
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "시니어 문화강좌 정보",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
 
-                // If filters are shown, display facilities after applying filters
-//                if (!showFilters) {
-//                    if (places.isNotEmpty()) {
-//                        LazyColumn(
-//                            modifier = Modifier
-//                                .fillMaxSize()
-//                                .padding(horizontal = 16.dp)
-//                        ) {
-//                            items(places) { place ->
-//                                PlaceCard(place = place)
-//                                Spacer(modifier = Modifier.height(8.dp))
-//                            }
-//                        }
-//                    } else {
-//                        Box(
-//                            modifier = Modifier.fillMaxSize(),
-//                            contentAlignment = Alignment.Center
-//                        ) {
-//                            Text("선택한 조건에 맞는 시설이 없습니다.")
-//                        }
-//                    }
-//                } else {
-//                    // Show prompt to use filters
-//                    Box(
-//                        modifier = Modifier.fillMaxSize(),
-//                        contentAlignment = Alignment.Center
-//                    ) {
-//                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-//                            Text("복지시설을 검색하려면 필터를 사용하세요.")
-//                            Spacer(modifier = Modifier.height(16.dp))
-//                            Button(
-//                                onClick = { showFilters = true },
-//                                colors = ButtonDefaults.buttonColors(
-//                                    containerColor = Color(0xFFc6f584),
-//                                    contentColor = Color.Black
-//                                )
-//                            ) {
-//                                Text("필터 보기")
-//                            }
-//                        }
-//                    }
-//                }
+                        Text(
+                            text = "총 ${viewModel.lectures.value.size}개",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = Color(0xFF4A7C25)
+                        )
+                    }
+
+                    Divider(modifier = Modifier.padding(horizontal = 16.dp))
+
+                    // Lectures list with pagination
+                    val lectures = viewModel.lectures.value.sortedByDescending { it.Id }
+
+                    if (lectures.isNotEmpty()) {
+                        // Pagination state
+                        var currentPage by remember { mutableStateOf(0) }
+                        val itemsPerPage = 5
+                        val totalPages = ceil(lectures.size.toFloat() / itemsPerPage).toInt()
+
+                        // Calculate current page items
+                        val startIndex = currentPage * itemsPerPage
+                        val endIndex = minOf(startIndex + itemsPerPage, lectures.size)
+                        val currentPageItems = lectures.subList(startIndex, endIndex)
+
+                        Column(
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            // Main content area - shows lectures for current page
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth()
+                            ) {
+                                LazyColumn(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = 16.dp),
+                                    contentPadding = PaddingValues(vertical = 8.dp)
+                                ) {
+                                    items(currentPageItems) { lecture ->
+                                        LectureCard(lecture = lecture)
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                    }
+                                }
+                            }
+
+                            // Pagination controls
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp, horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Calculate which page numbers to show
+                                val pageGroupSize = 4
+                                val startPage = (currentPage / pageGroupSize) * pageGroupSize
+                                val endPage = minOf(startPage + pageGroupSize, totalPages)
+
+                                if (startPage > 0) {
+                                    Text(
+                                        text = "이전",
+                                        modifier = Modifier
+                                            .clickable {
+                                                // Go to last page of previous group
+                                                currentPage = startPage - 1
+                                            }
+                                            .padding(horizontal = 12.dp, vertical = 4.dp),
+                                        color = Color(0xFF4A7C25),
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+
+                                // Page numbers
+                                for (i in startPage until endPage) {
+                                    val pageNumber = i + 1
+                                    Text(
+                                        text = pageNumber.toString(),
+                                        modifier = Modifier
+                                            .clickable { currentPage = i }
+                                            .padding(horizontal = 12.dp, vertical = 4.dp),
+                                        color = if (currentPage == i) Color(0xFF4A7C25) else Color(0xFF757575),
+                                        fontWeight = if (currentPage == i) FontWeight.Bold else FontWeight.Normal,
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                }
+
+                                // "다음" (next) button if there are more pages
+                                if (endPage < totalPages) {
+                                    Text(
+                                        text = "다음",
+                                        modifier = Modifier
+                                            .clickable { currentPage = endPage }
+                                            .padding(horizontal = 12.dp, vertical = 4.dp),
+                                        color = Color(0xFF4A7C25),
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    } else if (viewModel.isLoadingLectures) {
+                        // Show loading indicator
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                CircularProgressIndicator(color = Color(0xFF4A7C25))
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text("강좌 정보를 불러오는 중...")
+                            }
+                        }
+                    } else {
+                        // Show message when no data
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("강좌 정보가 없습니다")
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Button(
+                                    onClick = { viewModel.fetchLectureData() },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFFc6f584),
+                                        contentColor = Color.Black
+                                    )
+                                ) {
+                                    Text("새로고침")
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -1209,6 +1327,94 @@ fun JobCard(job: SupabaseDatabaseHelper.Job) {
                     fontWeight = FontWeight.Bold,
 //                    color = Color(0xFF4A7C25),
                     modifier = Modifier.align(Alignment.End)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun LectureCard(lecture: SupabaseDatabaseHelper.Lecture) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Lecture Title
+            Text(
+                text = lecture.Title ?: "강좌명 없음",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = Color.Yellow,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Institution
+            Row {
+                Text(
+                    "기관: ",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    lecture.Institution ?: "정보 없음",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Recruitment Period
+            Row {
+                Text(
+                    "모집기간: ",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    lecture.Recruitment_period ?: "정보 없음",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Education Period
+            Row {
+                Text(
+                    "교육기간: ",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    lecture.Education_period ?: "정보 없음",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Bottom row with Fee and Quota
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                // Fee
+                Text(
+                    "수강료: ${lecture.Fees ?: "무료"}",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+
+                // Quota
+                Text(
+                    "정원: ${lecture.Quota ?: "제한없음"}",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
                 )
             }
         }

@@ -40,6 +40,7 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
     private val _serviceSubcategories = mutableStateOf<Map<String, List<String>>>(emptyMap())
     val serviceSubcategories: State<Map<String, List<String>>> = _serviceSubcategories
 
+    // job
     private val _jobs = mutableStateOf<List<SupabaseDatabaseHelper.Job>>(emptyList<SupabaseDatabaseHelper.Job>())
     val jobs: State<List<SupabaseDatabaseHelper.Job>> = _jobs
 
@@ -47,12 +48,19 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
     val isLoading: Boolean
         get() = _isLoading.value
 
-    init {
-        // Fetch places data when ViewModel is initialized
-        fetchPlacesData()
+    // lecture
+    private val _lectures = mutableStateOf<List<SupabaseDatabaseHelper.Lecture>>(emptyList())
+    val lectures: State<List<SupabaseDatabaseHelper.Lecture>> = _lectures
 
-        // Fetch jobs data
+    private val _isLoadingLectures = mutableStateOf<Boolean>(false)
+    val isLoadingLectures: Boolean
+        get() = _isLoadingLectures.value
+
+    init {
+        // Fetch data when ViewModel is initialized
+        fetchPlacesData()
         fetchJobsData()
+        fetchLectureData()
     }
     private fun fetchPlacesData() {
         viewModelScope.launch {
@@ -728,7 +736,53 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
                 }
             }
         }
+    }
+    fun fetchLectureData() {
+        viewModelScope.launch {
+            try {
+                Log.d("PlaceViewModel", "Starting lectures data fetch")
+                _isLoadingLectures.value = true
 
-        // Modify your init block to include fetchJobsData()
+                val lectureData = withContext(Dispatchers.IO) {
+                    try {
+                        val lectures = supabaseHelper.getLectures()
+                        Log.d("PlaceViewModel", "Supabase getLectures returned ${lectures.size} items")
+
+                        if (lectures.isEmpty()) {
+                            Log.d("PlaceViewModel", "Supabase lectures returned empty list")
+                        } else {
+                            // Log first lecture for debugging
+                            val firstLecture = lectures.firstOrNull()
+                            if (firstLecture != null) {
+                                Log.d(
+                                    "PlaceViewModel", "Sample lecture data: id=${firstLecture.Id}, " +
+                                            "title=${firstLecture.Title}, " +
+                                            "institution=${firstLecture.Institution}"
+                                )
+                            }
+                        }
+                        lectures
+                    } catch (e: Exception) {
+                        Log.e(
+                            "PlaceViewModel",
+                            "Error in getLectures Dispatchers.IO block: ${e.message}",
+                            e
+                        )
+                        emptyList()
+                    }
+                }
+
+                // Update the lectures value with the fetched data
+                _lectures.value = lectureData
+
+                Log.d("PlaceViewModel", "Lectures data fetch complete: ${lectureData.size} items")
+            } catch (e: Exception) {
+                Log.e("PlaceViewModel", "Error fetching lectures data: ${e.message}", e)
+                // Set to empty list if there's an error
+                _lectures.value = emptyList()
+            } finally {
+                _isLoadingLectures.value = false
+            }
+        }
     }
-    }
+}

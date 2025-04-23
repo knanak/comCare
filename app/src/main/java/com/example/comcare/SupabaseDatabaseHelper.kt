@@ -354,4 +354,109 @@ class SupabaseDatabaseHelper(private val context: Context) {
         }
     }
 
+    // 3. Lecture data
+    @Serializable
+    data class Lecture(
+        val Id: Int,
+        val Institution: String? = null,
+        val Title: String? = null,
+        val Recruitment_period: String? = null,
+        val Education_period: String? = null,
+        val Fees: String? = null,
+        val Quota: String? = null
+    )
+
+    suspend fun getLectures(): List<Lecture> {
+        return try {
+            Log.d("supabase", "Starting getLectures")
+
+            withContext(Dispatchers.IO) {
+                try {
+                    // First get the total count
+                    val totalCount = supabase.postgrest["lecture"]
+                        .select(head = true, count = Count.EXACT)
+                        .count() ?: 0L
+
+                    Log.d("supabase", "Total count of lectures: $totalCount")
+
+                    if (totalCount == 0L) {
+                        Log.d("supabase", "No lectures found in the 'lecture' table")
+                        return@withContext emptyList<Lecture>()
+                    }
+
+                    // Determine the batch size
+                    val batchSize = 100
+                    val allLectures = mutableListOf<Lecture>()
+
+                    // Fetch in batches
+                    var currentStart = 0
+                    while (currentStart < totalCount) {
+                        val currentEnd = currentStart + batchSize - 1
+                        Log.d("supabase", "Fetching lectures batch: $currentStart to $currentEnd")
+
+                        try {
+                            // Configure a custom JSON instance that ignores unknown keys
+                            val batch = supabase.postgrest["lecture"]
+                                .select(filter = {
+                                    range(from = currentStart.toLong(), to = currentEnd.toLong())
+                                })
+                                .decodeList<Lecture>()
+
+                            Log.d("supabase", "Fetched batch of ${batch.size} lectures")
+
+                            // Clean the lecture data by removing newlines and excess whitespace
+                            val cleanedBatch = batch.map { lecture ->
+                                // Clean Recruitment_period: replace newlines with spaces, then trim excess whitespace
+                                val cleanedRecruitmentPeriod = lecture.Recruitment_period?.replace("\n", "")
+
+                                // Clean Education_period: replace newlines with spaces, then trim excess whitespace
+                                val cleanedEducationPeriod = lecture.Education_period?.replace("\n", "")
+
+                                // Create a copy of the lecture with the cleaned fields
+                                lecture.copy(
+                                    Recruitment_period = cleanedRecruitmentPeriod,
+                                    Education_period = cleanedEducationPeriod
+                                )
+                            }
+
+                            allLectures.addAll(cleanedBatch)
+
+                            // If we got an empty batch or fewer items than requested, we might be done
+                            if (batch.isEmpty() || batch.size < batchSize) {
+                                break
+                            }
+
+                            // Move to next batch
+                            currentStart += batchSize
+                        } catch (e: Exception) {
+                            Log.e("supabase", "Error fetching lectures batch $currentStart-$currentEnd: ${e.message}", e)
+                            // Continue to next batch despite error
+                            currentStart += batchSize
+                        }
+                    }
+
+                    Log.d("supabase", "Retrieved ${allLectures.size} lectures out of $totalCount total")
+
+                    // Log a sample lecture for debugging
+                    if (allLectures.isNotEmpty()) {
+                        val sample = allLectures.first()
+                        Log.d("supabase", "Sample lecture: id=${sample.Id}, " +
+                                "title=${sample.Title}, " +
+                                "institution=${sample.Institution}, " +
+                                "period=${sample.Education_period}")
+                    }
+
+                    allLectures
+                } catch (e: Exception) {
+                    Log.e("supabase", "Error in getLectures inner block: ${e.message}", e)
+                    e.printStackTrace()
+                    emptyList()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("supabase", "Error in getLectures: ${e.message}", e)
+            e.printStackTrace()
+            emptyList()
+        }
+    }
 }
