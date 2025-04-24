@@ -842,16 +842,159 @@ fun PlaceComparisonApp(
                         )
 
                         Text(
-                            text = "총 ${viewModel.lectures.value.size}개",
+                            text = "총 ${viewModel.filteredLectures.value.size}개",
                             style = MaterialTheme.typography.bodyLarge,
-                            color = Color(0xFF4A7C25)
+//                            color = Color(0xFF4A7C25)
                         )
+                    }
+
+                    // Add location filter section
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            // Location Filter Title
+                            Text(
+                                "위치 검색:",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // City and District selection (reusing existing state from viewModel)
+                            var expandedCityMenu by remember { mutableStateOf(false) }
+                            var expandedDistrictMenu by remember { mutableStateOf(false) }
+                            var selectedCity by remember { mutableStateOf("전체") }
+                            var selectedDistrict by remember { mutableStateOf("전체") }
+
+                            // Get available districts for the selected city
+                            val availableDistricts = remember(selectedCity) {
+                                viewModel.districts.value[selectedCity] ?: listOf("전체")
+                            }
+
+                            // Reset district when city changes
+                            LaunchedEffect(selectedCity) {
+                                selectedDistrict = "전체"
+                                viewModel.filterLectures(selectedCity, selectedDistrict)
+                            }
+
+                            // City and District Dropdowns side by side
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                // City Dropdown
+                                Box(modifier = Modifier.weight(1f)) {
+                                    OutlinedButton(
+                                        onClick = { expandedCityMenu = true },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                "$selectedCity",
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text("▼")
+                                        }
+                                    }
+
+                                    DropdownMenu(
+                                        expanded = expandedCityMenu,
+                                        onDismissRequest = { expandedCityMenu = false }
+                                    ) {
+                                        viewModel.cities.value.forEach { city ->
+                                            DropdownMenuItem(
+                                                text = {
+                                                    Text(
+                                                        city,
+                                                        style = MaterialTheme.typography.bodyLarge
+                                                    )
+                                                },
+                                                onClick = {
+                                                    selectedCity = city
+                                                    expandedCityMenu = false
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // District Dropdown
+                                Box(modifier = Modifier.weight(1f)) {
+                                    OutlinedButton(
+                                        onClick = { expandedDistrictMenu = true },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                "$selectedDistrict",
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text("▼")
+                                        }
+                                    }
+
+                                    DropdownMenu(
+                                        expanded = expandedDistrictMenu,
+                                        onDismissRequest = { expandedDistrictMenu = false }
+                                    ) {
+                                        availableDistricts.forEach { district ->
+                                            DropdownMenuItem(
+                                                text = {
+                                                    Text(
+                                                        district,
+                                                        style = MaterialTheme.typography.bodyLarge
+                                                    )
+                                                },
+                                                onClick = {
+                                                    selectedDistrict = district
+                                                    expandedDistrictMenu = false
+                                                    viewModel.filterLectures(selectedCity, selectedDistrict)
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+//                            Spacer(modifier = Modifier.height(16.dp))
+
+                            // Apply filter button
+//                            Button(
+//                                onClick = { viewModel.filterLectures(selectedCity, selectedDistrict) },
+//                                modifier = Modifier.fillMaxWidth(),
+//                                colors = ButtonDefaults.buttonColors(
+//                                    containerColor = Color(0xFFc6f584),
+//                                    contentColor = Color.Black
+//                                )
+//                            ) {
+//                                Text(
+//                                    "검색하기",
+//                                    style = MaterialTheme.typography.titleMedium,
+//                                    fontWeight = FontWeight.Bold
+//                                )
+//                            }
+                        }
                     }
 
                     Divider(modifier = Modifier.padding(horizontal = 16.dp))
 
                     // Lectures list with pagination
-                    val lectures = viewModel.lectures.value.sortedByDescending { it.Id }
+                    val lectures = viewModel.filteredLectures.value.sortedByDescending { it.Id }
 
                     if (lectures.isNotEmpty()) {
                         // Pagination state
@@ -1333,8 +1476,30 @@ fun JobCard(job: SupabaseDatabaseHelper.Job) {
     }
 }
 
+// Update the LectureCard composable to display a clean Institution name
 @Composable
 fun LectureCard(lecture: SupabaseDatabaseHelper.Lecture) {
+    // Extract the clean institution name by removing the region marker completely
+    val institutionText = lecture.Institution?.let {
+        val regionStart = it.indexOf("[REGION:")
+        if (regionStart >= 0) {
+            // Return the part before the region marker
+            it.substring(0, regionStart).trim()
+        } else {
+            it // No region marker, return as is
+        }
+    } ?: "정보 없음"
+
+    // Trim institution text to only show up to "센터"
+    val trimmedInstitutionText = institutionText.let {
+        val centerIndex = it.indexOf("센터")
+        if (centerIndex >= 0) {
+            it.substring(0, centerIndex + "센터".length)
+        } else {
+            it
+        }
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -1353,18 +1518,11 @@ fun LectureCard(lecture: SupabaseDatabaseHelper.Lecture) {
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Institution
-            Row {
-                Text(
-                    "기관: ",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    lecture.Institution ?: "정보 없음",
-                    style = MaterialTheme.typography.titleMedium
-                )
-            }
+            // Institution only (without region or brackets)
+            Text(
+                text = "기관: $trimmedInstitutionText",
+                style = MaterialTheme.typography.titleMedium
+            )
 
             Spacer(modifier = Modifier.height(4.dp))
 

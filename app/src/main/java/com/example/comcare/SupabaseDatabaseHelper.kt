@@ -404,18 +404,53 @@ class SupabaseDatabaseHelper(private val context: Context) {
 
                             Log.d("supabase", "Fetched batch of ${batch.size} lectures")
 
-                            // Clean the lecture data by removing newlines and excess whitespace
+                            // Clean the lecture data and extract region information
                             val cleanedBatch = batch.map { lecture ->
-                                // Clean Recruitment_period: replace newlines with spaces, then trim excess whitespace
+                                // Remove newlines entirely from Recruitment_period and Education_period
                                 val cleanedRecruitmentPeriod = lecture.Recruitment_period?.replace("\n", "")
-
-                                // Clean Education_period: replace newlines with spaces, then trim excess whitespace
                                 val cleanedEducationPeriod = lecture.Education_period?.replace("\n", "")
 
-                                // Create a copy of the lecture with the cleaned fields
+                                // Determine region based on Institution
+                                var region = ""
+                                val institution = lecture.Institution ?: ""
+
+                                if (institution.contains("센터")) {
+                                    // Case 1: If Institution contains "센터", extract the part before "센터" and append "구"
+                                    val centerIndex = institution.indexOf("센터")
+                                    if (centerIndex > 0) {
+                                        // Extract the part before "센터", trim whitespace, and append "구"
+                                        region = institution.substring(0, centerIndex).trim() + "구"
+                                    }
+                                } else {
+                                    // Case 2: Handle specific campus names
+                                    region = when (institution) {
+                                        "남부캠퍼스" -> "구로구"
+                                        "중부캠퍼스" -> "마포구"
+                                        "서부캠퍼스" -> "은평구"
+                                        "북부캠퍼스" -> "도봉구"
+                                        "동부캠퍼스" -> "광진구"
+                                        else -> "기타"
+                                    }
+                                }
+
+                                // Add logging to see extracted regions
+                                if (region.isNotEmpty()) {
+                                    Log.d("supabase", "Extracted region '$region' from institution '$institution'")
+                                }
+
+                                // Create a copy of the lecture with the cleaned fields and region information
+                                // We'll store the region in the existing Institution field with a prefix
+                                // so it can be used for filtering while preserving the original institution name
+                                val updatedInstitution = if (region.isNotEmpty()) {
+                                    "$institution [REGION:서울특별시 $region]"
+                                } else {
+                                    institution
+                                }
+
                                 lecture.copy(
                                     Recruitment_period = cleanedRecruitmentPeriod,
-                                    Education_period = cleanedEducationPeriod
+                                    Education_period = cleanedEducationPeriod,
+                                    Institution = updatedInstitution
                                 )
                             }
 

@@ -56,6 +56,10 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
     val isLoadingLectures: Boolean
         get() = _isLoadingLectures.value
 
+    private val _filteredLectures = mutableStateOf<List<SupabaseDatabaseHelper.Lecture>>(emptyList())
+    val filteredLectures: State<List<SupabaseDatabaseHelper.Lecture>> = _filteredLectures
+
+
     init {
         // Fetch data when ViewModel is initialized
         fetchPlacesData()
@@ -774,15 +778,83 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
 
                 // Update the lectures value with the fetched data
                 _lectures.value = lectureData
+                // Initialize filtered lectures with all lectures
+                _filteredLectures.value = lectureData
 
                 Log.d("PlaceViewModel", "Lectures data fetch complete: ${lectureData.size} items")
             } catch (e: Exception) {
                 Log.e("PlaceViewModel", "Error fetching lectures data: ${e.message}", e)
                 // Set to empty list if there's an error
                 _lectures.value = emptyList()
+                _filteredLectures.value = emptyList()
             } finally {
                 _isLoadingLectures.value = false
             }
         }
+    }
+
+    // Add function to filter lectures by location
+// Function to filter lectures by location
+    fun filterLectures(selectedCity: String, selectedDistrict: String) {
+        if (_lectures.value.isEmpty()) {
+            _filteredLectures.value = emptyList()
+            return
+        }
+
+        Log.d("PlaceViewModel", "Filtering lectures with city='$selectedCity', district='$selectedDistrict'")
+
+        _filteredLectures.value = _lectures.value.filter { lecture ->
+            // Extract location information from Institution field
+            val institution = lecture.Institution ?: ""
+
+            // Look for the region marker we added in the Institution field
+            val regionMarker = "[REGION:"
+            val regionStart = institution.indexOf(regionMarker)
+
+            if (regionStart >= 0) {
+                // Extract the region value between "[REGION:" and "]"
+                val regionEnd = institution.indexOf("]", regionStart)
+                if (regionEnd > regionStart) {
+                    val fullRegion = institution.substring(regionStart + regionMarker.length, regionEnd)
+
+                    // The fullRegion now contains "서울특별시 구로구" format
+                    // Split by space to separate city and district
+                    val parts = fullRegion.split(" ")
+                    val city = if (parts.isNotEmpty()) parts[0] else ""
+                    val district = if (parts.size > 1) parts.subList(1, parts.size).joinToString(" ") else ""
+
+                    // City filtering - check against the city part
+                    val cityMatch = selectedCity == "전체" ||
+                            city.contains(selectedCity) ||
+                            (selectedCity == "Seoul" && (city == "서울특별시" || city.contains("서울")))
+
+                    // District filtering - check against the district part
+                    val districtMatch = selectedDistrict == "전체" ||
+                            district == selectedDistrict ||
+                            district.contains(selectedDistrict) ||
+                            selectedDistrict.contains(district)
+
+                    Log.d("PlaceViewModel", "Checking lecture: institution='$institution', fullRegion='$fullRegion', " +
+                            "city='$city', district='$district', cityMatch=$cityMatch, districtMatch=$districtMatch")
+
+                    // Both conditions must match
+                    cityMatch && districtMatch
+                } else {
+                    // If region format is corrupted, don't filter out this item
+                    selectedCity == "전체" && selectedDistrict == "전체"
+                }
+            } else {
+                // If no region marker found, fall back to checking the entire institution field
+                val cityMatch = selectedCity == "전체" ||
+                        institution.contains(selectedCity) ||
+                        (selectedCity == "Seoul" && institution.contains("서울"))
+
+                val districtMatch = selectedDistrict == "전체" || institution.contains(selectedDistrict)
+
+                cityMatch && districtMatch
+            }
+        }
+
+        Log.d("PlaceViewModel", "Filtered lectures: ${_filteredLectures.value.size} of ${_lectures.value.size} with city='$selectedCity', district='$selectedDistrict'")
     }
 }
