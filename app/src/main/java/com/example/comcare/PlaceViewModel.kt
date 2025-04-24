@@ -44,6 +44,9 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
     private val _jobs = mutableStateOf<List<SupabaseDatabaseHelper.Job>>(emptyList<SupabaseDatabaseHelper.Job>())
     val jobs: State<List<SupabaseDatabaseHelper.Job>> = _jobs
 
+    private val _filteredJobs = mutableStateOf<List<SupabaseDatabaseHelper.Job>>(emptyList())
+    val filteredJobs: State<List<SupabaseDatabaseHelper.Job>> = _filteredJobs
+
     private val _isLoading = mutableStateOf<Boolean>(false)
     val isLoading: Boolean
         get() = _isLoading.value
@@ -52,12 +55,13 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
     private val _lectures = mutableStateOf<List<SupabaseDatabaseHelper.Lecture>>(emptyList())
     val lectures: State<List<SupabaseDatabaseHelper.Lecture>> = _lectures
 
+    private val _filteredLectures = mutableStateOf<List<SupabaseDatabaseHelper.Lecture>>(emptyList())
+    val filteredLectures: State<List<SupabaseDatabaseHelper.Lecture>> = _filteredLectures
+
     private val _isLoadingLectures = mutableStateOf<Boolean>(false)
     val isLoadingLectures: Boolean
         get() = _isLoadingLectures.value
 
-    private val _filteredLectures = mutableStateOf<List<SupabaseDatabaseHelper.Lecture>>(emptyList())
-    val filteredLectures: State<List<SupabaseDatabaseHelper.Lecture>> = _filteredLectures
 
 
     init {
@@ -740,6 +744,33 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
                 }
             }
         }
+    }
+
+    fun filterJobs(selectedCity: String, selectedDistrict: String) {
+        if (_jobs.value.isEmpty()) {
+            _filteredJobs.value = emptyList()
+            return
+        }
+
+        Log.d("PlaceViewModel", "Filtering jobs with city='$selectedCity', district='$selectedDistrict'")
+
+        _filteredJobs.value = _jobs.value.filter { job ->
+            // Extract location information from Location field
+            val location = job.Location ?: ""
+
+            // City filtering
+            val cityMatch = selectedCity == "전체" ||
+                    location.contains(selectedCity) ||
+                    (selectedCity == "Seoul" && (location.contains("서울") || location.contains("서울특별시")))
+
+            // District filtering
+            val districtMatch = selectedDistrict == "전체" || location.contains(selectedDistrict)
+
+            // Both conditions must match
+            cityMatch && districtMatch
+        }
+
+        Log.d("PlaceViewModel", "Filtered jobs: ${_filteredJobs.value.size} of ${_jobs.value.size} with city='$selectedCity', district='$selectedDistrict'")
     }
     fun fetchLectureData() {
         viewModelScope.launch {

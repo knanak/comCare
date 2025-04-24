@@ -668,7 +668,6 @@ fun PlaceComparisonApp(
                 }
             }
 
-// Replace the existing "jobs" case in your PlaceComparisonApp with this implementation
 
             "jobs" -> {
                 // Jobs content with pagination
@@ -688,16 +687,159 @@ fun PlaceComparisonApp(
                         )
 
                         Text(
-                            text = "총 ${viewModel.jobs.value.size}개",
+                            text = "총 ${viewModel.filteredJobs.value.size}개",
                             style = MaterialTheme.typography.bodyLarge,
-                            color = Color(0xFF4A7C25)
+//                            color = Color(0xFF4A7C25)
                         )
+                    }
+
+                    // Add location filter section
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            // Location Filter Title
+                            Text(
+                                "위치 검색:",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // City and District selection (reusing existing state from viewModel)
+                            var expandedCityMenu by remember { mutableStateOf(false) }
+                            var expandedDistrictMenu by remember { mutableStateOf(false) }
+                            var selectedCity by remember { mutableStateOf("전체") }
+                            var selectedDistrict by remember { mutableStateOf("전체") }
+
+                            // Get available districts for the selected city
+                            val availableDistricts = remember(selectedCity) {
+                                viewModel.districts.value[selectedCity] ?: listOf("전체")
+                            }
+
+                            // Reset district when city changes
+                            LaunchedEffect(selectedCity) {
+                                selectedDistrict = "전체"
+                                viewModel.filterJobs(selectedCity, selectedDistrict)
+                            }
+
+                            // City and District Dropdowns side by side
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                // City Dropdown
+                                Box(modifier = Modifier.weight(1f)) {
+                                    OutlinedButton(
+                                        onClick = { expandedCityMenu = true },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                "$selectedCity",
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text("▼")
+                                        }
+                                    }
+
+                                    DropdownMenu(
+                                        expanded = expandedCityMenu,
+                                        onDismissRequest = { expandedCityMenu = false }
+                                    ) {
+                                        viewModel.cities.value.forEach { city ->
+                                            DropdownMenuItem(
+                                                text = {
+                                                    Text(
+                                                        city,
+                                                        style = MaterialTheme.typography.bodyLarge
+                                                    )
+                                                },
+                                                onClick = {
+                                                    selectedCity = city
+                                                    expandedCityMenu = false
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // District Dropdown
+                                Box(modifier = Modifier.weight(1f)) {
+                                    OutlinedButton(
+                                        onClick = { expandedDistrictMenu = true },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                "$selectedDistrict",
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text("▼")
+                                        }
+                                    }
+
+                                    DropdownMenu(
+                                        expanded = expandedDistrictMenu,
+                                        onDismissRequest = { expandedDistrictMenu = false }
+                                    ) {
+                                        availableDistricts.forEach { district ->
+                                            DropdownMenuItem(
+                                                text = {
+                                                    Text(
+                                                        district,
+                                                        style = MaterialTheme.typography.bodyLarge
+                                                    )
+                                                },
+                                                onClick = {
+                                                    selectedDistrict = district
+                                                    expandedDistrictMenu = false
+                                                    viewModel.filterJobs(selectedCity, selectedDistrict)
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+//                            Spacer(modifier = Modifier.height(16.dp))
+//
+//                            // Apply filter button
+//                            Button(
+//                                onClick = { viewModel.filterJobs(selectedCity, selectedDistrict) },
+//                                modifier = Modifier.fillMaxWidth(),
+//                                colors = ButtonDefaults.buttonColors(
+//                                    containerColor = Color(0xFFc6f584),
+//                                    contentColor = Color.Black
+//                                )
+//                            ) {
+//                                Text(
+//                                    "검색하기",
+//                                    style = MaterialTheme.typography.titleMedium,
+//                                    fontWeight = FontWeight.Bold
+//                                )
+//                            }
+                        }
                     }
 
                     Divider(modifier = Modifier.padding(horizontal = 16.dp))
 
                     // Jobs list with pagination
-                    val jobs = viewModel.jobs.value.sortedByDescending { it.id }
+                    val jobs = viewModel.filteredJobs.value
 
                     if (jobs.isNotEmpty()) {
                         // Pagination state
@@ -745,6 +887,7 @@ fun PlaceComparisonApp(
                                 val startPage = (currentPage / pageGroupSize) * pageGroupSize
                                 val endPage = minOf(startPage + pageGroupSize, totalPages)
 
+                                // Previous button
                                 if (startPage > 0) {
                                     Text(
                                         text = "이전",
@@ -788,20 +931,20 @@ fun PlaceComparisonApp(
                                 }
                             }
                         }
+                    } else if (viewModel.isLoading) {
+                        // Show loading indicator
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                CircularProgressIndicator(color = Color(0xFF4A7C25))
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text("일자리 정보를 불러오는 중...")
+                            }
+                        }
                     }
-                    //                    else if (viewModel.isLoading) {
-//                        // Show loading indicator
-//                        Box(
-//                            modifier = Modifier.fillMaxSize(),
-//                            contentAlignment = Alignment.Center
-//                        ) {
-//                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-//                                CircularProgressIndicator(color = Color(0xFF4A7C25))
-//                                Spacer(modifier = Modifier.height(16.dp))
-//                                Text("일자리 정보를 불러오는 중...")
-//                            }
-//                        }
-//                    } else {
+//                    else {
 //                        // Show message when no data
 //                        Box(
 //                            modifier = Modifier.fillMaxSize(),
@@ -811,7 +954,11 @@ fun PlaceComparisonApp(
 //                                Text("일자리 정보가 없습니다")
 //                                Spacer(modifier = Modifier.height(16.dp))
 //                                Button(
-//                                    onClick = { viewModel.reloadJobsData() },
+//                                    onClick = {
+//                                        viewModel.fetchJobsData()
+//                                        // Reset filters
+//                                        viewModel.filterJobs("전체", "전체")
+//                                    },
 //                                    colors = ButtonDefaults.buttonColors(
 //                                        containerColor = Color(0xFFc6f584),
 //                                        contentColor = Color.Black
@@ -824,6 +971,8 @@ fun PlaceComparisonApp(
 //                    }
                 }
             }
+
+
             "culture" -> {
                 // Lectures content with pagination
                 Column(modifier = Modifier.fillMaxSize()) {
