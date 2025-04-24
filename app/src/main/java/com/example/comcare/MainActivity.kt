@@ -106,7 +106,7 @@ class MainActivity : ComponentActivity() {
 
                     NavHost(
                         navController = navController,
-                        startDestination = "chat" // Changed from "home" to "chat"
+                        startDestination = "chat"  // Changed to "chat" so the app starts on the chat screen
                     ) {
                         composable("home") {
                             PlaceComparisonApp(
@@ -120,12 +120,11 @@ class MainActivity : ComponentActivity() {
                                 navController = navController
                             )
                         }
-                        // Chat screen is now the start destination
                         composable("chat") {
                             ChatScreen(
                                 activity = this@MainActivity,
                                 navController = navController,
-                                showBackButton = false // Add this parameter to hide back button
+                                showBackButton = false  // Set to false since this is now the start screen
                             )
                         }
                     }
@@ -139,8 +138,10 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun PlaceComparisonApp(
     navController: NavController,
-    viewModel: PlaceViewModel
+    viewModel: PlaceViewModel,
+    initialSection: String = "home"
 ) {
+
     var selectedCity by remember { mutableStateOf("전체") }
     var selectedDistrict by remember { mutableStateOf("전체") }
     var selectedServiceCategory by remember { mutableStateOf("전체") }
@@ -155,7 +156,7 @@ fun PlaceComparisonApp(
     var showFilters by remember { mutableStateOf(false) }
 
     // State for the current active section
-    var currentSection by remember { mutableStateOf("Home") }
+    var currentSection by remember { mutableStateOf(initialSection) }
 
     // Get available districts for the selected city
     val availableDistricts = remember(selectedCity) {
@@ -646,34 +647,259 @@ fun PlaceComparisonApp(
 
         // Content based on the current section
         when (currentSection) {
-            "Home" -> {
-                // Long-term care facilities content
-                Text(
-                    "홈",
-                    modifier = Modifier.padding(16.dp),
-                    style = MaterialTheme.typography.titleMedium
-                )
+            "home" -> {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp)
+                ) {
+                     // Today's Facilities Section
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            // Section Title
+                            Text(
+                                "오늘의 시설",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF4A7C25)
+                            )
 
-                // Places List for long-term care facilities
-//                if (places.isNotEmpty()) {
-//                    LazyColumn(
-//                        modifier = Modifier
-//                            .fillMaxSize()
-//                            .padding(horizontal = 16.dp)
-//                    ) {
-//                        items(places) { place ->
-//                            PlaceCard(place = place)
-//                            Spacer(modifier = Modifier.height(8.dp))
-//                        }
-//                    }
-//                }
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            // Get random place if available
+                            if (viewModel.filteredPlaces.value.isNotEmpty()) {
+                                // Get a random place from the filtered places list
+                                val randomPlace = remember(viewModel.filteredPlaces.value) {
+                                    viewModel.filteredPlaces.value.random()
+                                }
+
+                                // Display the random place
+                                Text(
+                                    randomPlace.name,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+
+                                Spacer(modifier = Modifier.height(4.dp))
+
+                                Text(
+                                    "주소: ${randomPlace.address}",
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+
+                                Spacer(modifier = Modifier.height(4.dp))
+
+                                if (randomPlace.service1.isNotEmpty()) {
+                                    Text(
+                                        "시설 종류: ${randomPlace.service1.joinToString(", ")}",
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                }
+
+                                // View more button
+                                TextButton(
+                                    onClick = {
+                                        currentSection = "facilities"
+                                    },
+                                    modifier = Modifier.align(Alignment.End)
+                                ) {
+                                    Text(
+                                        "더보기 >",
+                                        color = Color(0xFF4A7C25),
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            } else {
+                                Text(
+                                    "시설 정보를 불러오는 중...",
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                            }
+                        }
+                    }
+
+                    // Today's Jobs Section
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            // Section Title
+                            Text(
+                                "오늘의 일자리",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF4A7C25)
+                            )
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            // Get random job if available
+                            if (viewModel.jobs.value.isNotEmpty()) {
+                                // Get a random job from the full list
+                                val randomJob = remember(viewModel.jobs.value) {
+                                    viewModel.jobs.value.random()
+                                }
+
+                                // Display the random job
+                                Text(
+                                    randomJob.JobTitle ?: "제목 없음",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.DarkGray
+                                )
+
+                                Spacer(modifier = Modifier.height(4.dp))
+
+                                Row {
+                                    Text(
+                                        "근무형태: ",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        randomJob.WorkingType ?: "정보 없음",
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(4.dp))
+
+                                Row {
+                                    Text(
+                                        "급여: ",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        randomJob.Salary ?: "정보 없음",
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                }
+
+                                // View more button
+                                TextButton(
+                                    onClick = {
+                                        currentSection = "jobs"
+                                    },
+                                    modifier = Modifier.align(Alignment.End)
+                                ) {
+                                    Text(
+                                        "더보기 >",
+                                        color = Color(0xFF4A7C25),
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            } else {
+                                Text(
+                                    "일자리 정보를 불러오는 중...",
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                            }
+                        }
+                    }
+
+                    // Today's Culture Section
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            // Section Title
+                            Text(
+                                "오늘의 문화",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF4A7C25)
+                            )
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            // Get random lecture if available
+                            if (viewModel.lectures.value.isNotEmpty()) {
+                                // Get a random lecture from the full list
+                                val randomLecture = remember(viewModel.lectures.value) {
+                                    viewModel.lectures.value.random()
+                                }
+
+                                // Display the random lecture
+                                Text(
+                                    randomLecture.Title ?: "강좌명 없음",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.DarkGray
+                                )
+
+                                Spacer(modifier = Modifier.height(4.dp))
+
+                                // Extract the clean institution name
+                                val institutionText = randomLecture.Institution?.let {
+                                    val regionStart = it.indexOf("[REGION:")
+                                    if (regionStart >= 0) {
+                                        it.substring(0, regionStart).trim()
+                                    } else {
+                                        it
+                                    }
+                                } ?: "정보 없음"
+
+                                Text(
+                                    "기관: $institutionText",
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+
+                                Spacer(modifier = Modifier.height(4.dp))
+
+                                Row {
+                                    Text(
+                                        "수강료: ",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        randomLecture.Fees ?: "무료",
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                }
+
+                                // View more button
+                                TextButton(
+                                    onClick = {
+                                        currentSection = "culture"
+                                        viewModel.fetchLectureData()
+                                    },
+                                    modifier = Modifier.align(Alignment.End)
+                                ) {
+                                    Text(
+                                        "더보기 >",
+                                        color = Color(0xFF4A7C25),
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            } else {
+                                Text(
+                                    "문화 강좌 정보를 불러오는 중...",
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                            }
+                        }
+                    }
+                }
             }
 
 
             "longTermCare" -> {
                 // Long-term care facilities content
                 Text(
-                    "장기요양기관 정dd보",
+                    "장기요양기관 정보",
                     modifier = Modifier.padding(16.dp),
                     style = MaterialTheme.typography.titleMedium
                 )
@@ -1943,7 +2169,15 @@ fun ChatScreen(
                 actions = {
                     // Add a button to navigate to the main home screen
                     if (!showBackButton) {
-                        IconButton(onClick = { navController.navigate("home") }) {
+                        IconButton(onClick = {
+                            // Navigate to home with section=home parameter
+                            navController.navigate("home?section=home") {
+                                // Pop up to the start destination to avoid building up a large stack
+                                popUpTo(navController.graph.startDestinationId) {
+                                    inclusive = true
+                                }
+                            }
+                        }) {
                             Icon(
                                 imageVector = Icons.Default.Home,
                                 contentDescription = "Home"
