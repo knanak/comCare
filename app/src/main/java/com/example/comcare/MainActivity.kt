@@ -155,7 +155,7 @@ fun PlaceComparisonApp(
     var showFilters by remember { mutableStateOf(false) }
 
     // State for the current active section
-    var currentSection by remember { mutableStateOf("longTermCare") }
+    var currentSection by remember { mutableStateOf("Home") }
 
     // Get available districts for the selected city
     val availableDistricts = remember(selectedCity) {
@@ -222,6 +222,29 @@ fun PlaceComparisonApp(
                 .fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
+            // Button 0 - Home
+            Button(
+                onClick = {
+                    currentSection = "home"
+                    showFilters = false
+                },
+                modifier = Modifier
+                    .weight(1f)
+                    .border(width = 1.dp, color = Color.Black, shape = RectangleShape),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if(currentSection == "home") Color(0xFFcacdca) else Color(0xFFcacdca),
+                    contentColor = Color.Black
+                ),
+                shape = RectangleShape
+            ) {
+                Text(
+                    "홈",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+
             // Button 1 - Long-term Care Facilities
             Button(
                 onClick = {
@@ -245,26 +268,26 @@ fun PlaceComparisonApp(
             }
 
             // Button 2 - Senior Policies
-            Button(
-                onClick = {
-                    currentSection = "seniorPolicies"
-                    showFilters = false
-                },
-                modifier = Modifier
-                    .weight(1f)
-                    .border(width = 1.dp, color = Color.Black, shape = RectangleShape),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if(currentSection == "seniorPolicies") Color(0xFFcacdca) else Color(0xFFcacdca),
-                    contentColor = Color.Black
-                ),
-                shape = RectangleShape
-            ) {
-                Text(
-                    "정책",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-            }
+//            Button(
+//                onClick = {
+//                    currentSection = "seniorPolicies"
+//                    showFilters = false
+//                },
+//                modifier = Modifier
+//                    .weight(1f)
+//                    .border(width = 1.dp, color = Color.Black, shape = RectangleShape),
+//                colors = ButtonDefaults.buttonColors(
+//                    containerColor = if(currentSection == "seniorPolicies") Color(0xFFcacdca) else Color(0xFFcacdca),
+//                    contentColor = Color.Black
+//                ),
+//                shape = RectangleShape
+//            ) {
+//                Text(
+//                    "정책",
+//                    style = MaterialTheme.typography.titleLarge,
+//                    fontWeight = FontWeight.Bold
+//                )
+//            }
 
             // Button 3 - Jobs
             Button(
@@ -623,10 +646,34 @@ fun PlaceComparisonApp(
 
         // Content based on the current section
         when (currentSection) {
+            "Home" -> {
+                // Long-term care facilities content
+                Text(
+                    "홈",
+                    modifier = Modifier.padding(16.dp),
+                    style = MaterialTheme.typography.titleMedium
+                )
+
+                // Places List for long-term care facilities
+//                if (places.isNotEmpty()) {
+//                    LazyColumn(
+//                        modifier = Modifier
+//                            .fillMaxSize()
+//                            .padding(horizontal = 16.dp)
+//                    ) {
+//                        items(places) { place ->
+//                            PlaceCard(place = place)
+//                            Spacer(modifier = Modifier.height(8.dp))
+//                        }
+//                    }
+//                }
+            }
+
+
             "longTermCare" -> {
                 // Long-term care facilities content
                 Text(
-                    "장기요양기관 정보",
+                    "장기요양기관 정dd보",
                     modifier = Modifier.padding(16.dp),
                     style = MaterialTheme.typography.titleMedium
                 )
