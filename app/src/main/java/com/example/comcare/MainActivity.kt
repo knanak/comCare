@@ -55,6 +55,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.delay
+import androidx.compose.ui.unit.sp
 
 
 
@@ -134,14 +135,14 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlaceComparisonApp(
     navController: NavController,
-    viewModel: PlaceViewModel,
-    initialSection: String = "home"
+    viewModel: PlaceViewModel
 ) {
-
+    var currentSection by remember { mutableStateOf("home") }
     var selectedCity by remember { mutableStateOf("전체") }
     var selectedDistrict by remember { mutableStateOf("전체") }
     var selectedServiceCategory by remember { mutableStateOf("전체") }
@@ -152,11 +153,7 @@ fun PlaceComparisonApp(
     var expandedServiceMenu by remember { mutableStateOf(false) }
     var expandedServiceSubcategoryMenu by remember { mutableStateOf(false) }
 
-    // State for showing/hiding the filters
     var showFilters by remember { mutableStateOf(false) }
-
-    // State for the current active section
-    var currentSection by remember { mutableStateOf(initialSection) }
 
     // Get available districts for the selected city
     val availableDistricts = remember(selectedCity) {
@@ -217,13 +214,12 @@ fun PlaceComparisonApp(
 //            }
 //        }
 
-// Navigation buttons row with borders and full width - immediately follows the card
         Row(
             modifier = Modifier
                 .fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            // Button 0 - Home
+            // Button 1 - Home
             Button(
                 onClick = {
                     currentSection = "home"
@@ -236,21 +232,25 @@ fun PlaceComparisonApp(
                     containerColor = if(currentSection == "home") Color(0xFFcacdca) else Color(0xFFcacdca),
                     contentColor = Color.Black
                 ),
-                shape = RectangleShape
+                shape = RectangleShape,
+                contentPadding = PaddingValues(horizontal = 2.dp, vertical = 2.dp) // Minimized padding
             ) {
                 Text(
                     "홈",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontSize = 22.sp  // Increased font size
+                    ),
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,  // Ensure single line
+                    overflow = TextOverflow.Visible  // Don't cut off text
                 )
             }
 
-
-            // Button 1 - Long-term Care Facilities
+            // Button 2 - Facilities
             Button(
                 onClick = {
                     currentSection = "welfareFacilities"
-                    showFilters = !showFilters  // Toggle filters visibility
+                    showFilters = true  // Always show filters when facilities button is pressed
                 },
                 modifier = Modifier
                     .weight(1f)
@@ -259,16 +259,21 @@ fun PlaceComparisonApp(
                     containerColor = if(currentSection == "welfareFacilities") Color(0xFFcacdca) else Color(0xFFcacdca),
                     contentColor = Color.Black
                 ),
-                shape = RectangleShape
+                shape = RectangleShape,
+                contentPadding = PaddingValues(horizontal = 2.dp, vertical = 2.dp) // Minimized padding
             ) {
                 Text(
                     "시설",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontSize = 22.sp  // Increased font size
+                    ),
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,  // Ensure single line
+                    overflow = TextOverflow.Visible  // Don't cut off text
                 )
             }
 
-            // Button 2 - Senior Policies
+            // Button 3 - Policy
 //            Button(
 //                onClick = {
 //                    currentSection = "seniorPolicies"
@@ -281,16 +286,21 @@ fun PlaceComparisonApp(
 //                    containerColor = if(currentSection == "seniorPolicies") Color(0xFFcacdca) else Color(0xFFcacdca),
 //                    contentColor = Color.Black
 //                ),
-//                shape = RectangleShape
+//                shape = RectangleShape,
+//                contentPadding = PaddingValues(horizontal = 2.dp, vertical = 2.dp) // Minimized padding
 //            ) {
 //                Text(
 //                    "정책",
-//                    style = MaterialTheme.typography.titleLarge,
-//                    fontWeight = FontWeight.Bold
+//                    style = MaterialTheme.typography.titleLarge.copy(
+//                        fontSize = 22.sp  // Increased font size
+//                    ),
+//                    fontWeight = FontWeight.Bold,
+//                    maxLines = 1,  // Ensure single line
+//                    overflow = TextOverflow.Visible  // Don't cut off text
 //                )
 //            }
 
-            // Button 3 - Jobs
+            // Button 4 - Jobs
             Button(
                 onClick = {
                     currentSection = "jobs"
@@ -303,16 +313,21 @@ fun PlaceComparisonApp(
                     containerColor = if(currentSection == "jobs") Color(0xFFcacdca) else Color(0xFFcacdca),
                     contentColor = Color.Black
                 ),
-                shape = RectangleShape
+                shape = RectangleShape,
+                contentPadding = PaddingValues(horizontal = 2.dp, vertical = 2.dp) // Minimized padding
             ) {
                 Text(
                     "고용",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontSize = 22.sp  // Increased font size
+                    ),
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,  // Ensure single line
+                    overflow = TextOverflow.Visible  // Don't cut off text
                 )
             }
 
-            // Button 4 - Culture
+            // Button 5 - Culture
             Button(
                 onClick = {
                     currentSection = "culture"
@@ -326,12 +341,17 @@ fun PlaceComparisonApp(
                     containerColor = if(currentSection == "culture") Color(0xFFcacdca) else Color(0xFFcacdca),
                     contentColor = Color.Black
                 ),
-                shape = RectangleShape
+                shape = RectangleShape,
+                contentPadding = PaddingValues(horizontal = 2.dp, vertical = 2.dp) // Minimized padding
             ) {
                 Text(
                     "문화",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontSize = 22.sp  // Increased font size
+                    ),
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,  // Ensure single line
+                    overflow = TextOverflow.Visible  // Don't cut off text
                 )
             }
         }
@@ -648,248 +668,365 @@ fun PlaceComparisonApp(
         // Content based on the current section
         when (currentSection) {
             "home" -> {
-                Column(
+                // Define the new color
+                val highlightColor = Color(0xFFf3f04d) // The #f3f04d color
+
+                // Replace Column with a scrollable container
+                Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 16.dp)
                 ) {
-                     // Today's Facilities Section
-                    Card(
+                    LazyColumn(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 8.dp),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                            .fillMaxSize()
+                            .padding(horizontal = 16.dp),
+                        contentPadding = PaddingValues(vertical = 8.dp)
                     ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            // Section Title
-                            Text(
-                                "오늘의 시설",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF4A7C25)
-                            )
-
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            // Get random place if available
-                            if (viewModel.filteredPlaces.value.isNotEmpty()) {
-                                // Get a random place from the filtered places list
-                                val randomPlace = remember(viewModel.filteredPlaces.value) {
-                                    viewModel.filteredPlaces.value.random()
-                                }
-
-                                // Display the random place
-                                Text(
-                                    randomPlace.name,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-
-                                Spacer(modifier = Modifier.height(4.dp))
-
-                                Text(
-                                    "주소: ${randomPlace.address}",
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
-
-                                Spacer(modifier = Modifier.height(4.dp))
-
-                                if (randomPlace.service1.isNotEmpty()) {
+                        // Today's Facilities Section
+                        item {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    // Section Title with updated color
                                     Text(
-                                        "시설 종류: ${randomPlace.service1.joinToString(", ")}",
-                                        style = MaterialTheme.typography.bodyMedium
+                                        "오늘의 시설",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = highlightColor, // Updated color
                                     )
-                                }
 
-                                // View more button
-                                TextButton(
-                                    onClick = {
-                                        currentSection = "facilities"
-                                    },
-                                    modifier = Modifier.align(Alignment.End)
-                                ) {
-                                    Text(
-                                        "더보기 >",
-                                        color = Color(0xFF4A7C25),
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            } else {
-                                Text(
-                                    "시설 정보를 불러오는 중...",
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
-                            }
-                        }
-                    }
+                                    Spacer(modifier = Modifier.height(12.dp))
 
-                    // Today's Jobs Section
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 8.dp),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            // Section Title
-                            Text(
-                                "오늘의 일자리",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF4A7C25)
-                            )
+                                    // Get random place if available
+                                    if (viewModel.filteredPlaces.value.isNotEmpty()) {
+                                        // Get a random place from the filtered places list
+                                        val randomPlace = remember(viewModel.filteredPlaces.value) {
+                                            viewModel.filteredPlaces.value.random()
+                                        }
 
-                            Spacer(modifier = Modifier.height(12.dp))
+                                        // Display the random place
+                                        Text(
+                                            randomPlace.name,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
 
-                            // Get random job if available
-                            if (viewModel.jobs.value.isNotEmpty()) {
-                                // Get a random job from the full list
-                                val randomJob = remember(viewModel.jobs.value) {
-                                    viewModel.jobs.value.random()
-                                }
+                                        Spacer(modifier = Modifier.height(4.dp))
 
-                                // Display the random job
-                                Text(
-                                    randomJob.JobTitle ?: "제목 없음",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.DarkGray
-                                )
+                                        Text(
+                                            "주소: ${randomPlace.address}",
+                                            style = MaterialTheme.typography.bodyLarge
+                                        )
 
-                                Spacer(modifier = Modifier.height(4.dp))
+                                        Spacer(modifier = Modifier.height(4.dp))
 
-                                Row {
-                                    Text(
-                                        "근무형태: ",
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Text(
-                                        randomJob.WorkingType ?: "정보 없음",
-                                        style = MaterialTheme.typography.bodyLarge
-                                    )
-                                }
+                                        if (randomPlace.service1.isNotEmpty()) {
+                                            Text(
+                                                "시설 종류: ${randomPlace.service1.joinToString(", ")}",
+                                                style = MaterialTheme.typography.bodyMedium
+                                            )
+                                        }
 
-                                Spacer(modifier = Modifier.height(4.dp))
+                                        Spacer(modifier = Modifier.height(12.dp))
 
-                                Row {
-                                    Text(
-                                        "급여: ",
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Text(
-                                        randomJob.Salary ?: "정보 없음",
-                                        style = MaterialTheme.typography.bodyLarge
-                                    )
-                                }
-
-                                // View more button
-                                TextButton(
-                                    onClick = {
-                                        currentSection = "jobs"
-                                    },
-                                    modifier = Modifier.align(Alignment.End)
-                                ) {
-                                    Text(
-                                        "더보기 >",
-                                        color = Color(0xFF4A7C25),
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            } else {
-                                Text(
-                                    "일자리 정보를 불러오는 중...",
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
-                            }
-                        }
-                    }
-
-                    // Today's Culture Section
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 8.dp),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            // Section Title
-                            Text(
-                                "오늘의 문화",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF4A7C25)
-                            )
-
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            // Get random lecture if available
-                            if (viewModel.lectures.value.isNotEmpty()) {
-                                // Get a random lecture from the full list
-                                val randomLecture = remember(viewModel.lectures.value) {
-                                    viewModel.lectures.value.random()
-                                }
-
-                                // Display the random lecture
-                                Text(
-                                    randomLecture.Title ?: "강좌명 없음",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.DarkGray
-                                )
-
-                                Spacer(modifier = Modifier.height(4.dp))
-
-                                // Extract the clean institution name
-                                val institutionText = randomLecture.Institution?.let {
-                                    val regionStart = it.indexOf("[REGION:")
-                                    if (regionStart >= 0) {
-                                        it.substring(0, regionStart).trim()
+                                        // New "More" button with right alignment and updated color
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.End
+                                        ) {
+                                            Button(
+                                                onClick = {
+                                                    currentSection = "welfareFacilities"
+                                                    showFilters = true
+                                                },
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = highlightColor, // Updated color
+                                                    contentColor = Color.Black
+                                                ),
+                                                shape = RoundedCornerShape(8.dp)
+                                            ) {
+                                                Text(
+                                                    "더보기",
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
                                     } else {
-                                        it
+                                        Text(
+                                            "시설 정보를 불러오는 중...",
+                                            style = MaterialTheme.typography.bodyLarge
+                                        )
                                     }
-                                } ?: "정보 없음"
-
-                                Text(
-                                    "기관: $institutionText",
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
-
-                                Spacer(modifier = Modifier.height(4.dp))
-
-                                Row {
-                                    Text(
-                                        "수강료: ",
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Text(
-                                        randomLecture.Fees ?: "무료",
-                                        style = MaterialTheme.typography.bodyLarge
-                                    )
                                 }
-
-                                // View more button
-                                TextButton(
-                                    onClick = {
-                                        currentSection = "culture"
-                                        viewModel.fetchLectureData()
-                                    },
-                                    modifier = Modifier.align(Alignment.End)
-                                ) {
-                                    Text(
-                                        "더보기 >",
-                                        color = Color(0xFF4A7C25),
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            } else {
-                                Text(
-                                    "문화 강좌 정보를 불러오는 중...",
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
                             }
+                        }
+
+                        // Today's Policy Section
+//                        item {
+//                            Card(
+//                                modifier = Modifier
+//                                    .fillMaxWidth()
+//                                    .padding(vertical = 8.dp),
+//                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+//                            ) {
+//                                Column(modifier = Modifier.padding(16.dp)) {
+//                                    // Section Title with updated color
+//                                    Text(
+//                                        "오늘의 정책",
+//                                        style = MaterialTheme.typography.titleLarge,
+//                                        fontWeight = FontWeight.Bold,
+//                                        color = highlightColor, // Updated color
+//                                    )
+//
+//                                    Spacer(modifier = Modifier.height(12.dp))
+//
+//                                    // Since we don't have actual policy data, display a sample policy
+//                                    Text(
+//                                        "노인 일자리 사업",
+//                                        style = MaterialTheme.typography.titleMedium,
+//                                        fontWeight = FontWeight.Bold
+//                                    )
+//
+//                                    Spacer(modifier = Modifier.height(4.dp))
+//
+//                                    Text(
+//                                        "만 65세 이상 노인에게 일자리를 제공하는 정책입니다.",
+//                                        style = MaterialTheme.typography.bodyLarge
+//                                    )
+//
+//                                    Spacer(modifier = Modifier.height(4.dp))
+//
+//                                    Text(
+//                                        "지원금: 월 30만원",
+//                                        style = MaterialTheme.typography.bodyMedium
+//                                    )
+//
+//                                    Spacer(modifier = Modifier.height(12.dp))
+//
+//                                    // New "More" button with right alignment and updated color
+//                                    Row(
+//                                        modifier = Modifier.fillMaxWidth(),
+//                                        horizontalArrangement = Arrangement.End
+//                                    ) {
+//                                        Button(
+//                                            onClick = {
+//                                                currentSection = "seniorPolicies"
+//                                            },
+//                                            colors = ButtonDefaults.buttonColors(
+//                                                containerColor = highlightColor, // Updated color
+//                                                contentColor = Color.Black
+//                                            ),
+//                                            shape = RoundedCornerShape(8.dp)
+//                                        ) {
+//                                            Text(
+//                                                "더보기",
+//                                                fontWeight = FontWeight.Bold
+//                                            )
+//                                        }
+//                                    }
+//                                }
+//                            }
+//                        }
+
+                        // Today's Jobs Section
+                        item {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    // Section Title with updated color
+                                    Text(
+                                        "오늘의 일자리",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = highlightColor, // Updated color
+                                    )
+
+                                    Spacer(modifier = Modifier.height(12.dp))
+
+                                    // Get random job if available
+                                    if (viewModel.jobs.value.isNotEmpty()) {
+                                        // Get a random job from the full list
+                                        val randomJob = remember(viewModel.jobs.value) {
+                                            viewModel.jobs.value.random()
+                                        }
+
+                                        // Display the random job
+                                        Text(
+                                            randomJob.JobTitle ?: "제목 없음",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                        )
+
+                                        Spacer(modifier = Modifier.height(4.dp))
+
+                                        Row {
+                                            Text(
+                                                "근무형태: ",
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text(
+                                                randomJob.WorkingType ?: "정보 없음",
+                                                style = MaterialTheme.typography.bodyLarge
+                                            )
+                                        }
+
+                                        Spacer(modifier = Modifier.height(4.dp))
+
+                                        Row {
+                                            Text(
+                                                "급여: ",
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text(
+                                                randomJob.Salary ?: "정보 없음",
+                                                style = MaterialTheme.typography.bodyLarge
+                                            )
+                                        }
+
+                                        Spacer(modifier = Modifier.height(12.dp))
+
+                                        // New "More" button with right alignment and updated color
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.End
+                                        ) {
+                                            Button(
+                                                onClick = {
+                                                    currentSection = "jobs"
+                                                },
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = highlightColor, // Updated color
+                                                    contentColor = Color.Black
+                                                ),
+                                                shape = RoundedCornerShape(8.dp)
+                                            ) {
+                                                Text(
+                                                    "더보기",
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                    } else {
+                                        Text(
+                                            "일자리 정보를 불러오는 중...",
+                                            style = MaterialTheme.typography.bodyLarge
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // Today's Culture Section
+                        item {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    // Section Title with updated color
+                                    Text(
+                                        "오늘의 문화",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = highlightColor, // Updated color
+                                    )
+
+                                    Spacer(modifier = Modifier.height(12.dp))
+
+                                    // Get random lecture if available
+                                    if (viewModel.lectures.value.isNotEmpty()) {
+                                        // Get a random lecture from the full list
+                                        val randomLecture = remember(viewModel.lectures.value) {
+                                            viewModel.lectures.value.random()
+                                        }
+
+                                        // Display the random lecture
+                                        Text(
+                                            randomLecture.Title ?: "강좌명 없음",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                        )
+
+                                        Spacer(modifier = Modifier.height(4.dp))
+
+                                        // Extract the clean institution name
+                                        val institutionText = randomLecture.Institution?.let {
+                                            val regionStart = it.indexOf("[REGION:")
+                                            if (regionStart >= 0) {
+                                                it.substring(0, regionStart).trim()
+                                            } else {
+                                                it
+                                            }
+                                        } ?: "정보 없음"
+
+                                        Text(
+                                            "기관: $institutionText",
+                                            style = MaterialTheme.typography.bodyLarge
+                                        )
+
+                                        Spacer(modifier = Modifier.height(4.dp))
+
+                                        Row {
+                                            Text(
+                                                "수강료: ",
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text(
+                                                randomLecture.Fees ?: "무료",
+                                                style = MaterialTheme.typography.bodyLarge
+                                            )
+                                        }
+
+                                        Spacer(modifier = Modifier.height(12.dp))
+
+                                        // New "More" button with right alignment and updated color
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.End
+                                        ) {
+                                            Button(
+                                                onClick = {
+                                                    currentSection = "culture"
+                                                    viewModel.fetchLectureData()
+                                                },
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = highlightColor, // Updated color
+                                                    contentColor = Color.Black
+                                                ),
+                                                shape = RoundedCornerShape(8.dp)
+                                            ) {
+                                                Text(
+                                                    "더보기",
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                    } else {
+                                        Text(
+                                            "문화 강좌 정보를 불러오는 중...",
+                                            style = MaterialTheme.typography.bodyLarge
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // Add extra space at the bottom for better scroll experience
+                        item {
+                            Spacer(modifier = Modifier.height(16.dp))
                         }
                     }
                 }

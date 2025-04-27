@@ -17,7 +17,7 @@ class ChatService {
     private val TAG = "ChatService"
 
     private val url =
-        "https://knanak.app.n8n.cloud/webhook-test/aa5b3dde-db5d-4c58-b383-d36a812fd3d9"
+        "https://knanak.app.n8n.cloud/webhook/aa5b3dde-db5d-4c58-b383-d36a812fd3d9"
 
     // Create OkHttpClient with logging interceptor to see exactly what's happening
     private val client: OkHttpClient by lazy {
