@@ -52,6 +52,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.delay
@@ -2137,14 +2138,12 @@ fun LectureCard(lecture: SupabaseDatabaseHelper.Lecture) {
         }
     }
 }
-
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
     activity: MainActivity,
     navController: NavController,
-    showBackButton: Boolean = true // Default to showing back button
+    showBackButton: Boolean = true
 ) {
     // Use rememberSaveable to persist state across recompositions
     var messageText by rememberSaveable { mutableStateOf("") }
@@ -2153,6 +2152,22 @@ fun ChatScreen(
 
     // Speech recognition state
     var isListening by remember { mutableStateOf(false) }
+
+    // Focus manager for keyboard control
+    val focusManager = LocalFocusManager.current
+
+    // Navigation state for search results
+    val showNavigationState = remember { mutableStateOf(false) }
+    val hasPreviousState = remember { mutableStateOf(false) }
+    val hasNextState = remember { mutableStateOf(false) }
+    val currentPageState = remember { mutableStateOf(0) }
+    val totalPagesState = remember { mutableStateOf(0) }
+
+    var showNavigation by showNavigationState
+    var hasPrevious by hasPreviousState
+    var hasNext by hasNextState
+    var currentPage by currentPageState
+    var totalPages by totalPagesState
 
     // Create speech recognizer
     val context = LocalContext.current
@@ -2253,13 +2268,33 @@ fun ChatScreen(
                     isFromUser = false
                 )
             } else {
-                updatedMessages.add(ChatMessage(
-                    text = aiResponse,
-                    isFromUser = false
-                ))
+                // Find the last AI message and update it, or add new one
+                val lastAiMessageIndex = updatedMessages.indexOfLast { !it.isFromUser && !it.isWaiting }
+                if (lastAiMessageIndex >= 0 && showNavigation) {
+                    // Update existing AI message when navigating through results
+                    updatedMessages[lastAiMessageIndex] = ChatMessage(
+                        text = aiResponse,
+                        isFromUser = false
+                    )
+                } else {
+                    // Add new AI message for new queries
+                    updatedMessages.add(ChatMessage(
+                        text = aiResponse,
+                        isFromUser = false
+                    ))
+                }
             }
 
             messages = updatedMessages
+        }
+
+        // Set up navigation callback
+        activity.chatService.navigationCallback = { hasPrev, hasNextResult, current, total ->
+            hasPrevious = hasPrev
+            hasNext = hasNextResult
+            currentPage = current
+            totalPages = total
+            showNavigation = total > 1
         }
     }
 
@@ -2267,6 +2302,7 @@ fun ChatScreen(
     DisposableEffect(Unit) {
         onDispose {
             activity.chatService.responseCallback = null
+            activity.chatService.navigationCallback = null
         }
     }
 
@@ -2295,10 +2331,14 @@ fun ChatScreen(
                 title = { Text("실버랜드 오비서") },
                 navigationIcon = {
                     if (showBackButton) {
-                        IconButton(onClick = { navController.navigateUp() }) {
+                        IconButton(
+                            onClick = { navController.navigateUp() },
+                            modifier = Modifier.size(56.dp) // 버튼 크기 증가
+                        ) {
                             Icon(
                                 imageVector = Icons.Default.ArrowBack,
-                                contentDescription = "Back"
+                                contentDescription = "Back",
+                                modifier = Modifier.size(32.dp) // 아이콘 크기 증가
                             )
                         }
                     }
@@ -2343,7 +2383,7 @@ fun ChatScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(horizontal = 16.dp),
-                    contentPadding = PaddingValues(top = 16.dp, bottom = 16.dp)
+                    contentPadding = PaddingValues(top = 16.dp, bottom = if (showNavigation) 80.dp else 16.dp)
                 ) {
                     itemsIndexed(messages) { index, message ->
                         MessageItem(message = message)
@@ -2355,6 +2395,135 @@ fun ChatScreen(
                     // Add extra space at the end
                     item {
                         Spacer(modifier = Modifier.height(40.dp))
+                    }
+                }
+            }
+
+            // Navigation controls for search results (when multiple results exist)
+            if (showNavigation) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = Color.Transparent // 완전히 투명
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 8.dp), // 패딩 줄임
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Previous button - 첫 번째 결과가 아닐 때만 표시
+                        if (hasPrevious) {
+                            Button(
+                                onClick = {
+                                    activity.chatService.showPreviousResult()
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFFc6f584), // 연두색으로 변경
+                                    contentColor = Color.Black
+                                ),
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 2.dp, vertical = 2.dp) // 패딩 더 줄임
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ArrowBack,
+                                        contentDescription = "Previous",
+                                        modifier = Modifier.size(24.dp) // 아이콘 크기 증가
+                                    )
+                                    Spacer(modifier = Modifier.width(2.dp)) // 간격 줄임
+                                    Text(
+                                        "이전",
+                                        style = MaterialTheme.typography.headlineSmall, // 텍스트 크기 대폭 증가
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        } else {
+                            // 첫 번째 결과일 때는 빈 공간
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+
+                        // Page indicator
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = 8.dp)
+                        ) {
+                            Text(
+                                text = "$currentPage / $totalPages",
+                                style = MaterialTheme.typography.headlineMedium, // 텍스트 크기 대폭 증가
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFc6f584) // 연두색으로 변경
+                            )
+                        }
+
+                        // Next button - 마지막 결과가 아닐 때는 '다음', 마지막일 때는 '탐색'
+                        if (hasNext) {
+                            Button(
+                                onClick = {
+                                    activity.chatService.showNextResult()
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFFc6f584), // 연두색으로 변경
+                                    contentColor = Color.Black
+                                ),
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 2.dp, vertical = 2.dp) // 패딩 더 줄임
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Text(
+                                        "다음",
+                                        style = MaterialTheme.typography.headlineSmall, // 텍스트 크기 대폭 증가
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.width(2.dp)) // 간격 줄임
+                                    Icon(
+                                        imageVector = Icons.Default.ArrowForward,
+                                        contentDescription = "Next",
+                                        modifier = Modifier.size(24.dp) // 아이콘 크기 증가
+                                    )
+                                }
+                            }
+                        } else {
+                            // 마지막 결과일 때는 '탐색' 버튼
+                            Button(
+                                onClick = {
+                                    // 탐색 버튼 기능 - 처음으로 돌아가거나 추가 검색 등
+                                    activity.chatService.showResultAtIndex(0) // 첫 번째 결과로 이동
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFFfba064), // 연두색으로 변경
+                                    contentColor = Color.Black
+                                ),
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 2.dp, vertical = 2.dp) // 패딩 더 줄임
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Search,
+                                        contentDescription = "Explore",
+                                        modifier = Modifier.size(25.dp) // 아이콘 크기 증가
+                                    )
+                                    Spacer(modifier = Modifier.width(2.dp)) // 간격 줄임
+                                    Text(
+                                        "탐색",
+                                        style = MaterialTheme.typography.headlineSmall, // 텍스트 크기 대폭 증가
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -2444,6 +2613,9 @@ fun ChatScreen(
                             keyboardActions = KeyboardActions(
                                 onSend = {
                                     if (messageText.isNotEmpty()) {
+                                        // Hide keyboard when sending message
+                                        focusManager.clearFocus()
+
                                         sendMessage(
                                             messageText,
                                             activity,
@@ -2451,6 +2623,8 @@ fun ChatScreen(
                                             messages
                                         ) { newMessages ->
                                             messages = newMessages
+                                            // Reset navigation when sending new message
+                                            showNavigation = false
                                         }
                                         messageText = ""
                                     }
@@ -2477,6 +2651,9 @@ fun ChatScreen(
                                         isListening = false
                                     }
 
+                                    // Hide keyboard when sending message
+                                    focusManager.clearFocus()
+
                                     sendMessage(
                                         messageText,
                                         activity,
@@ -2484,6 +2661,8 @@ fun ChatScreen(
                                         messages
                                     ) { newMessages ->
                                         messages = newMessages
+                                        // Reset navigation when sending new message
+                                        showNavigation = false
                                     }
                                     messageText = ""
                                 }
@@ -2577,7 +2756,9 @@ fun MessageItem(message: ChatMessage) {
                 Text(
                     text = message.text,
                     modifier = Modifier.padding(12.dp),
-                    color = Color.Black
+                    color = Color.Black,
+                    fontSize = 24.sp, // 직접 폰트 크기 지정
+                    lineHeight = 29.sp // 줄 간격 추가
                 )
             }
         }

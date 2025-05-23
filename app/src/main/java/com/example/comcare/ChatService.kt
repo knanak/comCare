@@ -1,4 +1,3 @@
-
 package com.example.comcare
 
 import android.os.Handler
@@ -17,8 +16,13 @@ import java.util.concurrent.TimeUnit
 class ChatService {
     private val TAG = "ChatService"
 
-    private val url =
-        "https://n8n.biseo.store/webhook/aa5b3dde-db5d-4c58-b383-d36a812fd3d9"
+    // URL을 Pinecone 서버 URL로 변경
+//    private val url = "https://coral-app-fjt8m.ondigitalocean.app/query"
+    private val url = "http://192.168.219.102:5000/query"
+
+    // 현재 검색 결과들을 저장하는 변수
+    private var currentResults: JSONArray? = null
+    private var currentIndex: Int = 0
 
     // Create OkHttpClient with logging interceptor to see exactly what's happening
     private val client: OkHttpClient by lazy {
@@ -35,32 +39,38 @@ class ChatService {
     }
 
     var responseCallback: ((String) -> Unit)? = null
+    var navigationCallback: ((hasPrevious: Boolean, hasNext: Boolean, currentPage: Int, totalPages: Int) -> Unit)? = null
 
     fun sendChatMessageToWorkflow(userId: String, message: String, sessionId: String) {
         Log.d(TAG, "==== STARTING NEW CHAT REQUEST ====")
         Log.d(TAG, "Request to URL: $url")
-        Log.d(TAG, "userId: $userId, sessionId: $sessionId, message: $message")
+        Log.d(TAG, "message: $message")
 
         val json = JSONObject().apply {
-            put("userId", userId)
-            put("message", message)
-            put("timestamp", System.currentTimeMillis())
-            put("sessionId", sessionId)
+            put("query", message)
         }
 
         val mediaType = "application/json; charset=utf-8".toMediaType()
         val requestBody = json.toString().toRequestBody(mediaType)
 
+        Log.d(TAG, "Request JSON: ${json.toString()}")
+
         val request = Request.Builder()
             .url(url)
             .post(requestBody)
+            .header("Content-Type", "application/json")
             .build()
 
-        Log.d(TAG, "Sending request with body: ${json.toString()}")
+        Log.d(TAG, "Request headers: ${request.headers}")
+        Log.d(TAG, "Sending request...")
+
+        // 새로운 검색 시작 시 초기화
+        currentResults = null
+        currentIndex = 0
 
         // First send a message that we're waiting for the AI
         Handler(Looper.getMainLooper()).post {
-            responseCallback?.invoke("AI 응답을 기다리는 중...")
+            responseCallback?.invoke("AI가 검색중...")
         }
 
         client.newCall(request).enqueue(object : Callback {
@@ -83,13 +93,12 @@ class ChatService {
                     Log.d(TAG, "Response message: ${response.message}")
                     Log.d(TAG, "Response headers: ${response.headers}")
 
-                    // Try debug the actual raw bytes
                     val bodyBytes = response.body?.bytes()
 
                     if (bodyBytes == null) {
                         Log.e(TAG, "Response body bytes are null")
                         Handler(Looper.getMainLooper()).post {
-                            responseCallback?.invoke("서버로부터 응답이 없습니다. n8n 워크플로우를 확인해주세요.")
+                            responseCallback?.invoke("서버로부터 응답이 없습니다. Pinecone 서버를 확인해주세요.")
                         }
                         return
                     }
@@ -99,94 +108,66 @@ class ChatService {
                     if (bodyBytes.isEmpty()) {
                         Log.e(TAG, "Response body is empty (zero bytes)")
                         Handler(Looper.getMainLooper()).post {
-                            responseCallback?.invoke("서버에서 빈 응답이 반환되었습니다. n8n 워크플로우에서 응답을 설정했는지 확인해주세요.")
+                            responseCallback?.invoke("서버에서 빈 응답이 반환되었습니다. Pinecone 서버를 확인해주세요.")
                         }
                         return
                     }
 
-                    // Try to convert bytes to string
                     val responseBody = String(bodyBytes)
                     Log.d(TAG, "Response body: $responseBody")
 
                     if (responseBody.isBlank()) {
                         Log.e(TAG, "Response body is blank (only whitespace)")
                         Handler(Looper.getMainLooper()).post {
-                            responseCallback?.invoke("서버 응답이 비어 있습니다. n8n 워크플로우를 확인해주세요.")
+                            responseCallback?.invoke("서버 응답이 비어 있습니다. Pinecone 서버를 확인해주세요.")
                         }
                         return
                     }
 
-                    // Try to parse the response as JSON
+                    // Pinecone 응답 처리 로직
                     try {
-                        // First check if this is a double-encoded JSON
-                        if (responseBody.trim().startsWith("{\"output\":\"")) {
-                            Log.d(TAG, "Detected double-encoded JSON")
-                            try {
-                                // Parse the outer JSON first
-                                val outerJson = JSONObject(responseBody)
-                                if (outerJson.has("output")) {
-                                    // Get the inner JSON string
-                                    val innerJsonString = outerJson.optString("output", "")
-                                    if (innerJsonString.isNotEmpty()) {
-                                        // Check if the inner content starts with markdown code block
-                                        if (innerJsonString.trim().startsWith("```")) {
-                                            Log.d(TAG, "Detected markdown code block in output")
-                                            // Extract content between code blocks
-                                            val cleanJsonString = extractJsonFromMarkdown(innerJsonString)
-                                            if (cleanJsonString.isNotEmpty()) {
-                                                try {
-                                                    val extractedJson = JSONObject(cleanJsonString)
-                                                    parseAndFormatResponse(extractedJson)
-                                                    return
-                                                } catch (e: JSONException) {
-                                                    Log.e(TAG, "Failed to parse JSON from markdown", e)
-                                                }
-                                            }
-                                        } else {
-                                            // Normal JSON string without markdown
-                                            try {
-                                                val innerJson = JSONObject(innerJsonString)
-                                                parseAndFormatResponse(innerJson)
-                                                return
-                                            } catch (e: JSONException) {
-                                                // If inner JSON parsing fails, continue with normal flow
-                                                Log.e(TAG, "Failed to parse inner JSON", e)
-                                            }
-                                        }
-                                    }
+                        val jsonResponse = JSONObject(responseBody)
+
+                        if (jsonResponse.has("results")) {
+                            val results = jsonResponse.getJSONArray("results")
+
+                            if (results.length() > 0) {
+                                // 검색 결과 저장
+                                currentResults = results
+                                currentIndex = 0
+
+                                // 첫 번째 결과만 표시
+                                showCurrentResult()
+
+                            } else {
+                                // 검색 결과가 없는 경우
+                                Handler(Looper.getMainLooper()).post {
+                                    responseCallback?.invoke("검색 결과가 없습니다. 다른 질문을 시도해보세요.")
+                                    navigationCallback?.invoke(false, false, 0, 0)
                                 }
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Error handling double-encoded JSON", e)
+                                return
+                            }
+                        } else if (jsonResponse.has("error")) {
+                            // 오류 메시지가 있는 경우
+                            val errorMessage = jsonResponse.getString("error")
+                            Handler(Looper.getMainLooper()).post {
+                                responseCallback?.invoke("서버 오류: $errorMessage")
+                                navigationCallback?.invoke(false, false, 0, 0)
+                            }
+                            return
+                        } else {
+                            // 기본 응답 - 다른 모든 경우
+                            Handler(Looper.getMainLooper()).post {
+                                responseCallback?.invoke("응답: $responseBody")
+                                navigationCallback?.invoke(false, false, 0, 0)
                             }
                         }
 
-                        // Continue with standard JSON parsing
-                        when {
-                            responseBody.trim().startsWith("[") -> {
-                                // It's a JSON array
-                                val jsonArray = JSONArray(responseBody)
-                                extractContentFromJsonArray(jsonArray)
-                            }
-                            responseBody.trim().startsWith("{") -> {
-                                // It's a JSON object
-                                val jsonObject = JSONObject(responseBody)
-                                parseAndFormatResponse(jsonObject)
-                            }
-                            else -> {
-                                // It's not JSON, return as plain text
-                                Log.d(TAG, "Response is not JSON, returning as plain text")
-                                // 일반 텍스트에서도 '\n' 텍스트를 줄바꿈으로 변경
-                                val formattedText = responseBody.replace("\\n", "\n")
-                                Handler(Looper.getMainLooper()).post {
-                                    responseCallback?.invoke(formattedText)
-                                }
-                            }
-                        }
                     } catch (e: JSONException) {
                         Log.e(TAG, "Error parsing JSON", e)
-                        // If it's not valid JSON, just return the raw response
                         Handler(Looper.getMainLooper()).post {
                             responseCallback?.invoke("JSON 파싱 오류: ${e.message}\n\n원본 응답: $responseBody")
+                            navigationCallback?.invoke(false, false, 0, 0)
                         }
                     }
 
@@ -194,6 +175,7 @@ class ChatService {
                     Log.e(TAG, "Error processing response", e)
                     Handler(Looper.getMainLooper()).post {
                         responseCallback?.invoke("응답 처리 중 오류가 발생했습니다: ${e.message}")
+                        navigationCallback?.invoke(false, false, 0, 0)
                     }
                 } finally {
                     response.close()
@@ -202,238 +184,157 @@ class ChatService {
         })
     }
 
-    /**
-     * 마크다운 코드 블록에서 JSON 문자열을 추출하는 헬퍼 함수
-     * ```json
-     * { ... }
-     * ```
-     * 와 같은 형식에서 { ... } 부분만 추출
-     */
-    private fun extractJsonFromMarkdown(markdownString: String): String {
-        Log.d(TAG, "Extracting JSON from markdown string")
+    // 현재 인덱스의 결과를 표시하는 함수
+    private fun showCurrentResult() {
+        currentResults?.let { results ->
+            if (currentIndex >= 0 && currentIndex < results.length()) {
+                try {
+                    val currentResult = results.getJSONObject(currentIndex)
+                    var content = currentResult.optString("content", "내용 없음")
 
-        // Remove the opening markdown code block marker (```json or just ```)
-        val withoutOpening = markdownString.replace(Regex("^```(json)?\\s*\\n"), "")
+                    // 응답 포맷팅: | 를 줄바꿈으로 변경하고 가독성 개선
+                    content = formatResponse(content)
 
-        // Remove the closing markdown code block marker (```)
-        val withoutClosing = withoutOpening.replace(Regex("\\n```\\s*$"), "")
+                    Log.d(TAG, "Showing result $currentIndex: $content")
 
-        Log.d(TAG, "Extracted JSON from markdown: $withoutClosing")
-        return withoutClosing.trim()
-    }
+                    Handler(Looper.getMainLooper()).post {
+                        responseCallback?.invoke(content)
 
-    /**
-     * 특정 응답 구조를 위한 새로운 메서드
-     * Response: {"output": {"content": ["line1", "line2", ...]}}
-     */
-    private fun parseAndFormatResponse(jsonObject: JSONObject) {
-        Log.d(TAG, "Parsing and formatting response: ${jsonObject.toString()}")
+                        // 네비게이션 상태 업데이트
+                        val hasPrevious = currentIndex > 0
+                        val hasNext = currentIndex < results.length() - 1
+                        val currentPage = currentIndex + 1
+                        val totalPages = results.length()
 
-        try {
-            // 1. 특정 구조 확인: {"output": {"content": [...]}}
-            if (jsonObject.has("output")) {
-                // 출력 필드가 문자열인지 객체인지 확인
-                val output = jsonObject.opt("output")
-
-                if (output is JSONObject && output.has("content")) {
-                    // Case 1: output is a JSON object with content field
-                    val content = output.optJSONArray("content")
-
-                    if (content != null && content.length() > 0) {
-                        // 2. content 배열의 모든 항목을 줄바꿈으로 연결
-                        val formattedContent = formatContentArray(content)
-
-                        Log.d(TAG, "Formatted content: $formattedContent")
-
-                        Handler(Looper.getMainLooper()).post {
-                            responseCallback?.invoke(formattedContent)
-                        }
-                        return
+                        navigationCallback?.invoke(hasPrevious, hasNext, currentPage, totalPages)
                     }
-                } else if (output is String) {
-                    // Case 2: output is a string that might be a JSON
-                    try {
-                        val outputJson = JSONObject(output.toString())
-                        if (outputJson.has("content")) {
-                            val content = outputJson.optJSONArray("content")
-
-                            if (content != null && content.length() > 0) {
-                                // content 배열의 모든 항목을 줄바꿈으로 연결
-                                val formattedContent = formatContentArray(content)
-
-                                Log.d(TAG, "Formatted content from string output: $formattedContent")
-
-                                Handler(Looper.getMainLooper()).post {
-                                    responseCallback?.invoke(formattedContent)
-                                }
-                                return
-                            }
-                        }
-                    } catch (e: JSONException) {
-                        Log.e(TAG, "Output string is not a valid JSON", e)
+                } catch (e: JSONException) {
+                    Log.e(TAG, "Error parsing current result", e)
+                    Handler(Looper.getMainLooper()).post {
+                        responseCallback?.invoke("결과 파싱 중 오류가 발생했습니다.")
                     }
                 }
-            }
-
-            // 특정 구조가 아닌 경우 일반적인 방법으로 처리
-            Log.d(TAG, "Specific structure not found, falling back to general method")
-            extractContentFromJsonObject(jsonObject)
-
-        } catch (e: Exception) {
-            Log.e(TAG, "Error in parseAndFormatResponse", e)
-            Handler(Looper.getMainLooper()).post {
-                responseCallback?.invoke("응답 파싱 중 오류가 발생했습니다: ${e.message}\n\n원본 응답: ${jsonObject.toString()}")
             }
         }
     }
 
-    /**
-     * JSONArray에서 content 문자열을 추출하고 포맷팅하는 헬퍼 함수
-     */
-    private fun formatContentArray(content: JSONArray): String {
-        val formattedContent = StringBuilder()
+    // 응답 텍스트를 사용자가 보기 편하게 포맷팅하는 함수
+    private fun formatResponse(content: String): String {
+        var formatted = content
 
-        for (i in 0 until content.length()) {
-            val line = content.optString(i, "")
-                .replace("\\n", "\n") // 이스케이프된 줄바꿈을 실제 줄바꿈으로 변환
+        // | 를 줄바꿈으로 변경
+        formatted = formatted.replace(" | ", "\n")
+        formatted = formatted.replace("|", "\n")
 
-            formattedContent.append(line)
+        // 연속된 줄바꿈을 하나로 통합
+        formatted = formatted.replace(Regex("\n+"), "\n")
 
-            // 마지막 항목이 아니면 줄바꿈 추가
-            if (i < content.length() - 1) {
-                formattedContent.append("\n\n") // 두 줄 띄우기 적용
+        // 시작과 끝 공백 제거
+        formatted = formatted.trim()
+
+        // 각 라인의 앞뒤 공백 제거
+        formatted = formatted.split("\n")
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .joinToString("\n")
+
+        // 특정 패턴들을 더 보기 좋게 포맷팅
+        formatted = formatted
+            .replace("Category:", "\n📍 지역:")
+            .replace("Title:", "\n📋 제목:")
+            .replace("Date of registration:", "\n📅 등록일:")
+            .replace("Deadline:", "\n⏰ 마감일:")
+            .replace("Job Category:", "\n💼 직종:")
+            .replace("Experience Required:", "\n📈 경력:")
+            .replace("Employment Type:", "\n📝 고용형태:")
+            .replace("Salary:", "\n💰 급여:")
+            .replace("SocialEnsurance:", "\n🛡️ 사회보험:")
+            .replace("RetirementBenefit:", "\n🏦 퇴직혜택:")
+            .replace("Address:", "\n📍 주소:")
+            .replace("WorkingHours:", "\n⏰ 근무시간:")
+            .replace("Working Type:", "\n📋 근무형태:")
+            .replace("Company Name:", "\n🏢 회사명:")
+            .replace("Job Description:", "\n📄 상세설명:")
+            .replace("ApplicationMethod:", "\n📝 지원방법:")
+            .replace("ApplicationType:", "\n📋 전형방법:")
+            .replace("document:", "\n📄 제출서류:")
+
+        // "Showing result X:" 부분 제거 (있다면)
+        if (formatted.startsWith("Showing result")) {
+            val colonIndex = formatted.indexOf(":")
+            if (colonIndex != -1 && colonIndex < 50) { // 첫 50자 내에 있는 경우만
+                formatted = formatted.substring(colonIndex + 1).trim()
             }
         }
 
-        return formattedContent.toString()
+        return formatted
     }
 
-    private fun extractContentFromJsonArray(jsonArray: JSONArray) {
-        Log.d(TAG, "Extracting content from JSON array")
-
-        // Check for the simplified structure from your example
-        if (jsonArray.length() > 0) {
-            try {
-                val mainObject = jsonArray.getJSONObject(0)
-
-                if (mainObject.has("output")) {
-                    // Try to parse using the new method first
-                    parseAndFormatResponse(mainObject)
-                    return
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error processing simplified structure", e)
+    // 이전 결과로 이동
+    fun showPreviousResult(): Boolean {
+        currentResults?.let { results ->
+            if (currentIndex > 0) {
+                currentIndex--
+                showCurrentResult()
+                return true
             }
         }
-
-        // If the simplified approach failed, try a more general approach
-        try {
-            for (i in 0 until jsonArray.length()) {
-                val item = jsonArray.opt(i)
-                if (item is JSONObject) {
-                    val contentText = searchForContentRecursively(item)
-                    if (contentText != null) {
-                        Log.d(TAG, "Found content using recursive search: $contentText")
-                        Handler(Looper.getMainLooper()).post {
-                            responseCallback?.invoke(contentText)
-                        }
-                        return
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error in general content search", e)
-        }
-
-        // If we couldn't find content, return a useful error with the full response
-        Log.w(TAG, "Could not find any content in the response")
-        Handler(Looper.getMainLooper()).post {
-            responseCallback?.invoke("응답에서 콘텐츠를 찾을 수 없습니다.\n\n디버깅 정보: " + jsonArray.toString(2))
-        }
+        return false
     }
 
-    private fun extractContentFromJsonObject(jsonObject: JSONObject) {
-        Log.d(TAG, "Extracting content from JSON object")
-
-        // Try to find content recursively
-        val contentText = searchForContentRecursively(jsonObject)
-
-        if (contentText != null) {
-            Log.d(TAG, "Found content: $contentText")
-            Handler(Looper.getMainLooper()).post {
-                responseCallback?.invoke(contentText)
+    // 다음 결과로 이동
+    fun showNextResult(): Boolean {
+        currentResults?.let { results ->
+            if (currentIndex < results.length() - 1) {
+                currentIndex++
+                showCurrentResult()
+                return true
             }
-            return
         }
-
-        // If we couldn't find content, return a useful error with the full response
-        Log.w(TAG, "Could not find any content in the response")
-        Handler(Looper.getMainLooper()).post {
-            responseCallback?.invoke("응답에서 콘텐츠를 찾을 수 없습니다.\n\n디버깅 정보: " + jsonObject.toString(2))
-        }
+        return false
     }
 
-    private fun searchForContentRecursively(json: Any?): String? {
-        if (json == null) return null
-
-        when (json) {
-            is JSONObject -> {
-                // Direct check for content array
-                if (json.has("content")) {
-                    try {
-                        val content = json.opt("content")
-                        if (content is JSONArray && content.length() > 0) {
-                            // content 배열의 모든 항목을 두 줄 띄우기로 연결
-                            return formatContentArray(content)
-                        } else if (content is String) {
-                            // 문자열에서 '\n' 텍스트를 실제 줄바꿈으로 변환
-                            return content.replace("\\n", "\n\n") // 두 줄 띄우기로 변경
-                        }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error extracting content", e)
-                    }
-                }
-
-                // Check all keys recursively
-                val keys = json.keys()
-                while (keys.hasNext()) {
-                    val key = keys.next()
-                    val result = searchForContentRecursively(json.opt(key))
-                    if (result != null) {
-                        return result
-                    }
-                }
-            }
-            is JSONArray -> {
-                // If the array itself is named content, build string from it
-                if (json.length() > 0) {
-                    // First try to build directly from this array
-                    try {
-                        val allStrings = (0 until json.length()).all {
-                            json.opt(it) is String
-                        }
-                        if (allStrings) {
-                            return formatContentArray(json)
-                        }
-                    } catch (e: Exception) {
-                        // Continue with recursive search
-                    }
-
-                    // Then try each element recursively
-                    for (i in 0 until json.length()) {
-                        val result = searchForContentRecursively(json.opt(i))
-                        if (result != null) {
-                            return result
-                        }
-                    }
-                }
+    // 특정 인덱스로 이동
+    fun showResultAtIndex(index: Int): Boolean {
+        currentResults?.let { results ->
+            if (index >= 0 && index < results.length()) {
+                currentIndex = index
+                showCurrentResult()
+                return true
             }
         }
+        return false
+    }
 
+    // 현재 상태 정보 가져오기
+    fun getCurrentState(): Triple<Int, Int, Boolean>? {
+        currentResults?.let { results ->
+            return Triple(currentIndex + 1, results.length(), results.length() > 1)
+        }
         return null
     }
 
-    private fun buildStringFromJsonArray(jsonArray: JSONArray): String {
-        return formatContentArray(jsonArray)
+    // 검색 결과 초기화
+    fun clearResults() {
+        currentResults = null
+        currentIndex = 0
+    }
+
+    // 현재 결과가 있는지 확인
+    fun hasResults(): Boolean {
+        return currentResults != null && currentResults!!.length() > 0
+    }
+
+    // 이전 버튼 활성화 여부
+    fun hasPrevious(): Boolean {
+        return currentResults != null && currentIndex > 0
+    }
+
+    // 다음 버튼 활성화 여부
+    fun hasNext(): Boolean {
+        currentResults?.let { results ->
+            return currentIndex < results.length() - 1
+        }
+        return false
     }
 }
