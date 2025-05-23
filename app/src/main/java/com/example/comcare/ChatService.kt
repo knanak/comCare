@@ -17,12 +17,15 @@ class ChatService {
     private val TAG = "ChatService"
 
     // URL을 Pinecone 서버 URL로 변경
-//    private val url = "https://coral-app-fjt8m.ondigitalocean.app/query"
     private val url = "http://192.168.219.102:5000/query"
 
     // 현재 검색 결과들을 저장하는 변수
     private var currentResults: JSONArray? = null
     private var currentIndex: Int = 0
+
+    // 탐색 결과를 위한 별도 저장 변수 - ChatMessage 타입으로 변경
+    private var exploreResults: List<ChatMessage> = emptyList()
+    private var isExploreMode: Boolean = false
 
     // Create OkHttpClient with logging interceptor to see exactly what's happening
     private val client: OkHttpClient by lazy {
@@ -67,6 +70,8 @@ class ChatService {
         // 새로운 검색 시작 시 초기화
         currentResults = null
         currentIndex = 0
+        isExploreMode = false
+        exploreResults = emptyList()
 
         // First send a message that we're waiting for the AI
         Handler(Looper.getMainLooper()).post {
@@ -184,8 +189,47 @@ class ChatService {
         })
     }
 
+    // 탐색 결과 설정 - ChatMessage 타입으로 변경
+    fun setSearchResults(results: List<ChatMessage>) {
+        exploreResults = results
+        currentIndex = 0
+        isExploreMode = true
+        currentResults = null // 일반 검색 결과 초기화
+
+        // 네비게이션 콜백 호출
+        Handler(Looper.getMainLooper()).post {
+            navigationCallback?.invoke(
+                false, // hasPrevious - 첫 번째 결과이므로 false
+                results.size > 1, // hasNext
+                1, // currentPage
+                results.size // totalPages
+            )
+        }
+    }
+
     // 현재 인덱스의 결과를 표시하는 함수
     private fun showCurrentResult() {
+        // 탐색 모드인 경우
+        if (isExploreMode && exploreResults.isNotEmpty()) {
+            if (currentIndex >= 0 && currentIndex < exploreResults.size) {
+                val message = exploreResults[currentIndex]
+
+                Handler(Looper.getMainLooper()).post {
+                    responseCallback?.invoke(message.text)
+
+                    // 네비게이션 상태 업데이트
+                    val hasPrevious = currentIndex > 0
+                    val hasNext = currentIndex < exploreResults.size - 1
+                    val currentPage = currentIndex + 1
+                    val totalPages = exploreResults.size
+
+                    navigationCallback?.invoke(hasPrevious, hasNext, currentPage, totalPages)
+                }
+            }
+            return
+        }
+
+        // 일반 검색 모드
         currentResults?.let { results ->
             if (currentIndex >= 0 && currentIndex < results.length()) {
                 try {
@@ -280,8 +324,6 @@ class ChatService {
             .replace("Wating:", "\n 대기:")
             .replace("Bus:", "\n\uD83D\uDE8C 방문목욕차량:")
             .replace("Tel:", "\n\uD83D\uDCDE 전화:")
-        
-
 
         // 중복된 줄바꿈 다시 한 번 정리
         formatted = formatted.replace(Regex("\n{2,}"), "\n\n")
@@ -294,6 +336,15 @@ class ChatService {
 
     // 이전 결과로 이동
     fun showPreviousResult(): Boolean {
+        if (isExploreMode && exploreResults.isNotEmpty()) {
+            if (currentIndex > 0) {
+                currentIndex--
+                showCurrentResult()
+                return true
+            }
+            return false
+        }
+
         currentResults?.let { results ->
             if (currentIndex > 0) {
                 currentIndex--
@@ -306,6 +357,15 @@ class ChatService {
 
     // 다음 결과로 이동
     fun showNextResult(): Boolean {
+        if (isExploreMode && exploreResults.isNotEmpty()) {
+            if (currentIndex < exploreResults.size - 1) {
+                currentIndex++
+                showCurrentResult()
+                return true
+            }
+            return false
+        }
+
         currentResults?.let { results ->
             if (currentIndex < results.length() - 1) {
                 currentIndex++
@@ -318,6 +378,15 @@ class ChatService {
 
     // 특정 인덱스로 이동
     fun showResultAtIndex(index: Int): Boolean {
+        if (isExploreMode && exploreResults.isNotEmpty()) {
+            if (index >= 0 && index < exploreResults.size) {
+                currentIndex = index
+                showCurrentResult()
+                return true
+            }
+            return false
+        }
+
         currentResults?.let { results ->
             if (index >= 0 && index < results.length()) {
                 currentIndex = index
@@ -330,6 +399,10 @@ class ChatService {
 
     // 현재 상태 정보 가져오기
     fun getCurrentState(): Triple<Int, Int, Boolean>? {
+        if (isExploreMode && exploreResults.isNotEmpty()) {
+            return Triple(currentIndex + 1, exploreResults.size, exploreResults.size > 1)
+        }
+
         currentResults?.let { results ->
             return Triple(currentIndex + 1, results.length(), results.length() > 1)
         }
@@ -340,20 +413,32 @@ class ChatService {
     fun clearResults() {
         currentResults = null
         currentIndex = 0
+        isExploreMode = false
+        exploreResults = emptyList()
     }
 
     // 현재 결과가 있는지 확인
     fun hasResults(): Boolean {
+        if (isExploreMode) {
+            return exploreResults.isNotEmpty()
+        }
         return currentResults != null && currentResults!!.length() > 0
     }
 
     // 이전 버튼 활성화 여부
     fun hasPrevious(): Boolean {
+        if (isExploreMode) {
+            return exploreResults.isNotEmpty() && currentIndex > 0
+        }
         return currentResults != null && currentIndex > 0
     }
 
     // 다음 버튼 활성화 여부
     fun hasNext(): Boolean {
+        if (isExploreMode && exploreResults.isNotEmpty()) {
+            return currentIndex < exploreResults.size - 1
+        }
+
         currentResults?.let { results ->
             return currentIndex < results.length() - 1
         }

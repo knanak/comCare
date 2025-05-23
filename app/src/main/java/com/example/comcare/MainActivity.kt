@@ -71,7 +71,11 @@ import android.location.Geocoder
 import java.util.Locale
 import android.content.Context
 import android.os.Build
+import android.provider.ContactsContract.CommonDataKinds.Website.URL
 import androidx.core.app.ActivityCompat
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
 
 class MainActivity : ComponentActivity() {
 
@@ -120,6 +124,8 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+// MainActivity의 onCreate 메서드 내부 setContent 부분 전체 수정
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -130,6 +136,10 @@ class MainActivity : ComponentActivity() {
         val supabaseHelper = SupabaseDatabaseHelper(this)
 
         setContent {
+            // 위치 정보를 State로 관리 - 초기값 설정
+            var userCityState by remember { mutableStateOf("위치 확인 중...") }
+            var userDistrictState by remember { mutableStateOf("위치 확인 중...") }
+
             var locationPermissionGranted by remember { mutableStateOf(false) }
             var showLocationPermissionDialog by remember { mutableStateOf(false) }
             var viewModelFactory by remember { mutableStateOf(PlaceViewModelFactory(supabaseHelper, "", "")) }
@@ -147,14 +157,18 @@ class MainActivity : ComponentActivity() {
                     getLastKnownLocation { city, district ->
                         userCity = city
                         userDistrict = district
+                        // State 업데이트 - 여기가 중요!
+                        userCityState = city
+                        userDistrictState = district
                         viewModelFactory = PlaceViewModelFactory(supabaseHelper, city, district)
                         Log.d(TAG, "위치 권한 승인 - 위치 정보 획득 완료")
-                        Log.d(TAG, "사용자 위치: $userCity $userDistrict")
-                        Log.d(TAG, "전체 주소: $user_add")
+                        Log.d(TAG, "사용자 위치 State 업데이트: $city $district")
                     }
                 } else {
                     // 권한이 거부된 경우
                     showLocationPermissionDialog = true
+                    userCityState = "위치 권한 없음"
+                    userDistrictState = "위치 권한 없음"
                 }
             }
 
@@ -170,10 +184,12 @@ class MainActivity : ComponentActivity() {
                         getLastKnownLocation { city, district ->
                             userCity = city
                             userDistrict = district
+                            // State 업데이트 - 여기가 중요!
+                            userCityState = city
+                            userDistrictState = district
                             viewModelFactory = PlaceViewModelFactory(supabaseHelper, city, district)
                             Log.d(TAG, "기존 위치 권한 있음 - 위치 정보 획득 완료")
-                            Log.d(TAG, "사용자 위치: $userCity $userDistrict")
-                            Log.d(TAG, "전체 주소: $user_add")
+                            Log.d(TAG, "사용자 위치 State 업데이트: $city $district")
                         }
                     }
                     else -> {
@@ -214,16 +230,17 @@ class MainActivity : ComponentActivity() {
                     // Use factory to create ViewModel with Supabase dependency
                     val viewModel: PlaceViewModel = viewModel(factory = viewModelFactory)
 
+                    // 현재 위치 정보 로그
+                    Log.d(TAG, "NavHost 렌더링 시점의 위치: City=$userCityState, District=$userDistrictState")
+
                     NavHost(
                         navController = navController,
-                        startDestination = "chat"  // Changed to "chat" so the app starts on the chat screen
+                        startDestination = "chat"
                     ) {
                         composable("home") {
                             PlaceComparisonApp(
                                 navController = navController,
                                 viewModel = viewModel,
-//                                userCity = userCity,
-//                                userDistrict = userDistrict
                             )
                         }
                         composable("searchResults") {
@@ -233,10 +250,15 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                         composable("chat") {
+                            // 현재 State 값 로그
+                            Log.d(TAG, "ChatScreen으로 전달되는 위치: City=$userCityState, District=$userDistrictState")
+
                             ChatScreen(
                                 activity = this@MainActivity,
                                 navController = navController,
-                                showBackButton = false  // Set to false since this is now the start screen
+                                showBackButton = false,
+                                userCity = userCityState,  // State 값 사용
+                                userDistrict = userDistrictState  // State 값 사용
                             )
                         }
                     }
@@ -244,7 +266,6 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-
     // 위치 정보를 가져오는 함수
     private fun getLastKnownLocation(callback: (String, String) -> Unit) {
         if (ActivityCompat.checkSelfPermission(
@@ -2422,7 +2443,9 @@ fun LectureCard(lecture: SupabaseDatabaseHelper.Lecture) {
 fun ChatScreen(
     activity: MainActivity,
     navController: NavController,
-    showBackButton: Boolean = true
+    showBackButton: Boolean = true,
+    userCity: String = "",
+    userDistrict: String = ""
 ) {
     // Use rememberSaveable to persist state across recompositions
     var messageText by rememberSaveable { mutableStateOf("") }
@@ -2607,7 +2630,7 @@ fun ChatScreen(
         ) {
             // Top bar
             TopAppBar(
-                title = { Text("실버랜드 오비서") },
+                title = { Text("오비서") },
                 navigationIcon = {
                     if (showBackButton) {
                         IconButton(
@@ -2636,7 +2659,8 @@ fun ChatScreen(
                         }) {
                             Icon(
                                 imageVector = Icons.Default.Home,
-                                contentDescription = "Home"
+                                contentDescription = "Home",
+                                modifier = Modifier.size(50.dp) // 아이콘 크기 증가
                             )
                         }
                     }
@@ -2772,18 +2796,167 @@ fun ChatScreen(
                                 }
                             }
                         } else {
-                            // 마지막 결과일 때는 '탐색' 버튼
+                            // ChatScreen의 탐색 버튼 onClick 부분 수정
+                            // ChatScreen의 탐색 버튼 onClick 부분 수정
                             Button(
                                 onClick = {
-                                    // 탐색 버튼 기능 - 처음으로 돌아가거나 추가 검색 등
-                                    activity.chatService.showResultAtIndex(0) // 첫 번째 결과로 이동
+                                    // 탐색 시작 토스트 메시지 표시
+                                    Toast.makeText(activity, "탐색 시작", Toast.LENGTH_SHORT).show()
+
+                                    // 상세 디버깅 로그
+                                    Log.d("ExploreDebug", "=== 탐색 버튼 클릭 ===")
+                                    Log.d("ExploreDebug", "userCity: '$userCity'")
+                                    Log.d("ExploreDebug", "userDistrict: '$userDistrict'")
+
+                                    // 탐색 버튼 기능 - Flask 서버의 explore 엔드포인트로 연결
+                                    Thread {
+                                        try {
+                                            val url = URL("http://192.168.219.102:5000/explore")
+                                            val connection = url.openConnection() as HttpURLConnection
+                                            connection.requestMethod = "POST"
+                                            connection.setRequestProperty("Content-Type", "application/json")
+                                            connection.doOutput = true
+
+                                            // JSON 데이터 생성
+                                            val jsonObject = JSONObject().apply {
+                                                put("userCity", userCity)
+                                                put("userDistrict", userDistrict)
+                                            }
+
+                                            Log.d("ExploreDebug", "전송할 JSON: ${jsonObject.toString()}")
+
+                                            // 데이터 전송
+                                            connection.outputStream.use { os ->
+                                                val input = jsonObject.toString().toByteArray(Charsets.UTF_8)
+                                                os.write(input, 0, input.size)
+                                            }
+
+                                            // 응답 받기
+                                            val responseCode = connection.responseCode
+                                            if (responseCode == HttpURLConnection.HTTP_OK) {
+                                                val response = connection.inputStream.bufferedReader().use { it.readText() }
+                                                Log.d("ExploreResponse", "서버 응답: $response")
+
+                                                // JSON 응답 파싱
+                                                try {
+                                                    val responseJson = JSONObject(response)
+                                                    val generatedQuery = responseJson.optString("generated_query", null)
+                                                    val queryResponse = responseJson.optJSONObject("query_response")
+
+                                                    // UI 스레드에서 처리
+                                                    activity.runOnUiThread {
+                                                        if (generatedQuery != null && queryResponse != null) {
+                                                            // 생성된 질문을 메시지로 추가
+                                                            val exploreMessage = ChatMessage(
+                                                                text = "🔍 탐색: $generatedQuery",
+                                                                isFromUser = false
+                                                            )
+                                                            messages = messages + exploreMessage
+
+                                                            // 응답 처리
+                                                            val responseType = queryResponse.optString("type")
+                                                            when (responseType) {
+                                                                "llm" -> {
+                                                                    val content = queryResponse.optString("content", "응답 없음")
+                                                                    val responseMessage = ChatMessage(
+                                                                        text = content,
+                                                                        isFromUser = false
+                                                                    )
+                                                                    messages = messages + responseMessage
+
+                                                                    // LLM 응답은 단일 결과이므로 네비게이션 필요 없음
+                                                                    showNavigation = false
+                                                                }
+                                                                "pinecone" -> {
+                                                                    val results = queryResponse.optJSONArray("results")
+                                                                    val category = queryResponse.optString("category", "")
+
+                                                                    if (results != null && results.length() > 0) {
+                                                                        // 검색 결과를 개별 메시지로 저장
+                                                                        val searchResults = mutableListOf<ChatMessage>()
+
+                                                                        for (i in 0 until results.length()) {
+                                                                            val result = results.getJSONObject(i)
+                                                                            val title = result.optString("title", "제목 없음")
+                                                                            val content = result.optString("content", "내용 없음")
+                                                                            val resultCategory = result.optString("category", "")
+
+                                                                            val resultText = StringBuilder()
+                                                                            resultText.append("📋 ${category} 검색 결과 ${i + 1}/${results.length()}\n\n")
+                                                                            resultText.append("🏢 $title\n")
+                                                                            if (resultCategory.isNotEmpty()) {
+                                                                                resultText.append("📍 $resultCategory\n")
+                                                                            }
+                                                                            resultText.append("\n$content")
+
+                                                                            searchResults.add(ChatMessage(
+                                                                                text = resultText.toString(),
+                                                                                isFromUser = false
+                                                                            ))
+                                                                        }
+
+                                                                        // ChatService를 통해 검색 결과 설정
+                                                                        activity.chatService.setSearchResults(searchResults)
+
+                                                                        // 첫 번째 결과 표시
+                                                                        if (searchResults.isNotEmpty()) {
+                                                                            messages = messages + searchResults[0]
+
+                                                                            // 검색 결과가 여러 개인 경우 네비게이션 표시
+                                                                            if (searchResults.size > 1) {
+                                                                                showNavigation = true
+                                                                                hasPrevious = false
+                                                                                hasNext = true
+                                                                                currentPage = 1
+                                                                                totalPages = searchResults.size
+                                                                            } else {
+                                                                                showNavigation = false
+                                                                            }
+                                                                        }
+                                                                    } else {
+                                                                        val responseMessage = ChatMessage(
+                                                                            text = "검색 결과가 없습니다.",
+                                                                            isFromUser = false
+                                                                        )
+                                                                        messages = messages + responseMessage
+                                                                        showNavigation = false
+                                                                    }
+                                                                }
+                                                            }
+
+                                                            Toast.makeText(activity, "탐색이 완료되었습니다.", Toast.LENGTH_SHORT).show()
+                                                        } else {
+                                                            Toast.makeText(activity, "탐색 결과가 없습니다.", Toast.LENGTH_SHORT).show()
+                                                        }
+                                                    }
+                                                } catch (e: Exception) {
+                                                    Log.e("ExploreError", "JSON 파싱 오류: ${e.message}")
+                                                    activity.runOnUiThread {
+                                                        Toast.makeText(activity, "응답 처리 중 오류가 발생했습니다.", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                }
+                                            } else {
+                                                Log.e("ExploreError", "HTTP error code: $responseCode")
+                                                activity.runOnUiThread {
+                                                    Toast.makeText(activity, "탐색 중 오류가 발생했습니다.", Toast.LENGTH_SHORT).show()
+                                                }
+                                            }
+
+                                            connection.disconnect()
+                                        } catch (e: Exception) {
+                                            Log.e("ExploreError", "Error: ${e.message}", e)
+                                            activity.runOnUiThread {
+                                                Toast.makeText(activity, "서버 연결에 실패했습니다.", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    }.start()
                                 },
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFFfba064), // 연두색으로 변경
+                                    containerColor = Color(0xFFfba064),
                                     contentColor = Color.Black
                                 ),
                                 modifier = Modifier.weight(1f),
-                                contentPadding = PaddingValues(horizontal = 2.dp, vertical = 2.dp) // 패딩 더 줄임
+                                contentPadding = PaddingValues(horizontal = 2.dp, vertical = 2.dp)
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
@@ -2792,12 +2965,12 @@ fun ChatScreen(
                                     Icon(
                                         imageVector = Icons.Default.Search,
                                         contentDescription = "Explore",
-                                        modifier = Modifier.size(25.dp) // 아이콘 크기 증가
+                                        modifier = Modifier.size(25.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(2.dp)) // 간격 줄임
+                                    Spacer(modifier = Modifier.width(2.dp))
                                     Text(
                                         "탐색",
-                                        style = MaterialTheme.typography.headlineSmall, // 텍스트 크기 대폭 증가
+                                        style = MaterialTheme.typography.headlineSmall,
                                         fontWeight = FontWeight.Bold
                                     )
                                 }
