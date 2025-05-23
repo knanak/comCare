@@ -222,6 +222,14 @@ class ChatService {
     private fun formatResponse(content: String): String {
         var formatted = content
 
+        // "Showing result X:" 부분 제거
+        val showingResultPattern = Regex("^Showing result \\d+:\\s*", RegexOption.IGNORE_CASE)
+        formatted = formatted.replace(showingResultPattern, "")
+
+        // "id: XXX" 부분 제거 (줄바꿈 포함)
+        val idPattern = Regex("id:\\s*\\d+\\s*[\n\r]*", RegexOption.IGNORE_CASE)
+        formatted = formatted.replace(idPattern, "")
+
         // | 를 줄바꿈으로 변경
         formatted = formatted.replace(" | ", "\n")
         formatted = formatted.replace("|", "\n")
@@ -238,34 +246,48 @@ class ChatService {
             .filter { it.isNotEmpty() }
             .joinToString("\n")
 
-        // 특정 패턴들을 더 보기 좋게 포맷팅
+        // 특정 패턴들을 더 보기 좋게 포맷팅 (Category는 제거)
         formatted = formatted
-            .replace("Category:", "\n📍 지역:")
-            .replace("Title:", "\n📋 제목:")
-            .replace("Date of registration:", "\n📅 등록일:")
+            .replace(Regex("Category:\\s*[^\\n]*\\n?", RegexOption.IGNORE_CASE), "") // Category 라인 전체 제거
+            .replace("Title:", "📋 제목:")
+            .replace("DateOfRegistration:", "\n📅 등록일:")
             .replace("Deadline:", "\n⏰ 마감일:")
-            .replace("Job Category:", "\n💼 직종:")
-            .replace("Experience Required:", "\n📈 경력:")
-            .replace("Employment Type:", "\n📝 고용형태:")
+            .replace("JobCategory:", "\n 직종:")
+            .replace("ExperienceRequired:", "\n 경력:")
+            .replace("EmploymentType:", "\n 고용형태:")
             .replace("Salary:", "\n💰 급여:")
-            .replace("SocialEnsurance:", "\n🛡️ 사회보험:")
-            .replace("RetirementBenefit:", "\n🏦 퇴직혜택:")
-            .replace("Address:", "\n📍 주소:")
+            .replace("SocialEnsurance:", "\n🛡 사회보험:")
+            .replace("RetirementBenefit:", "\n 퇴직혜택:")
+            .replace("Location:", "\n📍 주소:")
             .replace("WorkingHours:", "\n⏰ 근무시간:")
-            .replace("Working Type:", "\n📋 근무형태:")
-            .replace("Company Name:", "\n🏢 회사명:")
-            .replace("Job Description:", "\n📄 상세설명:")
+            .replace("WorkingType:", "\n 근무형태:")
+            .replace("CompanyName:", "\n 회사명:")
+            .replace("JobDescription:", "\n 상세설명:")
             .replace("ApplicationMethod:", "\n📝 지원방법:")
             .replace("ApplicationType:", "\n📋 전형방법:")
             .replace("document:", "\n📄 제출서류:")
+            .replace("Institution:", "\n📄 기관:")
+            .replace("Address:", "\n📍 주소:")
+            .replace("Recruitment_period:", "\n⏰ 등록기간:")
+            .replace("Education_period:", "\n⏰ 교육기간:")
+            .replace("Fee:", "\n💰 비용:")
+            .replace("Quota:", "\n 정원:")
+            .replace("Service1:", "\n📍")
+            .replace("Service2:", "\n📍")
+            .replace("Rating:", "\n📝 등급:")
+            .replace("Full:", "\n 정원:")
+            .replace("Now:", "\n 가능:")
+            .replace("Wating:", "\n 대기:")
+            .replace("Bus:", "\n\uD83D\uDE8C 방문목욕차량:")
+            .replace("Tel:", "\n\uD83D\uDCDE 전화:")
+        
 
-        // "Showing result X:" 부분 제거 (있다면)
-        if (formatted.startsWith("Showing result")) {
-            val colonIndex = formatted.indexOf(":")
-            if (colonIndex != -1 && colonIndex < 50) { // 첫 50자 내에 있는 경우만
-                formatted = formatted.substring(colonIndex + 1).trim()
-            }
-        }
+
+        // 중복된 줄바꿈 다시 한 번 정리
+        formatted = formatted.replace(Regex("\n{2,}"), "\n\n")
+
+        // 최종적으로 시작 부분의 공백이나 줄바꿈 제거
+        formatted = formatted.trim()
 
         return formatted
     }

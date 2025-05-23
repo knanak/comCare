@@ -20,6 +20,10 @@ import kotlin.Exception
 import com.example.comcare.OPEN_API_KEY
 
 class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewModel() {
+    // 사용자 위치 정보 추가
+    private var userCity: String = ""
+    private var userDistrict: String = ""
+
     // 1. facilities data
     // Using MutableState for the places list
     private val _allPlaces = mutableStateOf<List<Place>>(emptyList())
@@ -62,14 +66,43 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
     val isLoadingLectures: Boolean
         get() = _isLoadingLectures.value
 
-
-
     init {
         // Fetch data when ViewModel is initialized
         fetchPlacesData()
         fetchJobsData()
         fetchLectureData()
     }
+
+    // 사용자 위치 설정 함수 추가
+    fun setUserLocation(city: String, district: String) {
+        userCity = city
+        userDistrict = district
+
+        Log.d("PlaceViewModel", "========== 사용자 위치 설정 ==========")
+        Log.d("PlaceViewModel", "도시: $userCity")
+        Log.d("PlaceViewModel", "구/군: $userDistrict")
+        Log.d("PlaceViewModel", "=====================================")
+
+        // 위치가 설정되면 해당 지역으로 자동 필터링
+        if (city.isNotEmpty()) {
+            // 시설 필터링
+            filterPlaces(city, district, "전체", "전체")
+            Log.d("PlaceViewModel", "시설 필터링 완료 - 결과: ${_filteredPlaces.value.size}개")
+
+            // 일자리 필터링
+            filterJobs(city, district)
+            Log.d("PlaceViewModel", "일자리 필터링 완료 - 결과: ${_filteredJobs.value.size}개")
+
+            // 강좌 필터링
+            filterLectures(city, district)
+            Log.d("PlaceViewModel", "강좌 필터링 완료 - 결과: ${_filteredLectures.value.size}개")
+        }
+    }
+
+    // 사용자 위치 정보 getter 함수 추가
+    fun getUserCity(): String = userCity
+    fun getUserDistrict(): String = userDistrict
+
     private fun fetchPlacesData() {
         viewModelScope.launch {
             try {
@@ -203,28 +236,6 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
             emptyList()
         }
     }
-
-    // Helper function to extract district from address
-//    private fun extractDistrict(address: String): String {
-//        val addressParts = address.split(" ")
-//        return if (addressParts.size >= 2) {
-//            // Try to get district part (usually second part of Korean address)
-//            val districtPart = addressParts[1]
-//
-//            // Make sure it ends with "구" if it's a district
-//            if (districtPart.endsWith("구")) {
-//                districtPart
-//            } else if (districtPart.contains("구")) {
-//                // Extract just the district part if it contains "구" with other text
-//                val districtMatch = "(.+구)".toRegex().find(districtPart)
-//                districtMatch?.groupValues?.get(1) ?: districtPart
-//            } else {
-//                districtPart
-//            }
-//        } else {
-//            "" // Return empty string if address format is unexpected
-//        }
-//    }
 
     private fun processLocationCategories(places: List<Place>) {
         // Extract unique cities from addresses

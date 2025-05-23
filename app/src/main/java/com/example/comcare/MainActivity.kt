@@ -58,12 +58,38 @@ import androidx.core.content.ContextCompat
 import kotlinx.coroutines.delay
 import androidx.compose.ui.unit.sp
 
-
+// 위치 관련 import 추가
+import android.location.Location
+import android.location.LocationManager
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationResult
+import com.google.android.gms.location.Priority
+import android.location.Geocoder
+import java.util.Locale
+import android.content.Context
+import android.os.Build
+import androidx.core.app.ActivityCompat
 
 class MainActivity : ComponentActivity() {
 
     val chatService = ChatService()
     private var currentUserId: String = "guest" // Default value
+
+    // 위치 관련 변수 추가
+    private lateinit var fusedLocationClient: FusedLocationProviderClient
+    private var userCity: String = ""
+    private var userDistrict: String = ""
+    private var userLatitude: Double = 0.0
+    private var userLongitude: Double = 0.0
+    private var user_add: String = "" // 전체 주소를 저장하는 변수
+
+    companion object {
+        private const val LOCATION_PERMISSION_REQUEST_CODE = 1001
+        private const val TAG = "Location"
+    }
 
     fun onMessageSent(message: String, sessionId: String) {
         // Save message to local database, display in UI, etc.
@@ -75,12 +101,20 @@ class MainActivity : ComponentActivity() {
             sessionId
         )
     }
+
     // Add this nested class inside MainActivity
-    class PlaceViewModelFactory(private val supabaseHelper: SupabaseDatabaseHelper) : ViewModelProvider.Factory {
+    class PlaceViewModelFactory(
+        private val supabaseHelper: SupabaseDatabaseHelper,
+        private val userCity: String,
+        private val userDistrict: String
+    ) : ViewModelProvider.Factory {
         override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(PlaceViewModel::class.java)) {
                 @Suppress("UNCHECKED_CAST")
-                return PlaceViewModel(supabaseHelper) as T
+                return PlaceViewModel(supabaseHelper).apply {
+                    // 위치 정보 초기화
+                    setUserLocation(userCity, userDistrict)
+                } as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }
@@ -89,18 +123,92 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // FusedLocationProviderClient 초기화
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+
         // Initialize Supabase helper
         val supabaseHelper = SupabaseDatabaseHelper(this)
 
-        // Create ViewModel factory
-        val viewModelFactory = PlaceViewModelFactory(supabaseHelper)
-
         setContent {
+            var locationPermissionGranted by remember { mutableStateOf(false) }
+            var showLocationPermissionDialog by remember { mutableStateOf(false) }
+            var viewModelFactory by remember { mutableStateOf(PlaceViewModelFactory(supabaseHelper, "", "")) }
+
+            // 위치 권한 런처
+            val locationPermissionLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.RequestMultiplePermissions()
+            ) { permissions ->
+                val fineLocationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
+                val coarseLocationGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
+
+                if (fineLocationGranted || coarseLocationGranted) {
+                    locationPermissionGranted = true
+                    // 권한이 승인되면 위치 정보 가져오기
+                    getLastKnownLocation { city, district ->
+                        userCity = city
+                        userDistrict = district
+                        viewModelFactory = PlaceViewModelFactory(supabaseHelper, city, district)
+                        Log.d(TAG, "위치 권한 승인 - 위치 정보 획득 완료")
+                        Log.d(TAG, "사용자 위치: $userCity $userDistrict")
+                        Log.d(TAG, "전체 주소: $user_add")
+                    }
+                } else {
+                    // 권한이 거부된 경우
+                    showLocationPermissionDialog = true
+                }
+            }
+
+            // 앱 시작 시 위치 권한 확인 및 요청
+            LaunchedEffect(Unit) {
+                when {
+                    ContextCompat.checkSelfPermission(
+                        this@MainActivity,
+                        Manifest.permission.ACCESS_FINE_LOCATION
+                    ) == PackageManager.PERMISSION_GRANTED -> {
+                        // 이미 권한이 있는 경우
+                        locationPermissionGranted = true
+                        getLastKnownLocation { city, district ->
+                            userCity = city
+                            userDistrict = district
+                            viewModelFactory = PlaceViewModelFactory(supabaseHelper, city, district)
+                            Log.d(TAG, "기존 위치 권한 있음 - 위치 정보 획득 완료")
+                            Log.d(TAG, "사용자 위치: $userCity $userDistrict")
+                            Log.d(TAG, "전체 주소: $user_add")
+                        }
+                    }
+                    else -> {
+                        // 권한 요청
+                        locationPermissionLauncher.launch(
+                            arrayOf(
+                                Manifest.permission.ACCESS_FINE_LOCATION,
+                                Manifest.permission.ACCESS_COARSE_LOCATION
+                            )
+                        )
+                    }
+                }
+            }
+
             PlaceComparisonTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
+                    // 위치 권한 안내 다이얼로그
+                    if (showLocationPermissionDialog) {
+                        AlertDialog(
+                            onDismissRequest = { showLocationPermissionDialog = false },
+                            title = { Text("위치 권한 필요") },
+                            text = {
+                                Text("오비서 앱은 사용자님의 지역에 맞는 정보를 제공하기 위해 위치 권한이 필요합니다. 설정에서 위치 권한을 허용해주세요.")
+                            },
+                            confirmButton = {
+                                TextButton(onClick = { showLocationPermissionDialog = false }) {
+                                    Text("확인")
+                                }
+                            }
+                        )
+                    }
+
                     val navController = rememberNavController()
 
                     // Use factory to create ViewModel with Supabase dependency
@@ -113,7 +221,9 @@ class MainActivity : ComponentActivity() {
                         composable("home") {
                             PlaceComparisonApp(
                                 navController = navController,
-                                viewModel = viewModel
+                                viewModel = viewModel,
+//                                userCity = userCity,
+//                                userDistrict = userDistrict
                             )
                         }
                         composable("searchResults") {
@@ -134,8 +244,175 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-}
 
+    // 위치 정보를 가져오는 함수
+    private fun getLastKnownLocation(callback: (String, String) -> Unit) {
+        if (ActivityCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            Log.w(TAG, "위치 권한이 없습니다.")
+            callback("", "")
+            return
+        }
+
+        Log.d(TAG, "마지막 위치 정보 요청 중...")
+        fusedLocationClient.lastLocation.addOnSuccessListener { location: Location? ->
+            if (location != null) {
+                userLatitude = location.latitude
+                userLongitude = location.longitude
+
+                Log.d(TAG, "위치 정보 획득 성공 - 위도: $userLatitude, 경도: $userLongitude")
+
+                // Geocoder를 사용하여 좌표를 주소로 변환
+                getAddressFromLocation(location.latitude, location.longitude) { city, district ->
+                    callback(city, district)
+                }
+            } else {
+                Log.d(TAG, "마지막 위치 정보가 없음 - 새로운 위치 요청")
+                // 마지막 위치가 없는 경우 현재 위치 요청
+                requestNewLocationData(callback)
+            }
+        }.addOnFailureListener { exception ->
+            Log.e(TAG, "위치 정보 획득 실패: ${exception.message}")
+            callback("", "")
+        }
+    }
+
+    // 새로운 위치 데이터 요청
+    private fun requestNewLocationData(callback: (String, String) -> Unit) {
+        if (ActivityCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+
+        val locationRequest = LocationRequest.Builder(
+            Priority.PRIORITY_HIGH_ACCURACY,
+            10000L // 10초
+        ).apply {
+            setMinUpdateIntervalMillis(5000L) // 최소 5초
+            setMaxUpdates(1) // 한 번만 업데이트
+        }.build()
+
+        val locationCallback = object : LocationCallback() {
+            override fun onLocationResult(locationResult: LocationResult) {
+                val location = locationResult.lastLocation
+                if (location != null) {
+                    userLatitude = location.latitude
+                    userLongitude = location.longitude
+
+                    Log.d(TAG, "새로운 위치 정보 획득 - 위도: $userLatitude, 경도: $userLongitude")
+
+                    getAddressFromLocation(location.latitude, location.longitude) { city, district ->
+                        callback(city, district)
+                    }
+                } else {
+                    Log.w(TAG, "새로운 위치 정보를 가져올 수 없습니다.")
+                    callback("", "")
+                }
+                // 위치 업데이트 중지
+                fusedLocationClient.removeLocationUpdates(this)
+            }
+        }
+
+        fusedLocationClient.requestLocationUpdates(
+            locationRequest,
+            locationCallback,
+            mainLooper
+        )
+    }
+
+    // 좌표를 주소로 변환하는 함수
+    private fun getAddressFromLocation(latitude: Double, longitude: Double, callback: (String, String) -> Unit) {
+        try {
+            val geocoder = Geocoder(this, Locale.KOREAN)
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                geocoder.getFromLocation(latitude, longitude, 1) { addresses ->
+                    if (addresses.isNotEmpty()) {
+                        val address = addresses[0]
+                        val city = address.adminArea ?: ""  // 시/도
+                        val district = address.subLocality ?: address.locality ?: ""  // 구/군
+
+                        // 전체 주소 생성 및 저장
+                        val fullAddress = address.getAddressLine(0) ?: ""
+                        user_add = fullAddress
+
+                        // 상세 주소 정보 로그
+                        Log.d(TAG, "========== 위치 정보 ==========")
+                        Log.d(TAG, "전체 주소 (user_add): $user_add")
+//                        Log.d(TAG, "위도: $latitude")
+//                        Log.d(TAG, "경도: $longitude")
+                        Log.d(TAG, "시/도: $city")
+                        Log.d(TAG, "구/군: $district")
+//                        Log.d(TAG, "상세 주소 정보:")
+//                        Log.d(TAG, "  - 국가: ${address.countryName}")
+//                        Log.d(TAG, "  - 시/도 (adminArea): ${address.adminArea}")
+//                        Log.d(TAG, "  - 시/군/구 (locality): ${address.locality}")
+//                        Log.d(TAG, "  - 동/읍/면 (subLocality): ${address.subLocality}")
+//                        Log.d(TAG, "  - 도로명: ${address.thoroughfare}")
+//                        Log.d(TAG, "  - 상세주소: ${address.featureName}")
+//                        Log.d(TAG, "==============================")
+
+                        callback(city, district)
+                    } else {
+                        Log.w(TAG, "주소를 찾을 수 없습니다.")
+                        user_add = ""
+                        callback("", "")
+                    }
+                }
+            } else {
+                @Suppress("DEPRECATION")
+                val addresses = geocoder.getFromLocation(latitude, longitude, 1)
+                if (!addresses.isNullOrEmpty()) {
+                    val address = addresses[0]
+                    val city = address.adminArea ?: ""  // 시/도
+                    val district = address.subLocality ?: address.locality ?: ""  // 구/군
+
+                    // 전체 주소 생성 및 저장
+                    val fullAddress = address.getAddressLine(0) ?: ""
+                    user_add = fullAddress
+
+                    // 상세 주소 정보 로그
+                    Log.d(TAG, "========== 위치 정보 ==========")
+//                    Log.d(TAG, "전체 주소 (user_add): $user_add")
+//                    Log.d(TAG, "위도: $latitude")
+//                    Log.d(TAG, "경도: $longitude")
+                    Log.d(TAG, "시/도: $city")
+                    Log.d(TAG, "구/군: $district")
+//                    Log.d(TAG, "상세 주소 정보:")
+//                    Log.d(TAG, "  - 국가: ${address.countryName}")
+//                    Log.d(TAG, "  - 시/도 (adminArea): ${address.adminArea}")
+//                    Log.d(TAG, "  - 시/군/구 (locality): ${address.locality}")
+//                    Log.d(TAG, "  - 동/읍/면 (subLocality): ${address.subLocality}")
+//                    Log.d(TAG, "  - 도로명: ${address.thoroughfare}")
+//                    Log.d(TAG, "  - 상세주소: ${address.featureName}")
+//                    Log.d(TAG, "==============================")
+
+                    callback(city, district)
+                } else {
+                    Log.w(TAG, "주소를 찾을 수 없습니다.")
+                    user_add = ""
+                    callback("", "")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Geocoding 실패: ${e.message}", e)
+            user_add = ""
+            callback("", "")
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -151,6 +428,8 @@ fun PlaceComparisonApp(
 
     var expandedCityMenu by remember { mutableStateOf(false) }
     var expandedDistrictMenu by remember { mutableStateOf(false) }
+
+
     var expandedServiceMenu by remember { mutableStateOf(false) }
     var expandedServiceSubcategoryMenu by remember { mutableStateOf(false) }
 
