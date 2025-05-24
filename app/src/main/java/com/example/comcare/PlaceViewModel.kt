@@ -102,6 +102,14 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
     private val _cultureDistricts = mutableStateOf<Map<String, List<String>>>(mapOf("전체" to listOf("전체")))
     val cultureDistricts: State<Map<String, List<String>>> = _cultureDistricts
 
+    // kk_facility 관련 추가
+    private val _kkFacilities = mutableStateOf<List<SupabaseDatabaseHelper.KKFacility>>(emptyList())
+    val kkFacilities: State<List<SupabaseDatabaseHelper.KKFacility>> = _kkFacilities
+
+    private val _isLoadingKKFacilities = mutableStateOf<Boolean>(false)
+    val isLoadingKKFacilities: Boolean
+        get() = _isLoadingKKFacilities.value
+
     init {
         // Fetch data when ViewModel is initialized
         fetchPlacesData()
@@ -109,6 +117,7 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
         fetchLectureData()
         fetchKKJobsData()
         fetchKKCulturesData()
+        fetchKKFacilitiesData()
     }
 
     // 사용자 위치 설정 함수 추가
@@ -156,8 +165,13 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
                     fetchSupabaseData()
                 }
 
-                // Combine both datasets
-                val combinedData = apiData + supabaseData
+                // Get KK Facility data
+                val kkFacilityData = withContext(Dispatchers.IO) {
+                    fetchKKFacilityDataAsPlaces()
+                }
+
+                // Combine all datasets
+                val combinedData = apiData + supabaseData + kkFacilityData
 
                 // Process the combined data
                 processLocationCategories(combinedData)
@@ -167,7 +181,7 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
                 _filteredPlaces.value = combinedData
 
                 Log.d("PlaceViewModel", "Data fetch complete: ${combinedData.size} total items " +
-                        "(${apiData.size} API, ${supabaseData.size} Supabase)")
+                        "(${apiData.size} API, ${supabaseData.size} Supabase, ${kkFacilityData.size} KK Facility)")
 
             } catch (e: Exception) {
                 Log.e("PlaceViewModel", "Error fetching data", e)
@@ -184,6 +198,117 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
             }
         }
     }
+
+    // KK Facility 데이터를 Place 객체로 변환
+    private suspend fun fetchKKFacilityDataAsPlaces(): List<Place> {
+        return try {
+            Log.d("PlaceViewModel", "Starting KK Facility data fetch as Places")
+
+            val kkFacilities = supabaseHelper.getKKFacilities()
+            Log.d("PlaceViewModel", "KK Facility getKKFacilities returned ${kkFacilities.size} items")
+
+            if (kkFacilities.isEmpty()) {
+                Log.d("PlaceViewModel", "KK Facility returned empty list")
+                return emptyList()
+            }
+
+            // KK Facility 데이터를 Place 객체로 매핑
+            val places = kkFacilities.map { facility ->
+                try {
+                    // 주소에서 도시와 구/군 정보 추출
+                    val addressParts = facility.Address?.trim()?.split(" ") ?: emptyList()
+                    val city = if (addressParts.isNotEmpty()) addressParts[0] else ""
+                    val district = if (addressParts.size > 1) addressParts[1] else ""
+
+                    // Rating에서 개행문자 제거
+                    val cleanRating = facility.Rating?.replace("\n", " ") ?: ""
+
+                    Place(
+                        id = "kk_${facility.Id}",
+                        name = facility.Title ?: "이름 없음",
+                        facilityCode = "",
+                        facilityKind = facility.Service2 ?: "",
+                        facilityKindDetail = facility.Service1 ?: "복지시설",
+                        district = district,
+                        address = facility.Address ?: "",
+                        tel = facility.Tel ?: "",
+                        zipCode = "",
+                        service1 = listOf(facility.Service1 ?: "복지시설"),
+                        service2 = listOf(facility.Service2 ?: ""),
+                        rating = cleanRating,
+                        rating_year = "",
+                        full = facility.Full ?: "0",
+                        now = facility.Now ?: "0",
+                        wating = facility.Wating ?: "0",
+                        bus = facility.Bus ?: ""
+                    )
+                } catch (e: Exception) {
+                    Log.e("PlaceViewModel", "Error converting kk_facility: ${facility.Id}", e)
+                    null
+                }
+            }.filterNotNull()
+
+            Log.d("PlaceViewModel", "KK Facility data fetch complete: ${places.size} items")
+            places
+
+        } catch (e: Exception) {
+            Log.e("PlaceViewModel", "Error fetching KK Facility data", e)
+            emptyList()
+        }
+    }
+
+    fun fetchKKFacilitiesData() {
+        viewModelScope.launch {
+            try {
+                Log.d("PlaceViewModel", "Starting kk_facilities data fetch")
+                _isLoadingKKFacilities.value = true
+
+                val kkFacilitiesData = withContext(Dispatchers.IO) {
+                    try {
+                        val kkFacilities = supabaseHelper.getKKFacilities()
+                        Log.d("PlaceViewModel", "Supabase getKKFacilities returned ${kkFacilities.size} items")
+
+                        if (kkFacilities.isEmpty()) {
+                            Log.d("PlaceViewModel", "Supabase kk_facilities returned empty list")
+                        } else {
+                            // Log first kk_facility for debugging
+                            val firstKKFacility = kkFacilities.firstOrNull()
+                            if (firstKKFacility != null) {
+                                Log.d(
+                                    "PlaceViewModel", "Sample kk_facility data: Id=${firstKKFacility.Id}, " +
+                                            "title=${firstKKFacility.Title}, " +
+                                            "category=${firstKKFacility.Category}, " +
+                                            "address=${firstKKFacility.Address}"
+                                )
+                            }
+                        }
+                        kkFacilities
+                    } catch (e: Exception) {
+                        Log.e(
+                            "PlaceViewModel",
+                            "Error in getKKFacilities Dispatchers.IO block: ${e.message}",
+                            e
+                        )
+                        emptyList()
+                    }
+                }
+
+                // Update the kk_facilities value with the fetched data
+                _kkFacilities.value = kkFacilitiesData
+
+                // 기존 장소 데이터 다시 가져오기 (통합된 위치 정보 업데이트를 위해)
+                fetchPlacesData()
+
+                Log.d("PlaceViewModel", "KK_Facilities data fetch complete: ${kkFacilitiesData.size} items")
+            } catch (e: Exception) {
+                Log.e("PlaceViewModel", "Error fetching kk_facilities data: ${e.message}", e)
+                _kkFacilities.value = emptyList()
+            } finally {
+                _isLoadingKKFacilities.value = false
+            }
+        }
+    }
+
 
     // 주소에서 도시와 구/군 정보를 추출하는 함수들
     private fun extractCity(address: String): String {

@@ -893,4 +893,143 @@ class SupabaseDatabaseHelper(private val context: Context) {
             null
         }
     }
+
+    @Serializable
+    data class KKFacility(
+        val Id: Int,
+        val Category: String? = null,
+        val Title: String? = null,
+        val Service1: String? = null,
+        val Service2: String? = null,
+        val Rating: String? = null,
+        val Full: String? = null,
+        val Now: String? = null,
+        val Wating: String? = null,
+        val Bus: String? = null,
+        val Address: String? = null,
+        val Tel: String? = null
+    )
+
+    suspend fun getKKFacilities(): List<KKFacility> {
+        return try {
+            Log.d("supabase", "Starting getKKFacilities")
+
+            withContext(Dispatchers.IO) {
+                try {
+                    // First get the total count
+                    val totalCount = supabase.postgrest["kk_facility"]
+                        .select(head = true, count = Count.EXACT)
+                        .count() ?: 0L
+
+                    Log.d("supabase", "Total count of kk_facilities: $totalCount")
+
+                    if (totalCount == 0L) {
+                        Log.d("supabase", "No facilities found in the 'kk_facility' table")
+                        return@withContext emptyList<KKFacility>()
+                    }
+
+                    // Use the same approach as getKKJobs() - first make a test request
+                    val testBatch = supabase.postgrest["kk_facility"]
+                        .select()
+                        .decodeList<KKFacility>()
+
+                    // The batch size is whatever limit Supabase applied to our first request
+                    val batchSize = testBatch.size
+                    Log.d("supabase", "Detected batch size from Supabase: $batchSize")
+
+                    // Now we know the batch size, fetch all records
+                    val allKKFacilities = mutableListOf<KKFacility>()
+
+                    // Add the first batch
+                    allKKFacilities.addAll(testBatch)
+
+                    var currentStart = batchSize
+
+                    // Continue fetching until we have all records
+                    while (currentStart < totalCount) {
+                        val currentEnd = currentStart + batchSize - 1
+                        Log.d("supabase", "Fetching kk_facilities batch: $currentStart to $currentEnd")
+
+                        try {
+                            // Fetch a batch using range
+                            val batch = supabase.postgrest["kk_facility"]
+                                .select(filter = {
+                                    range(from = currentStart.toLong(), to = currentEnd.toLong())
+                                })
+                                .decodeList<KKFacility>()
+
+                            Log.d("supabase", "Fetched batch of ${batch.size} kk_facilities")
+
+                            allKKFacilities.addAll(batch)
+
+                            // If we got an empty batch or fewer items than requested, we might be done
+                            if (batch.isEmpty() || batch.size < batchSize) {
+                                break
+                            }
+
+                            // Move to next batch
+                            currentStart += batchSize
+                        } catch (e: Exception) {
+                            Log.e("supabase", "Error fetching kk_facilities batch $currentStart-$currentEnd: ${e.message}", e)
+                            e.printStackTrace()
+                            // Continue to next batch despite error
+                            currentStart += batchSize
+                        }
+                    }
+
+                    Log.d("supabase", "Retrieved ${allKKFacilities.size} kk_facilities out of $totalCount total")
+
+                    // Verify we got all records
+                    if (allKKFacilities.size < totalCount) {
+                        Log.w("supabase", "Warning: Retrieved fewer records than expected (${allKKFacilities.size} vs $totalCount)")
+                    }
+
+                    // Log a sample facility for debugging
+                    if (allKKFacilities.isNotEmpty()) {
+                        val sample = allKKFacilities.first()
+                        Log.d("supabase", "Sample kk_facility: id=${sample.Id}, " +
+                                "title=${sample.Title}, " +
+                                "category=${sample.Category}, " +
+                                "address=${sample.Address}")
+                    }
+
+                    allKKFacilities
+                } catch (e: Exception) {
+                    Log.e("supabase", "Error in getKKFacilities inner block: ${e.message}", e)
+                    e.printStackTrace()
+                    emptyList()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("supabase", "Error in getKKFacilities: ${e.message}", e)
+            e.printStackTrace()
+            emptyList()
+        }
+    }
+
+    // Also add a function to get a specific kk_facility by ID
+    suspend fun getKKFacilityById(kkFacilityId: Int): KKFacility? {
+        return try {
+            withContext(Dispatchers.IO) {
+                val response = supabase.postgrest.from("kk_facility")
+                    .select(
+                        filter = {
+                            eq("id", kkFacilityId)
+                        }
+                    )
+                    .decodeSingleOrNull<KKFacility>()
+
+                if (response != null) {
+                    Log.d(TAG, "Retrieved kk_facility with ID: $kkFacilityId")
+                    response
+                } else {
+                    Log.d(TAG, "No kk_facility found with ID: $kkFacilityId")
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching kk_facility by ID: ${e.message}")
+            null
+        }
+    }
 }

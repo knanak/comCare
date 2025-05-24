@@ -1002,7 +1002,7 @@ fun PlaceComparisonApp(
 
                                     Spacer(modifier = Modifier.height(12.dp))
 
-                                    // Get random place if available
+                                    // Get random place if available (이미 kk_facility 데이터 포함)
                                     if (viewModel.filteredPlaces.value.isNotEmpty()) {
                                         // Get a random place from the filtered places list
                                         val randomPlace = remember(viewModel.filteredPlaces.value) {
@@ -1029,6 +1029,16 @@ fun PlaceComparisonApp(
                                             Text(
                                                 "시설 종류: ${randomPlace.service1.joinToString(", ")}",
                                                 style = MaterialTheme.typography.bodyMedium
+                                            )
+                                        }
+
+                                        // kk_facility 데이터인 경우 추가 정보 표시
+                                        if (randomPlace.id.startsWith("kk_")) {
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                "※ 경기도 복지시설",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = Color.Gray
                                             )
                                         }
 
@@ -1411,6 +1421,7 @@ fun PlaceComparisonApp(
                     }
                 }
             }
+
             "seniorPolicies" -> {
                 // Senior policies content
                 Text(
@@ -1694,9 +1705,6 @@ fun PlaceComparisonApp(
                 }
             }
 
-
-// MainActivity.kt의 culture 섹션 수정 부분
-// "culture" -> { 부분을 다음과 같이 수정:
 
             "culture" -> {
                 // Lectures content with pagination
