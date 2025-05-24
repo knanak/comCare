@@ -19,7 +19,6 @@ import java.util.TimeZone
 
 class SupabaseDatabaseHelper(private val context: Context) {
 
-
     companion object {
         private const val SUPABASE_URL = "https://ptztivxympkpwiwdlcit.supabase.co"
         private const val TAG = "SupabaseHelper"
@@ -362,7 +361,7 @@ class SupabaseDatabaseHelper(private val context: Context) {
         val Title: String? = null,
         val Recruitment_period: String? = null,
         val Education_period: String? = null,
-        val Fees: String? = null,
+        val Fee: String? = null,
         val Quota: String? = null
     )
 
@@ -716,6 +715,181 @@ class SupabaseDatabaseHelper(private val context: Context) {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error fetching kk_job by ID: ${e.message}")
+            null
+        }
+    }
+
+    // 5. KK_Culture data
+    @Serializable
+    data class KKCulture(
+        val Id: Int,
+        val Category: String? = null,
+        val Title: String? = null,
+        val Recruitment_period: String? = null,
+        val Education_period: String? = null,
+        val Institution: String? = null,
+        val Address: String? = null,
+        val Quota: String? = null,
+        val State: String? = null,
+        val Registration: String? = null,
+        val Detail: String? = null,
+        val Date: String? = null,
+        val Tel: String? = null,
+        val Fee: String? = null
+    )
+
+    suspend fun getKKCultures(): List<KKCulture> {
+        return try {
+            Log.d("supabase", "Starting getKKCultures")
+
+            withContext(Dispatchers.IO) {
+                try {
+                    // First get the total count
+                    val totalCount = supabase.postgrest["kk_culture"]
+                        .select(head = true, count = Count.EXACT)
+                        .count() ?: 0L
+
+                    Log.d("supabase", "Total count of kk_cultures: $totalCount")
+
+                    if (totalCount == 0L) {
+                        Log.d("supabase", "No cultures found in the 'kk_culture' table")
+                        return@withContext emptyList<KKCulture>()
+                    }
+
+                    // Use the same approach as getKKJobs() - first make a test request
+                    val testBatch = supabase.postgrest["kk_culture"]
+                        .select()
+                        .decodeList<KKCulture>()
+
+                    // The batch size is whatever limit Supabase applied to our first request
+                    val batchSize = testBatch.size
+                    Log.d("supabase", "Detected batch size from Supabase: $batchSize")
+
+                    // Now we know the batch size, fetch all records
+                    val allKKCultures = mutableListOf<KKCulture>()
+
+                    // Clean the test batch data
+                    val cleanedFirstBatch = testBatch.map { kkCulture ->
+                        // Remove newlines from period fields
+                        val cleanedRecruitmentPeriod = kkCulture.Recruitment_period?.replace("\n", "")
+                        val cleanedEducationPeriod = kkCulture.Education_period?.replace("\n", "")
+
+                        kkCulture.copy(
+                            Recruitment_period = cleanedRecruitmentPeriod,
+                            Education_period = cleanedEducationPeriod
+                        )
+                    }
+
+                    // Add the cleaned first batch
+                    allKKCultures.addAll(cleanedFirstBatch)
+
+                    var currentStart = batchSize
+
+                    // Continue fetching until we have all records
+                    while (currentStart < totalCount) {
+                        val currentEnd = currentStart + batchSize - 1
+                        Log.d("supabase", "Fetching kk_cultures batch: $currentStart to $currentEnd")
+
+                        try {
+                            // Fetch a batch using range
+                            val batch = supabase.postgrest["kk_culture"]
+                                .select(filter = {
+                                    range(from = currentStart.toLong(), to = currentEnd.toLong())
+                                })
+                                .decodeList<KKCulture>()
+
+                            Log.d("supabase", "Fetched batch of ${batch.size} kk_cultures")
+
+                            // Clean the batch data
+                            val cleanedBatch = batch.map { kkCulture ->
+                                // Remove newlines from period fields
+                                val cleanedRecruitmentPeriod = kkCulture.Recruitment_period?.replace("\n", "")
+                                val cleanedEducationPeriod = kkCulture.Education_period?.replace("\n", "")
+
+                                kkCulture.copy(
+                                    Recruitment_period = cleanedRecruitmentPeriod,
+                                    Education_period = cleanedEducationPeriod
+                                )
+                            }
+
+                            allKKCultures.addAll(cleanedBatch)
+
+                            // If we got an empty batch or fewer items than requested, we might be done
+                            if (batch.isEmpty() || batch.size < batchSize) {
+                                break
+                            }
+
+                            // Move to next batch
+                            currentStart += batchSize
+                        } catch (e: Exception) {
+                            Log.e("supabase", "Error fetching kk_cultures batch $currentStart-$currentEnd: ${e.message}", e)
+                            e.printStackTrace()
+                            // Continue to next batch despite error
+                            currentStart += batchSize
+                        }
+                    }
+
+                    Log.d("supabase", "Retrieved ${allKKCultures.size} kk_cultures out of $totalCount total")
+
+                    // Verify we got all records
+                    if (allKKCultures.size < totalCount) {
+                        Log.w("supabase", "Warning: Retrieved fewer records than expected (${allKKCultures.size} vs $totalCount)")
+                    }
+
+                    // Log a sample culture for debugging
+                    if (allKKCultures.isNotEmpty()) {
+                        val sample = allKKCultures.first()
+                        Log.d("supabase", "Sample kk_culture: id=${sample.Id}, " +
+                                "title=${sample.Title}, " +
+                                "institution=${sample.Institution}, " +
+                                "address=${sample.Address}, " +
+                                "category=${sample.Category}")
+                    }
+
+                    allKKCultures
+                } catch (e: Exception) {
+                    Log.e("supabase", "Error in getKKCultures inner block: ${e.message}", e)
+                    e.printStackTrace()
+                    emptyList()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("supabase", "Error in getKKCultures: ${e.message}", e)
+            e.printStackTrace()
+            emptyList()
+        }
+    }
+
+    // Also add a function to get a specific kk_culture by ID
+    suspend fun getKKCultureById(kkCultureId: Int): KKCulture? {
+        return try {
+            withContext(Dispatchers.IO) {
+                val response = supabase.postgrest.from("kk_culture")
+                    .select(
+                        filter = {
+                            eq("id", kkCultureId)
+                        }
+                    )
+                    .decodeSingleOrNull<KKCulture>()
+
+                if (response != null) {
+                    Log.d(TAG, "Retrieved kk_culture with ID: $kkCultureId")
+
+                    // Clean the period fields if present
+                    val cleanedRecruitmentPeriod = response.Recruitment_period?.replace("\n", "")
+                    val cleanedEducationPeriod = response.Education_period?.replace("\n", "")
+
+                    response.copy(
+                        Recruitment_period = cleanedRecruitmentPeriod,
+                        Education_period = cleanedEducationPeriod
+                    )
+                } else {
+                    Log.d(TAG, "No kk_culture found with ID: $kkCultureId")
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching kk_culture by ID: ${e.message}")
             null
         }
     }

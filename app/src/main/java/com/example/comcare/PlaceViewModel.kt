@@ -84,12 +84,31 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
     private val _jobDistricts = mutableStateOf<Map<String, List<String>>>(mapOf("전체" to listOf("전체")))
     val jobDistricts: State<Map<String, List<String>>> = _jobDistricts
 
+    // kk_culture 관련 추가
+    private val _kkCultures = mutableStateOf<List<SupabaseDatabaseHelper.KKCulture>>(emptyList())
+    val kkCultures: State<List<SupabaseDatabaseHelper.KKCulture>> = _kkCultures
+
+    private val _filteredKKCultures = mutableStateOf<List<SupabaseDatabaseHelper.KKCulture>>(emptyList())
+    val filteredKKCultures: State<List<SupabaseDatabaseHelper.KKCulture>> = _filteredKKCultures
+
+    private val _isLoadingKKCultures = mutableStateOf<Boolean>(false)
+    val isLoadingKKCultures: Boolean
+        get() = _isLoadingKKCultures.value
+
+    // 통합된 culture 위치 정보 (lecture + kk_culture)
+    private val _cultureCities = mutableStateOf<List<String>>(listOf("전체"))
+    val cultureCities: State<List<String>> = _cultureCities
+
+    private val _cultureDistricts = mutableStateOf<Map<String, List<String>>>(mapOf("전체" to listOf("전체")))
+    val cultureDistricts: State<Map<String, List<String>>> = _cultureDistricts
+
     init {
         // Fetch data when ViewModel is initialized
         fetchPlacesData()
         fetchJobsData()
         fetchLectureData()
         fetchKKJobsData()
+        fetchKKCulturesData()
     }
 
     // 사용자 위치 설정 함수 추가
@@ -112,9 +131,9 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
             filterAllJobs(city, district)
             Log.d("PlaceViewModel", "일자리 필터링 완료 - 일반: ${_filteredJobs.value.size}개, KK: ${_filteredKKJobs.value.size}개")
 
-            // 강좌 필터링
-            filterLectures(city, district)
-            Log.d("PlaceViewModel", "강좌 필터링 완료 - 결과: ${_filteredLectures.value.size}개")
+            // 문화 필터링 (통합) - 수정
+            filterAllCultures(city, district)
+            Log.d("PlaceViewModel", "문화 필터링 완료 - 일반: ${_filteredLectures.value.size}개, KK: ${_filteredKKCultures.value.size}개")
         }
     }
 
@@ -876,6 +895,7 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
         Log.d("PlaceViewModel", "Filtered jobs: ${_filteredJobs.value.size} of ${_jobs.value.size} with city='$selectedCity', district='$selectedDistrict'")
     }
 
+    // fetchLectureData 함수 수정 - 통합 위치 정보 처리 추가
     fun fetchLectureData() {
         viewModelScope.launch {
             try {
@@ -915,6 +935,11 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
                 _lectures.value = lectureData
                 // Initialize filtered lectures with all lectures
                 _filteredLectures.value = lectureData
+
+                // 통합 위치 정보 처리 (KK_Culture 데이터도 로드된 후에 실행)
+                if (_kkCultures.value.isNotEmpty()) {
+                    processAllCultureLocationCategories()
+                }
 
                 Log.d("PlaceViewModel", "Lectures data fetch complete: ${lectureData.size} items")
             } catch (e: Exception) {
@@ -1086,4 +1111,188 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
     fun getTotalFilteredJobsCount(): Int {
         return _filteredJobs.value.size + _filteredKKJobs.value.size
     }
+
+
+    private fun processAllCultureLocationCategories() {
+        val citySet = mutableSetOf<String>()
+        val districtMap = mutableMapOf<String, MutableSet<String>>()
+
+        // Always include "전체" (All) option
+        citySet.add("전체")
+        districtMap["전체"] = mutableSetOf("전체")
+
+        // Process regular lectures (서울특별시 데이터)
+        _lectures.value.forEach { lecture ->
+            val institution = lecture.Institution ?: ""
+
+            // Extract region from the REGION marker
+            val regionMarker = "[REGION:"
+            val regionStart = institution.indexOf(regionMarker)
+
+            if (regionStart >= 0) {
+                val regionEnd = institution.indexOf("]", regionStart)
+                if (regionEnd > regionStart) {
+                    val fullRegion = institution.substring(regionStart + regionMarker.length, regionEnd)
+                    val parts = fullRegion.split(" ")
+
+                    if (parts.isNotEmpty()) {
+                        val city = parts[0] // "서울특별시"
+                        citySet.add(city)
+
+                        if (!districtMap.containsKey(city)) {
+                            districtMap[city] = mutableSetOf("전체")
+                        }
+
+                        if (parts.size > 1) {
+                            val district = parts.subList(1, parts.size).joinToString(" ")
+                            districtMap[city]?.add(district)
+                        }
+                    }
+                }
+            }
+        }
+
+        // Process kk_cultures (경기도 등 다른 지역 데이터)
+        _kkCultures.value.forEach { kkCulture ->
+            val city = "경기도" // kk_culture의 city는 항상 경기도로 고정
+            val district = kkCulture.Category ?: return@forEach // Category를 district로 사용
+
+            if (district.isNotEmpty()) {
+                citySet.add(city)
+
+                if (!districtMap.containsKey(city)) {
+                    districtMap[city] = mutableSetOf("전체")
+                }
+
+                districtMap[city]?.add(district)
+            }
+        }
+
+        // Convert sets to sorted lists
+        _cultureCities.value = citySet.toList().sorted()
+
+        // Ensure "전체" is always first
+        if (_cultureCities.value.contains("전체")) {
+            val citiesList = _cultureCities.value.toMutableList()
+            citiesList.remove("전체")
+            citiesList.add(0, "전체")
+            _cultureCities.value = citiesList
+        }
+
+        // Convert district sets to sorted lists with "전체" always first
+        val districtMapSorted = mutableMapOf<String, List<String>>()
+        districtMap.forEach { (city, districts) ->
+            val sortedDistricts = districts.filter { it != "전체" }.sorted().toMutableList()
+            sortedDistricts.add(0, "전체")
+            districtMapSorted[city] = sortedDistricts
+        }
+        _cultureDistricts.value = districtMapSorted
+
+        Log.d("CultureLocation", "Combined cities: ${_cultureCities.value}")
+        _cultureDistricts.value.forEach { (city, districts) ->
+            Log.d("CultureLocation", "City: $city, Districts: $districts")
+        }
+    }
+
+    fun fetchKKCulturesData() {
+        viewModelScope.launch {
+            try {
+                Log.d("PlaceViewModel", "Starting kk_cultures data fetch")
+                _isLoadingKKCultures.value = true
+
+                val kkCulturesData = withContext(Dispatchers.IO) {
+                    try {
+                        val kkCultures = supabaseHelper.getKKCultures()
+                        Log.d("PlaceViewModel", "Supabase getKKCultures returned ${kkCultures.size} items")
+
+                        if (kkCultures.isEmpty()) {
+                            Log.d("PlaceViewModel", "Supabase kk_cultures returned empty list")
+                        } else {
+                            // Log first kk_culture for debugging
+                            val firstKKCulture = kkCultures.firstOrNull()
+                            if (firstKKCulture != null) {
+                                Log.d(
+                                    "PlaceViewModel", "Sample kk_culture data: Id=${firstKKCulture.Id}, " +
+                                            "title=${firstKKCulture.Title}, " +
+                                            "institution=${firstKKCulture.Institution}, " +
+                                            "address=${firstKKCulture.Address}"
+                                )
+                            }
+                        }
+                        kkCultures
+                    } catch (e: Exception) {
+                        Log.e(
+                            "PlaceViewModel",
+                            "Error in getKKCultures Dispatchers.IO block: ${e.message}",
+                            e
+                        )
+                        emptyList()
+                    }
+                }
+
+                // Update the kk_cultures value with the fetched data
+                _kkCultures.value = kkCulturesData
+                _filteredKKCultures.value = kkCulturesData
+
+                // 통합 위치 정보 처리
+                processAllCultureLocationCategories()
+
+                Log.d("PlaceViewModel", "KK_Cultures data fetch complete: ${kkCulturesData.size} items")
+            } catch (e: Exception) {
+                Log.e("PlaceViewModel", "Error fetching kk_cultures data: ${e.message}", e)
+                _kkCultures.value = emptyList()
+                _filteredKKCultures.value = emptyList()
+            } finally {
+                _isLoadingKKCultures.value = false
+            }
+        }
+    }
+
+    fun filterKKCultures(selectedCity: String, selectedDistrict: String) {
+        if (_kkCultures.value.isEmpty()) {
+            _filteredKKCultures.value = emptyList()
+            return
+        }
+
+        Log.d("PlaceViewModel", "Filtering kk_cultures with city='$selectedCity', district='$selectedDistrict'")
+
+        _filteredKKCultures.value = _kkCultures.value.filter { kkCulture ->
+            // kk_culture는 항상 경기도 데이터
+            val cultureCity = "경기도"
+            val cultureDistrict = kkCulture.Category ?: "" // Category를 district로 사용
+
+            // City filtering
+            val cityMatch = selectedCity == "전체" || cultureCity == selectedCity
+
+            // District filtering
+            val districtMatch = selectedDistrict == "전체" || cultureDistrict == selectedDistrict
+
+            // Both conditions must match
+            cityMatch && districtMatch
+        }
+
+        Log.d("PlaceViewModel", "Filtered kk_cultures: ${_filteredKKCultures.value.size} of ${_kkCultures.value.size}")
+    }
+
+    // 통합 필터링 함수
+    fun filterAllCultures(selectedCity: String, selectedDistrict: String) {
+        // Regular lectures 필터링
+        filterLectures(selectedCity, selectedDistrict)
+
+        // KK_Cultures 필터링
+        filterKKCultures(selectedCity, selectedDistrict)
+
+        Log.d("PlaceViewModel", "Filtered all cultures - Regular: ${_filteredLectures.value.size}, KK: ${_filteredKKCultures.value.size}")
+    }
+
+
+    // 통합된 필터링된 문화 강좌 개수를 반환하는 함수
+    fun getTotalFilteredCulturesCount(): Int {
+        return _filteredLectures.value.size + _filteredKKCultures.value.size
+    }
+
+
+
+
+
 }

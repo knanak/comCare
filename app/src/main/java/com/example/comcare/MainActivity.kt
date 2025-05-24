@@ -1227,6 +1227,7 @@ fun PlaceComparisonApp(
                             }
                         }
 
+
                         // Today's Culture Section
                         item {
                             Card(
@@ -1246,49 +1247,95 @@ fun PlaceComparisonApp(
 
                                     Spacer(modifier = Modifier.height(12.dp))
 
-                                    // Get random lecture if available
-                                    if (viewModel.lectures.value.isNotEmpty()) {
-                                        // Get a random lecture from the full list
-                                        val randomLecture = remember(viewModel.lectures.value) {
-                                            viewModel.lectures.value.random()
+                                    // Get all cultures (lectures + kk_cultures)
+                                    val allCultures = viewModel.lectures.value + viewModel.kkCultures.value
+
+                                    // Get random culture if available
+                                    if (allCultures.isNotEmpty()) {
+                                        // Get a random culture from the combined list
+                                        val randomCulture = remember(allCultures) {
+                                            allCultures.random()
                                         }
 
-                                        // Display the random lecture
-                                        Text(
-                                            randomLecture.Title ?: "강좌명 없음",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold,
-                                        )
+                                        // Display the random culture based on its type
+                                        when (randomCulture) {
+                                            is SupabaseDatabaseHelper.Lecture -> {
+                                                // Display lecture
+                                                Text(
+                                                    randomCulture.Title ?: "강좌명 없음",
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    fontWeight = FontWeight.Bold,
+                                                )
 
-                                        Spacer(modifier = Modifier.height(4.dp))
+                                                Spacer(modifier = Modifier.height(4.dp))
 
-                                        // Extract the clean institution name
-                                        val institutionText = randomLecture.Institution?.let {
-                                            val regionStart = it.indexOf("[REGION:")
-                                            if (regionStart >= 0) {
-                                                it.substring(0, regionStart).trim()
-                                            } else {
-                                                it
+                                                // Extract the clean institution name
+                                                val institutionText = randomCulture.Institution?.let {
+                                                    val regionStart = it.indexOf("[REGION:")
+                                                    if (regionStart >= 0) {
+                                                        it.substring(0, regionStart).trim()
+                                                    } else {
+                                                        it
+                                                    }
+                                                } ?: "정보 없음"
+
+                                                Text(
+                                                    "기관: $institutionText",
+                                                    style = MaterialTheme.typography.bodyLarge
+                                                )
+
+                                                Spacer(modifier = Modifier.height(4.dp))
+
+                                                Row {
+                                                    Text(
+                                                        "수강료: ",
+                                                        style = MaterialTheme.typography.bodyLarge,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                    Text(
+                                                        randomCulture.Fee ?: "무료",
+                                                        style = MaterialTheme.typography.bodyLarge
+                                                    )
+                                                }
                                             }
-                                        } ?: "정보 없음"
+                                            is SupabaseDatabaseHelper.KKCulture -> {
+                                                // Display kk_culture
+                                                Text(
+                                                    randomCulture.Title ?: "강좌명 없음",
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    fontWeight = FontWeight.Bold,
+                                                )
 
-                                        Text(
-                                            "기관: $institutionText",
-                                            style = MaterialTheme.typography.bodyLarge
-                                        )
+                                                Spacer(modifier = Modifier.height(4.dp))
 
-                                        Spacer(modifier = Modifier.height(4.dp))
+                                                Text(
+                                                    "기관: ${randomCulture.Institution ?: "정보 없음"}",
+                                                    style = MaterialTheme.typography.bodyLarge
+                                                )
 
-                                        Row {
-                                            Text(
-                                                "수강료: ",
-                                                style = MaterialTheme.typography.bodyLarge,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                            Text(
-                                                randomLecture.Fees ?: "무료",
-                                                style = MaterialTheme.typography.bodyLarge
-                                            )
+                                                Spacer(modifier = Modifier.height(4.dp))
+
+                                                // Show category as location for kk_culture
+                                                randomCulture.Category?.let { category ->
+                                                    Text(
+                                                        "지역: 경기도 $category",
+                                                        style = MaterialTheme.typography.bodyLarge
+                                                    )
+                                                    Spacer(modifier = Modifier.height(4.dp))
+                                                }
+
+                                                Row {
+                                                    Text(
+                                                        "수강료: ",
+                                                        style = MaterialTheme.typography.bodyLarge,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                    Text(
+                                                        randomCulture.Fee ?: "무료",
+                                                        style = MaterialTheme.typography.bodyLarge
+                                                    )
+                                                }
+                                            }
                                         }
 
                                         Spacer(modifier = Modifier.height(12.dp))
@@ -1302,6 +1349,7 @@ fun PlaceComparisonApp(
                                                 onClick = {
                                                     currentSection = "culture"
                                                     viewModel.fetchLectureData()
+                                                    viewModel.fetchKKCulturesData()
                                                 },
                                                 colors = ButtonDefaults.buttonColors(
                                                     containerColor = highlightColor, // Updated color
@@ -1647,6 +1695,9 @@ fun PlaceComparisonApp(
             }
 
 
+// MainActivity.kt의 culture 섹션 수정 부분
+// "culture" -> { 부분을 다음과 같이 수정:
+
             "culture" -> {
                 // Lectures content with pagination
                 Column(modifier = Modifier.fillMaxSize()) {
@@ -1665,9 +1716,8 @@ fun PlaceComparisonApp(
                         )
 
                         Text(
-                            text = "총 ${viewModel.filteredLectures.value.size}개",
+                            text = "총 ${viewModel.getTotalFilteredCulturesCount()}개",
                             style = MaterialTheme.typography.bodyLarge,
-//                            color = Color(0xFF4A7C25)
                         )
                     }
 
@@ -1688,21 +1738,21 @@ fun PlaceComparisonApp(
 
                             Spacer(modifier = Modifier.height(8.dp))
 
-                            // City and District selection (reusing existing state from viewModel)
+                            // City and District selection
                             var expandedCityMenu by remember { mutableStateOf(false) }
                             var expandedDistrictMenu by remember { mutableStateOf(false) }
                             var selectedCity by remember { mutableStateOf("전체") }
                             var selectedDistrict by remember { mutableStateOf("전체") }
 
-                            // Get available districts for the selected city
+                            // 통합된 culture cities 사용
                             val availableDistricts = remember(selectedCity) {
-                                viewModel.districts.value[selectedCity] ?: listOf("전체")
+                                viewModel.cultureDistricts.value[selectedCity] ?: listOf("전체")
                             }
 
                             // Reset district when city changes
                             LaunchedEffect(selectedCity) {
                                 selectedDistrict = "전체"
-                                viewModel.filterLectures(selectedCity, selectedDistrict)
+                                viewModel.filterAllCultures(selectedCity, selectedDistrict)
                             }
 
                             // City and District Dropdowns side by side
@@ -1722,7 +1772,7 @@ fun PlaceComparisonApp(
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Text(
-                                                "$selectedCity",
+                                                selectedCity,
                                                 style = MaterialTheme.typography.bodyLarge,
                                                 fontWeight = FontWeight.Bold
                                             )
@@ -1734,7 +1784,7 @@ fun PlaceComparisonApp(
                                         expanded = expandedCityMenu,
                                         onDismissRequest = { expandedCityMenu = false }
                                     ) {
-                                        viewModel.cities.value.forEach { city ->
+                                        viewModel.cultureCities.value.forEach { city ->
                                             DropdownMenuItem(
                                                 text = {
                                                     Text(
@@ -1763,7 +1813,7 @@ fun PlaceComparisonApp(
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Text(
-                                                "$selectedDistrict",
+                                                selectedDistrict,
                                                 style = MaterialTheme.typography.bodyLarge,
                                                 fontWeight = FontWeight.Bold
                                             )
@@ -1786,54 +1836,40 @@ fun PlaceComparisonApp(
                                                 onClick = {
                                                     selectedDistrict = district
                                                     expandedDistrictMenu = false
-                                                    viewModel.filterLectures(selectedCity, selectedDistrict)
+                                                    viewModel.filterAllCultures(selectedCity, selectedDistrict)
                                                 }
                                             )
                                         }
                                     }
                                 }
                             }
-
-//                            Spacer(modifier = Modifier.height(16.dp))
-
-                            // Apply filter button
-//                            Button(
-//                                onClick = { viewModel.filterLectures(selectedCity, selectedDistrict) },
-//                                modifier = Modifier.fillMaxWidth(),
-//                                colors = ButtonDefaults.buttonColors(
-//                                    containerColor = Color(0xFFc6f584),
-//                                    contentColor = Color.Black
-//                                )
-//                            ) {
-//                                Text(
-//                                    "검색하기",
-//                                    style = MaterialTheme.typography.titleMedium,
-//                                    fontWeight = FontWeight.Bold
-//                                )
-//                            }
                         }
                     }
 
                     Divider(modifier = Modifier.padding(horizontal = 16.dp))
 
-                    // Lectures list with pagination
-                    val lectures = viewModel.filteredLectures.value.sortedByDescending { it.Id }
+                    // 통합된 문화 강좌 리스트 (lectures + kk_cultures)
+                    val regularLectures = viewModel.filteredLectures.value
+                    val kkCultures = viewModel.filteredKKCultures.value
 
-                    if (lectures.isNotEmpty()) {
+                    // 통합된 문화 강좌 리스트 생성
+                    val allCultures = regularLectures + kkCultures
+
+                    if (allCultures.isNotEmpty()) {
                         // Pagination state
                         var currentPage by remember { mutableStateOf(0) }
                         val itemsPerPage = 5
-                        val totalPages = ceil(lectures.size.toFloat() / itemsPerPage).toInt()
+                        val totalPages = ceil(allCultures.size.toFloat() / itemsPerPage).toInt()
 
                         // Calculate current page items
                         val startIndex = currentPage * itemsPerPage
-                        val endIndex = minOf(startIndex + itemsPerPage, lectures.size)
-                        val currentPageItems = lectures.subList(startIndex, endIndex)
+                        val endIndex = minOf(startIndex + itemsPerPage, allCultures.size)
+                        val currentPageItems = allCultures.subList(startIndex, endIndex)
 
                         Column(
                             modifier = Modifier.fillMaxSize()
                         ) {
-                            // Main content area - shows lectures for current page
+                            // Main content area - shows cultures for current page
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
@@ -1845,8 +1881,11 @@ fun PlaceComparisonApp(
                                         .padding(horizontal = 16.dp),
                                     contentPadding = PaddingValues(vertical = 8.dp)
                                 ) {
-                                    items(currentPageItems) { lecture ->
-                                        LectureCard(lecture = lecture)
+                                    items(currentPageItems) { culture ->
+                                        when (culture) {
+                                            is SupabaseDatabaseHelper.Lecture -> LectureCard(lecture = culture)
+                                            is SupabaseDatabaseHelper.KKCulture -> KKCultureCard(kkCulture = culture)
+                                        }
                                         Spacer(modifier = Modifier.height(8.dp))
                                     }
                                 }
@@ -1908,7 +1947,7 @@ fun PlaceComparisonApp(
                                 }
                             }
                         }
-                    } else if (viewModel.isLoadingLectures) {
+                    } else if (viewModel.isLoadingLectures || viewModel.isLoadingKKCultures) {
                         // Show loading indicator
                         Box(
                             modifier = Modifier.fillMaxSize(),
@@ -1930,7 +1969,10 @@ fun PlaceComparisonApp(
                                 Text("강좌 정보가 없습니다")
                                 Spacer(modifier = Modifier.height(16.dp))
                                 Button(
-                                    onClick = { viewModel.fetchLectureData() },
+                                    onClick = {
+                                        viewModel.fetchLectureData()
+                                        viewModel.fetchKKCulturesData()
+                                    },
                                     colors = ButtonDefaults.buttonColors(
                                         containerColor = Color(0xFFc6f584),
                                         contentColor = Color.Black
@@ -2466,7 +2508,7 @@ fun LectureCard(lecture: SupabaseDatabaseHelper.Lecture) {
             ) {
                 // Fee
                 Text(
-                    "수강료: ${lecture.Fees ?: "무료"}",
+                    "수강료: ${lecture.Fee ?: "무료"}",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -2476,6 +2518,120 @@ fun LectureCard(lecture: SupabaseDatabaseHelper.Lecture) {
                     "정원: ${lecture.Quota ?: "제한없음"}",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun KKCultureCard(kkCulture: SupabaseDatabaseHelper.KKCulture) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Culture Title
+            Text(
+                text = kkCulture.Title ?: "강좌명 없음",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = Color.Yellow,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Institution
+            Text(
+                text = "기관: ${kkCulture.Institution ?: "정보 없음"}",
+                style = MaterialTheme.typography.titleMedium
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Address
+            kkCulture.Address?.let { address ->
+                Text(
+                    text = "위치: $address",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+            }
+
+            // Category (이제 지역 정보로 표시)
+            kkCulture.Category?.let { category ->
+                Text(
+                    text = "지역: 경기도 $category",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+            }
+
+            // Recruitment Period
+            Row {
+                Text(
+                    "모집기간: ",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    kkCulture.Recruitment_period ?: "정보 없음",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Education Period
+            Row {
+                Text(
+                    "교육기간: ",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    kkCulture.Education_period ?: "정보 없음",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Bottom row with Fee and Quota
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                // Fee (Fees -> Fee로 변경)
+                Text(
+                    "수강료: ${kkCulture.Fee ?: "무료"}",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+
+                // Quota
+                Text(
+                    "정원: ${kkCulture.Quota ?: "제한없음"}",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            // State information if available
+            kkCulture.State?.let { state ->
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "상태: $state",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = when(state) {
+                        "모집중" -> Color(0xFF4CAF50)
+                        "마감" -> Color(0xFFF44336)
+                        else -> Color.Gray
+                    }
                 )
             }
         }
