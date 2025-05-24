@@ -233,6 +233,8 @@ class MainActivity : ComponentActivity() {
                     // 현재 위치 정보 로그
                     Log.d(TAG, "NavHost 렌더링 시점의 위치: City=$userCityState, District=$userDistrictState")
 
+                    // MainActivity.kt의 onCreate 내부 NavHost 부분 수정
+
                     NavHost(
                         navController = navController,
                         startDestination = "chat"
@@ -241,6 +243,8 @@ class MainActivity : ComponentActivity() {
                             PlaceComparisonApp(
                                 navController = navController,
                                 viewModel = viewModel,
+                                userCity = userCityState,  // State 값 전달
+                                userDistrict = userDistrictState  // State 값 전달
                             )
                         }
                         composable("searchResults") {
@@ -439,7 +443,9 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun PlaceComparisonApp(
     navController: NavController,
-    viewModel: PlaceViewModel
+    viewModel: PlaceViewModel,
+    userCity: String = "",
+    userDistrict: String = ""
 ) {
     var currentSection by remember { mutableStateOf("home") }
     var selectedCity by remember { mutableStateOf("전체") }
@@ -1002,11 +1008,25 @@ fun PlaceComparisonApp(
 
                                     Spacer(modifier = Modifier.height(12.dp))
 
-                                    // Get random place if available (이미 kk_facility 데이터 포함)
-                                    if (viewModel.filteredPlaces.value.isNotEmpty()) {
+                                    // 사용자 위치 기반 필터링된 시설 목록
+                                    val locationFilteredPlaces = remember(viewModel.filteredPlaces.value, userCity, userDistrict) {
+                                        if (userCity.isNotEmpty() && userDistrict.isNotEmpty()) {
+                                            // 사용자 위치 정보가 있는 경우
+                                            viewModel.filteredPlaces.value.filter { place ->
+                                                place.address.contains(userCity) &&
+                                                        (place.district == userDistrict || place.address.contains(userDistrict))
+                                            }
+                                        } else {
+                                            // 위치 정보가 없는 경우 전체 목록 사용
+                                            viewModel.filteredPlaces.value
+                                        }
+                                    }
+
+                                    // Get random place if available
+                                    if (locationFilteredPlaces.isNotEmpty()) {
                                         // Get a random place from the filtered places list
-                                        val randomPlace = remember(viewModel.filteredPlaces.value) {
-                                            viewModel.filteredPlaces.value.random()
+                                        val randomPlace = remember(locationFilteredPlaces) {
+                                            locationFilteredPlaces.random()
                                         }
 
                                         // Display the random place
@@ -1071,6 +1091,18 @@ fun PlaceComparisonApp(
                                                 )
                                             }
                                         }
+                                    } else if (viewModel.filteredPlaces.value.isNotEmpty()) {
+                                        // 사용자 위치에 맞는 시설이 없지만 전체 시설 데이터는 있는 경우
+                                        Text(
+                                            "${userCity} ${userDistrict} 지역에 시설 정보가 없습니다.",
+                                            style = MaterialTheme.typography.bodyLarge
+                                        )
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Text(
+                                            "다른 지역의 시설을 확인해보세요.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = Color.Gray
+                                        )
                                     } else {
                                         Text(
                                             "시설 정보를 불러오는 중...",
@@ -1080,73 +1112,6 @@ fun PlaceComparisonApp(
                                 }
                             }
                         }
-
-                        // Today's Policy Section
-//                        item {
-//                            Card(
-//                                modifier = Modifier
-//                                    .fillMaxWidth()
-//                                    .padding(vertical = 8.dp),
-//                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-//                            ) {
-//                                Column(modifier = Modifier.padding(16.dp)) {
-//                                    // Section Title with updated color
-//                                    Text(
-//                                        "오늘의 정책",
-//                                        style = MaterialTheme.typography.titleLarge,
-//                                        fontWeight = FontWeight.Bold,
-//                                        color = highlightColor, // Updated color
-//                                    )
-//
-//                                    Spacer(modifier = Modifier.height(12.dp))
-//
-//                                    // Since we don't have actual policy data, display a sample policy
-//                                    Text(
-//                                        "노인 일자리 사업",
-//                                        style = MaterialTheme.typography.titleMedium,
-//                                        fontWeight = FontWeight.Bold
-//                                    )
-//
-//                                    Spacer(modifier = Modifier.height(4.dp))
-//
-//                                    Text(
-//                                        "만 65세 이상 노인에게 일자리를 제공하는 정책입니다.",
-//                                        style = MaterialTheme.typography.bodyLarge
-//                                    )
-//
-//                                    Spacer(modifier = Modifier.height(4.dp))
-//
-//                                    Text(
-//                                        "지원금: 월 30만원",
-//                                        style = MaterialTheme.typography.bodyMedium
-//                                    )
-//
-//                                    Spacer(modifier = Modifier.height(12.dp))
-//
-//                                    // New "More" button with right alignment and updated color
-//                                    Row(
-//                                        modifier = Modifier.fillMaxWidth(),
-//                                        horizontalArrangement = Arrangement.End
-//                                    ) {
-//                                        Button(
-//                                            onClick = {
-//                                                currentSection = "seniorPolicies"
-//                                            },
-//                                            colors = ButtonDefaults.buttonColors(
-//                                                containerColor = highlightColor, // Updated color
-//                                                contentColor = Color.Black
-//                                            ),
-//                                            shape = RoundedCornerShape(8.dp)
-//                                        ) {
-//                                            Text(
-//                                                "더보기",
-//                                                fontWeight = FontWeight.Bold
-//                                            )
-//                                        }
-//                                    }
-//                                }
-//                            }
-//                        }
 
                         // Today's Jobs Section
                         item {
@@ -1167,46 +1132,109 @@ fun PlaceComparisonApp(
 
                                     Spacer(modifier = Modifier.height(12.dp))
 
+                                    // 사용자 위치 기반 필터링된 일자리 목록
+                                    val allJobs = viewModel.jobs.value + viewModel.kkJobs.value
+                                    val locationFilteredJobs = remember(allJobs, userCity, userDistrict) {
+                                        if (userCity.isNotEmpty() && userDistrict.isNotEmpty()) {
+                                            // 사용자 위치 정보가 있는 경우
+                                            allJobs.filter { job ->
+                                                when (job) {
+                                                    is SupabaseDatabaseHelper.Job -> {
+                                                        val location = job.Location ?: ""
+                                                        location.contains(userCity) && location.contains(userDistrict)
+                                                    }
+                                                    is SupabaseDatabaseHelper.KKJob -> {
+                                                        val address = job.Address ?: ""
+                                                        address.contains(userCity) && address.contains(userDistrict)
+                                                    }
+                                                    else -> false
+                                                }
+                                            }
+                                        } else {
+                                            // 위치 정보가 없는 경우 전체 목록 사용
+                                            allJobs
+                                        }
+                                    }
+
                                     // Get random job if available
-                                    if (viewModel.jobs.value.isNotEmpty()) {
-                                        // Get a random job from the full list
-                                        val randomJob = remember(viewModel.jobs.value) {
-                                            viewModel.jobs.value.random()
+                                    if (locationFilteredJobs.isNotEmpty()) {
+                                        // Get a random job from the filtered list
+                                        val randomJob = remember(locationFilteredJobs) {
+                                            locationFilteredJobs.random()
                                         }
 
-                                        // Display the random job
-                                        Text(
-                                            randomJob.JobTitle ?: "제목 없음",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold,
-                                        )
+                                        // Display the random job based on its type
+                                        when (randomJob) {
+                                            is SupabaseDatabaseHelper.Job -> {
+                                                Text(
+                                                    randomJob.JobTitle ?: "제목 없음",
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    fontWeight = FontWeight.Bold,
+                                                )
 
-                                        Spacer(modifier = Modifier.height(4.dp))
+                                                Spacer(modifier = Modifier.height(4.dp))
 
-                                        Row {
-                                            Text(
-                                                "근무형태: ",
-                                                style = MaterialTheme.typography.bodyLarge,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                            Text(
-                                                randomJob.WorkingType ?: "정보 없음",
-                                                style = MaterialTheme.typography.bodyLarge
-                                            )
-                                        }
+                                                Row {
+                                                    Text(
+                                                        "근무형태: ",
+                                                        style = MaterialTheme.typography.bodyLarge,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                    Text(
+                                                        randomJob.WorkingType ?: "정보 없음",
+                                                        style = MaterialTheme.typography.bodyLarge
+                                                    )
+                                                }
 
-                                        Spacer(modifier = Modifier.height(4.dp))
+                                                Spacer(modifier = Modifier.height(4.dp))
 
-                                        Row {
-                                            Text(
-                                                "급여: ",
-                                                style = MaterialTheme.typography.bodyLarge,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                            Text(
-                                                randomJob.Salary ?: "정보 없음",
-                                                style = MaterialTheme.typography.bodyLarge
-                                            )
+                                                Row {
+                                                    Text(
+                                                        "급여: ",
+                                                        style = MaterialTheme.typography.bodyLarge,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                    Text(
+                                                        randomJob.Salary ?: "정보 없음",
+                                                        style = MaterialTheme.typography.bodyLarge
+                                                    )
+                                                }
+                                            }
+                                            is SupabaseDatabaseHelper.KKJob -> {
+                                                Text(
+                                                    randomJob.Title ?: "제목 없음",
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    fontWeight = FontWeight.Bold,
+                                                )
+
+                                                Spacer(modifier = Modifier.height(4.dp))
+
+                                                Row {
+                                                    Text(
+                                                        "카테고리: ",
+                                                        style = MaterialTheme.typography.bodyLarge,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                    Text(
+                                                        randomJob.Category ?: "정보 없음",
+                                                        style = MaterialTheme.typography.bodyLarge
+                                                    )
+                                                }
+
+                                                Spacer(modifier = Modifier.height(4.dp))
+
+                                                Row {
+                                                    Text(
+                                                        "위치: ",
+                                                        style = MaterialTheme.typography.bodyLarge,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                    Text(
+                                                        randomJob.Address ?: "정보 없음",
+                                                        style = MaterialTheme.typography.bodyLarge
+                                                    )
+                                                }
+                                            }
                                         }
 
                                         Spacer(modifier = Modifier.height(12.dp))
@@ -1232,6 +1260,18 @@ fun PlaceComparisonApp(
                                                 )
                                             }
                                         }
+                                    } else if (allJobs.isNotEmpty()) {
+                                        // 사용자 위치에 맞는 일자리가 없지만 전체 일자리 데이터는 있는 경우
+                                        Text(
+                                            "${userCity} ${userDistrict} 지역에 일자리 정보가 없습니다.",
+                                            style = MaterialTheme.typography.bodyLarge
+                                        )
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Text(
+                                            "다른 지역의 일자리를 확인해보세요.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = Color.Gray
+                                        )
                                     } else {
                                         Text(
                                             "일자리 정보를 불러오는 중...",
@@ -1241,7 +1281,6 @@ fun PlaceComparisonApp(
                                 }
                             }
                         }
-
 
                         // Today's Culture Section
                         item {
@@ -1265,11 +1304,35 @@ fun PlaceComparisonApp(
                                     // Get all cultures (lectures + kk_cultures)
                                     val allCultures = viewModel.lectures.value + viewModel.kkCultures.value
 
+                                    // 사용자 위치 기반 필터링된 문화 강좌 목록
+                                    val locationFilteredCultures = remember(allCultures, userCity, userDistrict) {
+                                        if (userCity.isNotEmpty() && userDistrict.isNotEmpty()) {
+                                            // 사용자 위치 정보가 있는 경우
+                                            allCultures.filter { culture ->
+                                                when (culture) {
+                                                    is SupabaseDatabaseHelper.Lecture -> {
+                                                        val institution = culture.Institution ?: ""
+                                                        institution.contains(userCity) && institution.contains(userDistrict)
+                                                    }
+                                                    is SupabaseDatabaseHelper.KKCulture -> {
+                                                        // KKCulture는 경기도 데이터이므로 userCity가 경기도이고
+                                                        // Category가 userDistrict와 일치하는 경우
+                                                        userCity.contains("경기") && culture.Category == userDistrict
+                                                    }
+                                                    else -> false
+                                                }
+                                            }
+                                        } else {
+                                            // 위치 정보가 없는 경우 전체 목록 사용
+                                            allCultures
+                                        }
+                                    }
+
                                     // Get random culture if available
-                                    if (allCultures.isNotEmpty()) {
-                                        // Get a random culture from the combined list
-                                        val randomCulture = remember(allCultures) {
-                                            allCultures.random()
+                                    if (locationFilteredCultures.isNotEmpty()) {
+                                        // Get a random culture from the filtered list
+                                        val randomCulture = remember(locationFilteredCultures) {
+                                            locationFilteredCultures.random()
                                         }
 
                                         // Display the random culture based on its type
@@ -1378,6 +1441,18 @@ fun PlaceComparisonApp(
                                                 )
                                             }
                                         }
+                                    } else if (allCultures.isNotEmpty()) {
+                                        // 사용자 위치에 맞는 문화 강좌가 없지만 전체 문화 데이터는 있는 경우
+                                        Text(
+                                            "${userCity} ${userDistrict} 지역에 문화 강좌 정보가 없습니다.",
+                                            style = MaterialTheme.typography.bodyLarge
+                                        )
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Text(
+                                            "다른 지역의 문화 강좌를 확인해보세요.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = Color.Gray
+                                        )
                                     } else {
                                         Text(
                                             "문화 강좌 정보를 불러오는 중...",
@@ -1391,609 +1466,6 @@ fun PlaceComparisonApp(
                         // Add extra space at the bottom for better scroll experience
                         item {
                             Spacer(modifier = Modifier.height(16.dp))
-                        }
-                    }
-                }
-            }
-
-
-            "longTermCare" -> {
-                // Long-term care facilities content
-                Text(
-                    "장기요양기관 정보",
-                    modifier = Modifier.padding(16.dp),
-                    style = MaterialTheme.typography.titleMedium
-                )
-
-                // Places List for long-term care facilities
-                if (places.isNotEmpty()) {
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 16.dp)
-                    ) {
-                        items(places) { place ->
-                            PlaceCard(place = place)
-                            Spacer(modifier = Modifier.height(8.dp))
-                        }
-                    }
-                } else {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("시설 정보를 불러오는 중...")
-                    }
-                }
-            }
-
-            "seniorPolicies" -> {
-                // Senior policies content
-                Text(
-                    "노인정책 정보",
-                    modifier = Modifier.padding(16.dp),
-                    style = MaterialTheme.typography.titleMedium
-                )
-
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("노인정책 정보 섹션")
-                }
-            }
-
-
-            "jobs" -> {
-                // Jobs content with pagination
-                Column(modifier = Modifier.fillMaxSize()) {
-                    // Section header
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = "노인 일자리 정보",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-
-                        Text(
-                            text = "총 ${viewModel.getTotalFilteredJobsCount()}개",
-                            style = MaterialTheme.typography.bodyLarge,
-                        )
-                    }
-
-                    // Add location filter section
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            // Location Filter Title
-                            Text(
-                                "위치 검색:",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-
-                            Spacer(modifier = Modifier.height(8.dp))
-
-                            // City and District selection
-                            var expandedCityMenu by remember { mutableStateOf(false) }
-                            var expandedDistrictMenu by remember { mutableStateOf(false) }
-                            var selectedCity by remember { mutableStateOf("전체") }
-                            var selectedDistrict by remember { mutableStateOf("전체") }
-
-                            // 통합된 job cities 사용
-                            val availableDistricts = remember(selectedCity) {
-                                viewModel.jobDistricts.value[selectedCity] ?: listOf("전체")
-                            }
-
-                            // Reset district when city changes
-                            LaunchedEffect(selectedCity) {
-                                selectedDistrict = "전체"
-                                viewModel.filterAllJobs(selectedCity, selectedDistrict)
-                            }
-
-                            // City and District Dropdowns side by side
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                // City Dropdown
-                                Box(modifier = Modifier.weight(1f)) {
-                                    OutlinedButton(
-                                        onClick = { expandedCityMenu = true },
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Text(
-                                                selectedCity,
-                                                style = MaterialTheme.typography.bodyLarge,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                            Text("▼")
-                                        }
-                                    }
-
-                                    DropdownMenu(
-                                        expanded = expandedCityMenu,
-                                        onDismissRequest = { expandedCityMenu = false }
-                                    ) {
-                                        viewModel.jobCities.value.forEach { city ->
-                                            DropdownMenuItem(
-                                                text = {
-                                                    Text(
-                                                        city,
-                                                        style = MaterialTheme.typography.bodyLarge
-                                                    )
-                                                },
-                                                onClick = {
-                                                    selectedCity = city
-                                                    expandedCityMenu = false
-                                                }
-                                            )
-                                        }
-                                    }
-                                }
-
-                                // District Dropdown
-                                Box(modifier = Modifier.weight(1f)) {
-                                    OutlinedButton(
-                                        onClick = { expandedDistrictMenu = true },
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Text(
-                                                selectedDistrict,
-                                                style = MaterialTheme.typography.bodyLarge,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                            Text("▼")
-                                        }
-                                    }
-
-                                    DropdownMenu(
-                                        expanded = expandedDistrictMenu,
-                                        onDismissRequest = { expandedDistrictMenu = false }
-                                    ) {
-                                        availableDistricts.forEach { district ->
-                                            DropdownMenuItem(
-                                                text = {
-                                                    Text(
-                                                        district,
-                                                        style = MaterialTheme.typography.bodyLarge
-                                                    )
-                                                },
-                                                onClick = {
-                                                    selectedDistrict = district
-                                                    expandedDistrictMenu = false
-                                                    viewModel.filterAllJobs(selectedCity, selectedDistrict)
-                                                }
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    Divider(modifier = Modifier.padding(horizontal = 16.dp))
-
-                    // Jobs list with pagination
-                    val regularJobs = viewModel.filteredJobs.value
-                    val kkJobs = viewModel.filteredKKJobs.value
-
-                    // 통합된 일자리 리스트 생성
-                    val allJobs = regularJobs + kkJobs
-
-                    if (allJobs.isNotEmpty()) {
-                        // Pagination state
-                        var currentPage by remember { mutableStateOf(0) }
-                        val itemsPerPage = 5
-                        val totalPages = ceil(allJobs.size.toFloat() / itemsPerPage).toInt()
-
-                        // Calculate current page items
-                        val startIndex = currentPage * itemsPerPage
-                        val endIndex = minOf(startIndex + itemsPerPage, allJobs.size)
-                        val currentPageItems = allJobs.subList(startIndex, endIndex)
-
-                        Column(
-                            modifier = Modifier.fillMaxSize()
-                        ) {
-                            // Main content area - shows jobs for current page
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxWidth()
-                            ) {
-                                LazyColumn(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(horizontal = 16.dp),
-                                    contentPadding = PaddingValues(vertical = 8.dp)
-                                ) {
-                                    items(currentPageItems) { job ->
-                                        when (job) {
-                                            is SupabaseDatabaseHelper.Job -> JobCard(job = job)
-                                            is SupabaseDatabaseHelper.KKJob -> KKJobCard(kkJob = job)
-                                        }
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                    }
-                                }
-                            }
-
-                            // Pagination controls
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 8.dp, horizontal = 16.dp),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                // Calculate which page numbers to show
-                                val pageGroupSize = 4
-                                val startPage = (currentPage / pageGroupSize) * pageGroupSize
-                                val endPage = minOf(startPage + pageGroupSize, totalPages)
-
-                                // Previous button
-                                if (startPage > 0) {
-                                    Text(
-                                        text = "이전",
-                                        modifier = Modifier
-                                            .clickable {
-                                                // Go to last page of previous group
-                                                currentPage = startPage - 1
-                                            }
-                                            .padding(horizontal = 12.dp, vertical = 4.dp),
-                                        color = Color(0xFF4A7C25),
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-
-                                // Page numbers
-                                for (i in startPage until endPage) {
-                                    val pageNumber = i + 1
-                                    Text(
-                                        text = pageNumber.toString(),
-                                        modifier = Modifier
-                                            .clickable { currentPage = i }
-                                            .padding(horizontal = 12.dp, vertical = 4.dp),
-                                        color = if (currentPage == i) Color(0xFF4A7C25) else Color(0xFF757575),
-                                        fontWeight = if (currentPage == i) FontWeight.Bold else FontWeight.Normal,
-                                        style = MaterialTheme.typography.bodyLarge
-                                    )
-                                }
-
-                                // "다음" (next) button if there are more pages
-                                if (endPage < totalPages) {
-                                    Text(
-                                        text = "다음",
-                                        modifier = Modifier
-                                            .clickable { currentPage = endPage }
-                                            .padding(horizontal = 12.dp, vertical = 4.dp),
-                                        color = Color(0xFF4A7C25),
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-                        }
-                    } else if (viewModel.isLoading || viewModel.isLoadingKKJobs) {
-                        // Show loading indicator
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                CircularProgressIndicator(color = Color(0xFF4A7C25))
-                                Spacer(modifier = Modifier.height(16.dp))
-                                Text("일자리 정보를 불러오는 중...")
-                            }
-                        }
-                    }
-                }
-            }
-
-
-            "culture" -> {
-                // Lectures content with pagination
-                Column(modifier = Modifier.fillMaxSize()) {
-                    // Section header
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = "시니어 문화강좌 정보",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-
-                        Text(
-                            text = "총 ${viewModel.getTotalFilteredCulturesCount()}개",
-                            style = MaterialTheme.typography.bodyLarge,
-                        )
-                    }
-
-                    // Add location filter section
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            // Location Filter Title
-                            Text(
-                                "위치 검색:",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-
-                            Spacer(modifier = Modifier.height(8.dp))
-
-                            // City and District selection
-                            var expandedCityMenu by remember { mutableStateOf(false) }
-                            var expandedDistrictMenu by remember { mutableStateOf(false) }
-                            var selectedCity by remember { mutableStateOf("전체") }
-                            var selectedDistrict by remember { mutableStateOf("전체") }
-
-                            // 통합된 culture cities 사용
-                            val availableDistricts = remember(selectedCity) {
-                                viewModel.cultureDistricts.value[selectedCity] ?: listOf("전체")
-                            }
-
-                            // Reset district when city changes
-                            LaunchedEffect(selectedCity) {
-                                selectedDistrict = "전체"
-                                viewModel.filterAllCultures(selectedCity, selectedDistrict)
-                            }
-
-                            // City and District Dropdowns side by side
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                // City Dropdown
-                                Box(modifier = Modifier.weight(1f)) {
-                                    OutlinedButton(
-                                        onClick = { expandedCityMenu = true },
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Text(
-                                                selectedCity,
-                                                style = MaterialTheme.typography.bodyLarge,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                            Text("▼")
-                                        }
-                                    }
-
-                                    DropdownMenu(
-                                        expanded = expandedCityMenu,
-                                        onDismissRequest = { expandedCityMenu = false }
-                                    ) {
-                                        viewModel.cultureCities.value.forEach { city ->
-                                            DropdownMenuItem(
-                                                text = {
-                                                    Text(
-                                                        city,
-                                                        style = MaterialTheme.typography.bodyLarge
-                                                    )
-                                                },
-                                                onClick = {
-                                                    selectedCity = city
-                                                    expandedCityMenu = false
-                                                }
-                                            )
-                                        }
-                                    }
-                                }
-
-                                // District Dropdown
-                                Box(modifier = Modifier.weight(1f)) {
-                                    OutlinedButton(
-                                        onClick = { expandedDistrictMenu = true },
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Text(
-                                                selectedDistrict,
-                                                style = MaterialTheme.typography.bodyLarge,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                            Text("▼")
-                                        }
-                                    }
-
-                                    DropdownMenu(
-                                        expanded = expandedDistrictMenu,
-                                        onDismissRequest = { expandedDistrictMenu = false }
-                                    ) {
-                                        availableDistricts.forEach { district ->
-                                            DropdownMenuItem(
-                                                text = {
-                                                    Text(
-                                                        district,
-                                                        style = MaterialTheme.typography.bodyLarge
-                                                    )
-                                                },
-                                                onClick = {
-                                                    selectedDistrict = district
-                                                    expandedDistrictMenu = false
-                                                    viewModel.filterAllCultures(selectedCity, selectedDistrict)
-                                                }
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    Divider(modifier = Modifier.padding(horizontal = 16.dp))
-
-                    // 통합된 문화 강좌 리스트 (lectures + kk_cultures)
-                    val regularLectures = viewModel.filteredLectures.value
-                    val kkCultures = viewModel.filteredKKCultures.value
-
-                    // 통합된 문화 강좌 리스트 생성
-                    val allCultures = regularLectures + kkCultures
-
-                    if (allCultures.isNotEmpty()) {
-                        // Pagination state
-                        var currentPage by remember { mutableStateOf(0) }
-                        val itemsPerPage = 5
-                        val totalPages = ceil(allCultures.size.toFloat() / itemsPerPage).toInt()
-
-                        // Calculate current page items
-                        val startIndex = currentPage * itemsPerPage
-                        val endIndex = minOf(startIndex + itemsPerPage, allCultures.size)
-                        val currentPageItems = allCultures.subList(startIndex, endIndex)
-
-                        Column(
-                            modifier = Modifier.fillMaxSize()
-                        ) {
-                            // Main content area - shows cultures for current page
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxWidth()
-                            ) {
-                                LazyColumn(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(horizontal = 16.dp),
-                                    contentPadding = PaddingValues(vertical = 8.dp)
-                                ) {
-                                    items(currentPageItems) { culture ->
-                                        when (culture) {
-                                            is SupabaseDatabaseHelper.Lecture -> LectureCard(lecture = culture)
-                                            is SupabaseDatabaseHelper.KKCulture -> KKCultureCard(kkCulture = culture)
-                                        }
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                    }
-                                }
-                            }
-
-                            // Pagination controls
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 8.dp, horizontal = 16.dp),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                // Calculate which page numbers to show
-                                val pageGroupSize = 4
-                                val startPage = (currentPage / pageGroupSize) * pageGroupSize
-                                val endPage = minOf(startPage + pageGroupSize, totalPages)
-
-                                if (startPage > 0) {
-                                    Text(
-                                        text = "이전",
-                                        modifier = Modifier
-                                            .clickable {
-                                                // Go to last page of previous group
-                                                currentPage = startPage - 1
-                                            }
-                                            .padding(horizontal = 12.dp, vertical = 4.dp),
-                                        color = Color(0xFF4A7C25),
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-
-                                // Page numbers
-                                for (i in startPage until endPage) {
-                                    val pageNumber = i + 1
-                                    Text(
-                                        text = pageNumber.toString(),
-                                        modifier = Modifier
-                                            .clickable { currentPage = i }
-                                            .padding(horizontal = 12.dp, vertical = 4.dp),
-                                        color = if (currentPage == i) Color(0xFF4A7C25) else Color(0xFF757575),
-                                        fontWeight = if (currentPage == i) FontWeight.Bold else FontWeight.Normal,
-                                        style = MaterialTheme.typography.bodyLarge
-                                    )
-                                }
-
-                                // "다음" (next) button if there are more pages
-                                if (endPage < totalPages) {
-                                    Text(
-                                        text = "다음",
-                                        modifier = Modifier
-                                            .clickable { currentPage = endPage }
-                                            .padding(horizontal = 12.dp, vertical = 4.dp),
-                                        color = Color(0xFF4A7C25),
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-                        }
-                    } else if (viewModel.isLoadingLectures || viewModel.isLoadingKKCultures) {
-                        // Show loading indicator
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                CircularProgressIndicator(color = Color(0xFF4A7C25))
-                                Spacer(modifier = Modifier.height(16.dp))
-                                Text("강좌 정보를 불러오는 중...")
-                            }
-                        }
-                    } else {
-                        // Show message when no data
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("강좌 정보가 없습니다")
-                                Spacer(modifier = Modifier.height(16.dp))
-                                Button(
-                                    onClick = {
-                                        viewModel.fetchLectureData()
-                                        viewModel.fetchKKCulturesData()
-                                    },
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = Color(0xFFc6f584),
-                                        contentColor = Color.Black
-                                    )
-                                ) {
-                                    Text("새로고침")
-                                }
-                            }
                         }
                     }
                 }
