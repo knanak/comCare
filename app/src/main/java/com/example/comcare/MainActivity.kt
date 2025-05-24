@@ -1398,9 +1398,8 @@ fun PlaceComparisonApp(
                         )
 
                         Text(
-                            text = "총 ${viewModel.filteredJobs.value.size}개",
+                            text = "총 ${viewModel.getTotalFilteredJobsCount()}개",
                             style = MaterialTheme.typography.bodyLarge,
-//                            color = Color(0xFF4A7C25)
                         )
                     }
 
@@ -1421,21 +1420,21 @@ fun PlaceComparisonApp(
 
                             Spacer(modifier = Modifier.height(8.dp))
 
-                            // City and District selection (reusing existing state from viewModel)
+                            // City and District selection
                             var expandedCityMenu by remember { mutableStateOf(false) }
                             var expandedDistrictMenu by remember { mutableStateOf(false) }
                             var selectedCity by remember { mutableStateOf("전체") }
                             var selectedDistrict by remember { mutableStateOf("전체") }
 
-                            // Get available districts for the selected city
+                            // 통합된 job cities 사용
                             val availableDistricts = remember(selectedCity) {
-                                viewModel.districts.value[selectedCity] ?: listOf("전체")
+                                viewModel.jobDistricts.value[selectedCity] ?: listOf("전체")
                             }
 
                             // Reset district when city changes
                             LaunchedEffect(selectedCity) {
                                 selectedDistrict = "전체"
-                                viewModel.filterJobs(selectedCity, selectedDistrict)
+                                viewModel.filterAllJobs(selectedCity, selectedDistrict)
                             }
 
                             // City and District Dropdowns side by side
@@ -1455,7 +1454,7 @@ fun PlaceComparisonApp(
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Text(
-                                                "$selectedCity",
+                                                selectedCity,
                                                 style = MaterialTheme.typography.bodyLarge,
                                                 fontWeight = FontWeight.Bold
                                             )
@@ -1467,7 +1466,7 @@ fun PlaceComparisonApp(
                                         expanded = expandedCityMenu,
                                         onDismissRequest = { expandedCityMenu = false }
                                     ) {
-                                        viewModel.cities.value.forEach { city ->
+                                        viewModel.jobCities.value.forEach { city ->
                                             DropdownMenuItem(
                                                 text = {
                                                     Text(
@@ -1496,7 +1495,7 @@ fun PlaceComparisonApp(
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Text(
-                                                "$selectedDistrict",
+                                                selectedDistrict,
                                                 style = MaterialTheme.typography.bodyLarge,
                                                 fontWeight = FontWeight.Bold
                                             )
@@ -1519,49 +1518,35 @@ fun PlaceComparisonApp(
                                                 onClick = {
                                                     selectedDistrict = district
                                                     expandedDistrictMenu = false
-                                                    viewModel.filterJobs(selectedCity, selectedDistrict)
+                                                    viewModel.filterAllJobs(selectedCity, selectedDistrict)
                                                 }
                                             )
                                         }
                                     }
                                 }
                             }
-
-//                            Spacer(modifier = Modifier.height(16.dp))
-//
-//                            // Apply filter button
-//                            Button(
-//                                onClick = { viewModel.filterJobs(selectedCity, selectedDistrict) },
-//                                modifier = Modifier.fillMaxWidth(),
-//                                colors = ButtonDefaults.buttonColors(
-//                                    containerColor = Color(0xFFc6f584),
-//                                    contentColor = Color.Black
-//                                )
-//                            ) {
-//                                Text(
-//                                    "검색하기",
-//                                    style = MaterialTheme.typography.titleMedium,
-//                                    fontWeight = FontWeight.Bold
-//                                )
-//                            }
                         }
                     }
 
                     Divider(modifier = Modifier.padding(horizontal = 16.dp))
 
                     // Jobs list with pagination
-                    val jobs = viewModel.filteredJobs.value
+                    val regularJobs = viewModel.filteredJobs.value
+                    val kkJobs = viewModel.filteredKKJobs.value
 
-                    if (jobs.isNotEmpty()) {
+                    // 통합된 일자리 리스트 생성
+                    val allJobs = regularJobs + kkJobs
+
+                    if (allJobs.isNotEmpty()) {
                         // Pagination state
                         var currentPage by remember { mutableStateOf(0) }
                         val itemsPerPage = 5
-                        val totalPages = ceil(jobs.size.toFloat() / itemsPerPage).toInt()
+                        val totalPages = ceil(allJobs.size.toFloat() / itemsPerPage).toInt()
 
                         // Calculate current page items
                         val startIndex = currentPage * itemsPerPage
-                        val endIndex = minOf(startIndex + itemsPerPage, jobs.size)
-                        val currentPageItems = jobs.subList(startIndex, endIndex)
+                        val endIndex = minOf(startIndex + itemsPerPage, allJobs.size)
+                        val currentPageItems = allJobs.subList(startIndex, endIndex)
 
                         Column(
                             modifier = Modifier.fillMaxSize()
@@ -1579,7 +1564,10 @@ fun PlaceComparisonApp(
                                     contentPadding = PaddingValues(vertical = 8.dp)
                                 ) {
                                     items(currentPageItems) { job ->
-                                        JobCard(job = job)
+                                        when (job) {
+                                            is SupabaseDatabaseHelper.Job -> JobCard(job = job)
+                                            is SupabaseDatabaseHelper.KKJob -> KKJobCard(kkJob = job)
+                                        }
                                         Spacer(modifier = Modifier.height(8.dp))
                                     }
                                 }
@@ -1642,7 +1630,7 @@ fun PlaceComparisonApp(
                                 }
                             }
                         }
-                    } else if (viewModel.isLoading) {
+                    } else if (viewModel.isLoading || viewModel.isLoadingKKJobs) {
                         // Show loading indicator
                         Box(
                             modifier = Modifier.fillMaxSize(),
@@ -1655,31 +1643,6 @@ fun PlaceComparisonApp(
                             }
                         }
                     }
-//                    else {
-//                        // Show message when no data
-//                        Box(
-//                            modifier = Modifier.fillMaxSize(),
-//                            contentAlignment = Alignment.Center
-//                        ) {
-//                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-//                                Text("일자리 정보가 없습니다")
-//                                Spacer(modifier = Modifier.height(16.dp))
-//                                Button(
-//                                    onClick = {
-//                                        viewModel.fetchJobsData()
-//                                        // Reset filters
-//                                        viewModel.filterJobs("전체", "전체")
-//                                    },
-//                                    colors = ButtonDefaults.buttonColors(
-//                                        containerColor = Color(0xFFc6f584),
-//                                        contentColor = Color.Black
-//                                    )
-//                                ) {
-//                                    Text("새로고침")
-//                                }
-//                            }
-//                        }
-//                    }
                 }
             }
 
@@ -2329,6 +2292,86 @@ fun JobCard(job: SupabaseDatabaseHelper.Job) {
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
 //                    color = Color(0xFF4A7C25),
+                    modifier = Modifier.align(Alignment.End)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun KKJobCard(kkJob: SupabaseDatabaseHelper.KKJob) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Job Title
+            Text(
+                text = kkJob.Title ?: "제목 없음",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = Color.Yellow,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Category
+            Row {
+                Text(
+                    "카테고리: ",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    kkJob.Category ?: "정보 없음",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Location
+            Row {
+                Text(
+                    "위치: ",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    kkJob.Address ?: "정보 없음",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Working Hours
+            if (!kkJob.WorkingHours.isNullOrEmpty()) {
+                Row {
+                    Text(
+                        "근무시간: ",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        kkJob.WorkingHours,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Deadline
+            kkJob.Deadline?.let {
+                Text(
+                    "마감일: $it",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
                     modifier = Modifier.align(Alignment.End)
                 )
             }

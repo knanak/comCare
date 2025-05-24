@@ -77,6 +77,12 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
     val isLoadingKKJobs: Boolean
         get() = _isLoadingKKJobs.value
 
+    // 통합된 job 위치 정보 (job + kk_job)
+    private val _jobCities = mutableStateOf<List<String>>(listOf("전체"))
+    val jobCities: State<List<String>> = _jobCities
+
+    private val _jobDistricts = mutableStateOf<Map<String, List<String>>>(mapOf("전체" to listOf("전체")))
+    val jobDistricts: State<Map<String, List<String>>> = _jobDistricts
 
     init {
         // Fetch data when ViewModel is initialized
@@ -102,17 +108,13 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
             filterPlaces(city, district, "전체", "전체")
             Log.d("PlaceViewModel", "시설 필터링 완료 - 결과: ${_filteredPlaces.value.size}개")
 
-            // 일자리 필터링
-            filterJobs(city, district)
-            Log.d("PlaceViewModel", "일자리 필터링 완료 - 결과: ${_filteredJobs.value.size}개")
+            // 일자리 필터링 (통합)
+            filterAllJobs(city, district)
+            Log.d("PlaceViewModel", "일자리 필터링 완료 - 일반: ${_filteredJobs.value.size}개, KK: ${_filteredKKJobs.value.size}개")
 
             // 강좌 필터링
             filterLectures(city, district)
             Log.d("PlaceViewModel", "강좌 필터링 완료 - 결과: ${_filteredLectures.value.size}개")
-
-            // KK_Job 필터링 추가
-            filterKKJobs(city, district)
-            Log.d("PlaceViewModel", "KK_Job 필터링 완료 - 결과: ${_filteredKKJobs.value.size}개")
         }
     }
 
@@ -218,14 +220,12 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
                     // facility.rating에서 개행문자 제거
                     val cleanRating = facility.rating.replace("\n", " ")
 
-//                    Log.d("PlaceViewModel", "Converting facility: ${facility.id} - ${facility.name} - ${facility.service1} - ${facility.service2} - ${facility.address}")
                     Place(
                         id = facility.id.toString(),
                         name = facility.name,
                         facilityCode = "", // No direct equivalent in Supabase model
                         facilityKind = originalService2,
                         facilityKindDetail = "장기요양기관",
-//                        city = city, // 추출한 도시 정보 저장
                         district = district, // 추출한 구/군 정보 저장
                         address = facility.address,
                         tel = facility.tel,
@@ -313,7 +313,6 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
         _districts.value = districtMapSorted
 
         // Log the extracted location data
-//        Log.d("LocationCategories", "Extracted cities: ${_cities.value}")
         _districts.value.forEach { (city, districts) ->
             Log.d("LocationCategories", "City: $city, Districts: $districts")
         }
@@ -522,11 +521,6 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
                 // Derived values
                 service2 = service2Values,
                 service1 = service1Values,
-
-//                 Default values for fields not in API
-//                full = (80..200).random().toString(),
-//                now = (60..150).random().toString(),
-//                wating = (0..20).random().toString(),
                 bus = determineTransportation(address)
             )
 
@@ -716,9 +710,85 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
         }
     }
 
-    // 2. job data
-    // Add these properties to your PlaceViewModel class
+    // job과 kk_job의 위치 정보를 통합하는 함수
+    private fun processAllJobLocationCategories() {
+        val citySet = mutableSetOf<String>()
+        val districtMap = mutableMapOf<String, MutableSet<String>>()
 
+        // Always include "전체" (All) option
+        citySet.add("전체")
+        districtMap["전체"] = mutableSetOf("전체")
+
+        // Process regular jobs
+        _jobs.value.forEach { job ->
+            val location = job.Location ?: return@forEach
+            val addressParts = location.trim().split(" ")
+
+            if (addressParts.isNotEmpty()) {
+                // 서울특별시 처리
+                if (location.contains("서울")) {
+                    citySet.add("서울특별시")
+                    if (!districtMap.containsKey("서울특별시")) {
+                        districtMap["서울특별시"] = mutableSetOf("전체")
+                    }
+                    // 구 정보 추출
+                    addressParts.forEach { part ->
+                        if (part.endsWith("구")) {
+                            districtMap["서울특별시"]?.add(part)
+                        }
+                    }
+                }
+            }
+        }
+
+        // Process kk_jobs
+        _kkJobs.value.forEach { kkJob ->
+            val location = kkJob.Address ?: return@forEach
+            val addressParts = location.trim().split(" ")
+
+            if (addressParts.size >= 2) {
+                val city = addressParts[0] // 첫 번째 부분이 시/도 (예: "경기도")
+                val district = addressParts[1] // 두 번째 부분이 시/군/구 (예: "평택시")
+
+                if (city.isNotEmpty()) {
+                    citySet.add(city)
+
+                    if (!districtMap.containsKey(city)) {
+                        districtMap[city] = mutableSetOf("전체")
+                    }
+
+                    if (district.isNotEmpty()) {
+                        districtMap[city]?.add(district)
+                    }
+                }
+            }
+        }
+
+        // Convert sets to sorted lists
+        _jobCities.value = citySet.toList().sorted()
+
+        // Ensure "전체" is always first
+        if (_jobCities.value.contains("전체")) {
+            val citiesList = _jobCities.value.toMutableList()
+            citiesList.remove("전체")
+            citiesList.add(0, "전체")
+            _jobCities.value = citiesList
+        }
+
+        // Convert district sets to sorted lists with "전체" always first
+        val districtMapSorted = mutableMapOf<String, List<String>>()
+        districtMap.forEach { (city, districts) ->
+            val sortedDistricts = districts.filter { it != "전체" }.sorted().toMutableList()
+            sortedDistricts.add(0, "전체")
+            districtMapSorted[city] = sortedDistricts
+        }
+        _jobDistricts.value = districtMapSorted
+
+        Log.d("JobLocation", "Combined cities: ${_jobCities.value}")
+        _jobDistricts.value.forEach { (city, districts) ->
+            Log.d("JobLocation", "City: $city, Districts: $districts")
+        }
+    }
 
     private fun fetchJobsData() {
         viewModelScope.launch {
@@ -759,6 +829,11 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
                 // Update the jobs value with the fetched data
                 _jobs.value = jobsData
 
+                // 통합 위치 정보 처리 (KK_Job 데이터도 로드된 후에 실행)
+                if (_kkJobs.value.isNotEmpty()) {
+                    processAllJobLocationCategories()
+                }
+
                 Log.d("PlaceViewModel", "Jobs data fetch complete: ${jobsData.size} items")
             } catch (e: Exception) {
                 Log.e("PlaceViewModel", "Error fetching jobs data: ${e.message}", e)
@@ -789,7 +864,7 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
             // City filtering
             val cityMatch = selectedCity == "전체" ||
                     location.contains(selectedCity) ||
-                    (selectedCity == "Seoul" && (location.contains("서울") || location.contains("서울특별시")))
+                    (selectedCity == "서울특별시" && (location.contains("서울")))
 
             // District filtering
             val districtMatch = selectedDistrict == "전체" || location.contains(selectedDistrict)
@@ -800,6 +875,7 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
 
         Log.d("PlaceViewModel", "Filtered jobs: ${_filteredJobs.value.size} of ${_jobs.value.size} with city='$selectedCity', district='$selectedDistrict'")
     }
+
     fun fetchLectureData() {
         viewModelScope.launch {
             try {
@@ -852,8 +928,6 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
         }
     }
 
-    // Add function to filter lectures by location
-// Function to filter lectures by location
     fun filterLectures(selectedCity: String, selectedDistrict: String) {
         if (_lectures.value.isEmpty()) {
             _filteredLectures.value = emptyList()
@@ -893,9 +967,6 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
                             district.contains(selectedDistrict) ||
                             selectedDistrict.contains(district)
 
-//                    Log.d("PlaceViewModel", "Checking lecture: institution='$institution', fullRegion='$fullRegion', " +
-//                            "city='$city', district='$district', cityMatch=$cityMatch, districtMatch=$districtMatch")
-
                     // Both conditions must match
                     cityMatch && districtMatch
                 } else {
@@ -917,7 +988,6 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
         Log.d("PlaceViewModel", "Filtered lectures: ${_filteredLectures.value.size} of ${_lectures.value.size} with city='$selectedCity', district='$selectedDistrict'")
     }
 
-    // KK_Job 데이터를 가져오는 함수
     fun fetchKKJobsData() {
         viewModelScope.launch {
             try {
@@ -936,9 +1006,9 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
                             val firstKKJob = kkJobs.firstOrNull()
                             if (firstKKJob != null) {
                                 Log.d(
-                                    "PlaceViewModel", "Sample kk_job data: id=${firstKKJob.Id}, " +
+                                    "PlaceViewModel", "Sample kk_job data: Id=${firstKKJob.Id}, " +
                                             "title=${firstKKJob.Title}, " +
-                                            "category=${firstKKJob.JobCategory}, " +
+                                            "category=${firstKKJob.Category}, " +
                                             "location=${firstKKJob.Address}"
                                 )
                             }
@@ -956,13 +1026,14 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
 
                 // Update the kk_jobs value with the fetched data
                 _kkJobs.value = kkJobsData
-                // Initialize filtered kk_jobs with all kk_jobs
                 _filteredKKJobs.value = kkJobsData
+
+                // 통합 위치 정보 처리
+                processAllJobLocationCategories()
 
                 Log.d("PlaceViewModel", "KK_Jobs data fetch complete: ${kkJobsData.size} items")
             } catch (e: Exception) {
                 Log.e("PlaceViewModel", "Error fetching kk_jobs data: ${e.message}", e)
-                // Set to empty list if there's an error
                 _kkJobs.value = emptyList()
                 _filteredKKJobs.value = emptyList()
             } finally {
@@ -971,7 +1042,6 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
         }
     }
 
-    // Function to filter kk_jobs by location
     fun filterKKJobs(selectedCity: String, selectedDistrict: String) {
         if (_kkJobs.value.isEmpty()) {
             _filteredKKJobs.value = emptyList()
@@ -981,23 +1051,39 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
         Log.d("PlaceViewModel", "Filtering kk_jobs with city='$selectedCity', district='$selectedDistrict'")
 
         _filteredKKJobs.value = _kkJobs.value.filter { kkJob ->
-            // Extract location information from Location field
             val location = kkJob.Address ?: ""
+            val addressParts = location.trim().split(" ")
+
+            // Extract city and district from the location
+            val jobCity = if (addressParts.isNotEmpty()) addressParts[0] else ""
+            val jobDistrict = if (addressParts.size > 1) addressParts[1] else ""
 
             // City filtering
-            val cityMatch = selectedCity == "전체" ||
-                    location.contains(selectedCity) ||
-                    (selectedCity == "Seoul" && (location.contains("서울") || location.contains("서울특별시")))
+            val cityMatch = selectedCity == "전체" || jobCity == selectedCity
 
             // District filtering
-            val districtMatch = selectedDistrict == "전체" || location.contains(selectedDistrict)
+            val districtMatch = selectedDistrict == "전체" || jobDistrict == selectedDistrict
 
             // Both conditions must match
             cityMatch && districtMatch
         }
 
-        Log.d("PlaceViewModel", "Filtered kk_jobs: ${_filteredKKJobs.value.size} of ${_kkJobs.value.size} with city='$selectedCity', district='$selectedDistrict'")
+        Log.d("PlaceViewModel", "Filtered kk_jobs: ${_filteredKKJobs.value.size} of ${_kkJobs.value.size}")
     }
 
+    // 통합 필터링 함수
+    fun filterAllJobs(selectedCity: String, selectedDistrict: String) {
+        // Regular jobs 필터링
+        filterJobs(selectedCity, selectedDistrict)
 
+        // KK_Jobs 필터링
+        filterKKJobs(selectedCity, selectedDistrict)
+
+        Log.d("PlaceViewModel", "Filtered all jobs - Regular: ${_filteredJobs.value.size}, KK: ${_filteredKKJobs.value.size}")
+    }
+
+    // 통합된 필터링된 일자리 개수를 반환하는 함수
+    fun getTotalFilteredJobsCount(): Int {
+        return _filteredJobs.value.size + _filteredKKJobs.value.size
+    }
 }
