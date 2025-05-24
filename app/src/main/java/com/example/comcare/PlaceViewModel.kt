@@ -66,11 +66,24 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
     val isLoadingLectures: Boolean
         get() = _isLoadingLectures.value
 
+    // kk_job
+    private val _kkJobs = mutableStateOf<List<SupabaseDatabaseHelper.KKJob>>(emptyList())
+    val kkJobs: State<List<SupabaseDatabaseHelper.KKJob>> = _kkJobs
+
+    private val _filteredKKJobs = mutableStateOf<List<SupabaseDatabaseHelper.KKJob>>(emptyList())
+    val filteredKKJobs: State<List<SupabaseDatabaseHelper.KKJob>> = _filteredKKJobs
+
+    private val _isLoadingKKJobs = mutableStateOf<Boolean>(false)
+    val isLoadingKKJobs: Boolean
+        get() = _isLoadingKKJobs.value
+
+
     init {
         // Fetch data when ViewModel is initialized
         fetchPlacesData()
         fetchJobsData()
         fetchLectureData()
+        fetchKKJobsData()
     }
 
     // 사용자 위치 설정 함수 추가
@@ -96,6 +109,10 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
             // 강좌 필터링
             filterLectures(city, district)
             Log.d("PlaceViewModel", "강좌 필터링 완료 - 결과: ${_filteredLectures.value.size}개")
+
+            // KK_Job 필터링 추가
+            filterKKJobs(city, district)
+            Log.d("PlaceViewModel", "KK_Job 필터링 완료 - 결과: ${_filteredKKJobs.value.size}개")
         }
     }
 
@@ -201,7 +218,7 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
                     // facility.rating에서 개행문자 제거
                     val cleanRating = facility.rating.replace("\n", " ")
 
-                    Log.d("PlaceViewModel", "Converting facility: ${facility.id} - ${facility.name} - ${facility.service1} - ${facility.service2} - ${facility.address}")
+//                    Log.d("PlaceViewModel", "Converting facility: ${facility.id} - ${facility.name} - ${facility.service1} - ${facility.service2} - ${facility.address}")
                     Place(
                         id = facility.id.toString(),
                         name = facility.name,
@@ -296,7 +313,7 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
         _districts.value = districtMapSorted
 
         // Log the extracted location data
-        Log.d("LocationCategories", "Extracted cities: ${_cities.value}")
+//        Log.d("LocationCategories", "Extracted cities: ${_cities.value}")
         _districts.value.forEach { (city, districts) ->
             Log.d("LocationCategories", "City: $city, Districts: $districts")
         }
@@ -876,8 +893,8 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
                             district.contains(selectedDistrict) ||
                             selectedDistrict.contains(district)
 
-                    Log.d("PlaceViewModel", "Checking lecture: institution='$institution', fullRegion='$fullRegion', " +
-                            "city='$city', district='$district', cityMatch=$cityMatch, districtMatch=$districtMatch")
+//                    Log.d("PlaceViewModel", "Checking lecture: institution='$institution', fullRegion='$fullRegion', " +
+//                            "city='$city', district='$district', cityMatch=$cityMatch, districtMatch=$districtMatch")
 
                     // Both conditions must match
                     cityMatch && districtMatch
@@ -899,4 +916,88 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
 
         Log.d("PlaceViewModel", "Filtered lectures: ${_filteredLectures.value.size} of ${_lectures.value.size} with city='$selectedCity', district='$selectedDistrict'")
     }
+
+    // KK_Job 데이터를 가져오는 함수
+    fun fetchKKJobsData() {
+        viewModelScope.launch {
+            try {
+                Log.d("PlaceViewModel", "Starting kk_jobs data fetch")
+                _isLoadingKKJobs.value = true
+
+                val kkJobsData = withContext(Dispatchers.IO) {
+                    try {
+                        val kkJobs = supabaseHelper.getKKJobs()
+                        Log.d("PlaceViewModel", "Supabase getKKJobs returned ${kkJobs.size} items")
+
+                        if (kkJobs.isEmpty()) {
+                            Log.d("PlaceViewModel", "Supabase kk_jobs returned empty list")
+                        } else {
+                            // Log first kk_job for debugging
+                            val firstKKJob = kkJobs.firstOrNull()
+                            if (firstKKJob != null) {
+                                Log.d(
+                                    "PlaceViewModel", "Sample kk_job data: id=${firstKKJob.Id}, " +
+                                            "title=${firstKKJob.Title}, " +
+                                            "category=${firstKKJob.JobCategory}, " +
+                                            "location=${firstKKJob.Address}"
+                                )
+                            }
+                        }
+                        kkJobs
+                    } catch (e: Exception) {
+                        Log.e(
+                            "PlaceViewModel",
+                            "Error in getKKJobs Dispatchers.IO block: ${e.message}",
+                            e
+                        )
+                        emptyList()
+                    }
+                }
+
+                // Update the kk_jobs value with the fetched data
+                _kkJobs.value = kkJobsData
+                // Initialize filtered kk_jobs with all kk_jobs
+                _filteredKKJobs.value = kkJobsData
+
+                Log.d("PlaceViewModel", "KK_Jobs data fetch complete: ${kkJobsData.size} items")
+            } catch (e: Exception) {
+                Log.e("PlaceViewModel", "Error fetching kk_jobs data: ${e.message}", e)
+                // Set to empty list if there's an error
+                _kkJobs.value = emptyList()
+                _filteredKKJobs.value = emptyList()
+            } finally {
+                _isLoadingKKJobs.value = false
+            }
+        }
+    }
+
+    // Function to filter kk_jobs by location
+    fun filterKKJobs(selectedCity: String, selectedDistrict: String) {
+        if (_kkJobs.value.isEmpty()) {
+            _filteredKKJobs.value = emptyList()
+            return
+        }
+
+        Log.d("PlaceViewModel", "Filtering kk_jobs with city='$selectedCity', district='$selectedDistrict'")
+
+        _filteredKKJobs.value = _kkJobs.value.filter { kkJob ->
+            // Extract location information from Location field
+            val location = kkJob.Address ?: ""
+
+            // City filtering
+            val cityMatch = selectedCity == "전체" ||
+                    location.contains(selectedCity) ||
+                    (selectedCity == "Seoul" && (location.contains("서울") || location.contains("서울특별시")))
+
+            // District filtering
+            val districtMatch = selectedDistrict == "전체" || location.contains(selectedDistrict)
+
+            // Both conditions must match
+            cityMatch && districtMatch
+        }
+
+        Log.d("PlaceViewModel", "Filtered kk_jobs: ${_filteredKKJobs.value.size} of ${_kkJobs.value.size} with city='$selectedCity', district='$selectedDistrict'")
+    }
+
+
 }

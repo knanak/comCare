@@ -434,9 +434,9 @@ class SupabaseDatabaseHelper(private val context: Context) {
                                 }
 
                                 // Add logging to see extracted regions
-                                if (region.isNotEmpty()) {
-                                    Log.d("supabase", "Extracted region '$region' from institution '$institution'")
-                                }
+//                                if (region.isNotEmpty()) {
+////                                    Log.d("supabase", "Extracted region '$region' from institution '$institution'")
+//                                }
 
                                 // Create a copy of the lecture with the cleaned fields and region information
                                 // We'll store the region in the existing Institution field with a prefix
@@ -492,6 +492,231 @@ class SupabaseDatabaseHelper(private val context: Context) {
             Log.e("supabase", "Error in getLectures: ${e.message}", e)
             e.printStackTrace()
             emptyList()
+        }
+    }
+
+    // 4. KK_Job data
+    @Serializable
+    data class KKJob(
+        val Id: Int,
+        val Category: String? = null,
+        val Title: String? = null,
+        val DateOfRegistration: String? = null,
+        val Deadline: String? = null,
+        val JobCategory: String? = null,
+        val ExperienceRequired: String? = null,
+        val EmploymentType: String? = null,
+        val Salary: String? = null,
+        val SocialEnsurance: String? = null,
+        val RetirementBenefit: String? = null,
+        val Address: String? = null,
+        val WorkingHours: String? = null,
+        val WorkingType: String? = null,
+        val CompanyName: String? = null,
+        val JobDescription: String? = null,
+        val ApplicationMethod: String? = null,
+        val ApplicationType: String? = null,
+        val document: String? = null
+    )
+
+    // Helper function to clean working hours
+    private fun cleanWorkingHours(workingHours: String?): String? {
+        if (workingHours == null) return null
+
+        var result = workingHours
+
+        // Remove "주 소정근로시간" if present
+        if (result.contains("주 소정근로시간")) {
+            val parts = result.split("주 소정근로시간")
+            result = if (parts.isNotEmpty() && parts[0].isNotEmpty()) {
+                parts[0].trim()
+            } else {
+                if (parts.size > 1) parts[1].trim() else result
+            }
+        }
+
+        // Remove "(근무시간) " if present
+        if (result.contains("(근무시간) ")) {
+            result = result.replace("(근무시간) ", "").trim()
+        }
+
+        // Remove "* 상세 근무시간" and everything after it if present
+        if (result.contains("* 상세 근무시간")) {
+            val parts = result.split("* 상세 근무시간")
+            result = parts[0].trim()
+        }
+
+        return result
+    }
+
+    suspend fun getKKJobs(): List<KKJob> {
+        return try {
+            Log.d("supabase", "Starting getKKJobs")
+
+            withContext(Dispatchers.IO) {
+                try {
+                    // First get the total count
+                    val totalCount = supabase.postgrest["kk_job"]
+                        .select(head = true, count = Count.EXACT)
+                        .count() ?: 0L
+
+                    Log.d("supabase", "Total count of kk_jobs: $totalCount")
+
+                    if (totalCount == 0L) {
+                        Log.d("supabase", "No jobs found in the 'kk_job' table")
+                        return@withContext emptyList<KKJob>()
+                    }
+
+                    // Use the same approach as getFacilities() - first make a test request
+                    val testBatch = supabase.postgrest["kk_job"]
+                        .select()
+                        .decodeList<KKJob>()
+
+                    // The batch size is whatever limit Supabase applied to our first request
+                    val batchSize = testBatch.size
+                    Log.d("supabase", "Detected batch size from Supabase: $batchSize")
+
+                    // Now we know the batch size, fetch all records
+                    val allKKJobs = mutableListOf<KKJob>()
+                    // Add the first batch that we already retrieved
+                    allKKJobs.addAll(testBatch)
+
+                    var currentStart = batchSize
+
+                    // Continue fetching until we have all records
+                    while (currentStart < totalCount) {
+                        val currentEnd = currentStart + batchSize - 1
+                        Log.d("supabase", "Fetching kk_jobs batch: $currentStart to $currentEnd")
+
+                        try {
+                            // Fetch a batch using range
+                            val batch = supabase.postgrest["kk_job"]
+                                .select(filter = {
+                                    range(from = currentStart.toLong(), to = currentEnd.toLong())
+                                })
+                                .decodeList<KKJob>()
+
+                            Log.d("supabase", "Fetched batch of ${batch.size} kk_jobs")
+
+                            // Clean the WorkingHours field for each job before adding to the list
+                            val cleanedBatch = batch.map { kkJob ->
+                                kkJob.copy(WorkingHours = cleanWorkingHours(kkJob.WorkingHours))
+                            }
+
+                            allKKJobs.addAll(cleanedBatch)
+
+                            // If we got an empty batch or fewer items than requested, we might be done
+                            if (batch.isEmpty() || batch.size < batchSize) {
+                                break
+                            }
+
+                            // Move to next batch
+                            currentStart += batchSize
+                        } catch (e: Exception) {
+                            Log.e("supabase", "Error fetching kk_jobs batch $currentStart-$currentEnd: ${e.message}", e)
+                            e.printStackTrace()
+                            // Continue to next batch despite error
+                            currentStart += batchSize
+                        }
+                    }
+
+                    // Clean the first batch as well
+                    val cleanedFirstBatch = testBatch.map { kkJob ->
+                        kkJob.copy(WorkingHours = cleanWorkingHours(kkJob.WorkingHours))
+                    }
+
+                    // Replace the first batch with cleaned version
+                    if (cleanedFirstBatch.isNotEmpty()) {
+                        allKKJobs.clear()
+                        allKKJobs.addAll(cleanedFirstBatch)
+
+                        // Add remaining batches
+                        currentStart = batchSize
+                        while (currentStart < totalCount) {
+                            val currentEnd = currentStart + batchSize - 1
+                            Log.d("supabase", "Fetching kk_jobs batch: $currentStart to $currentEnd")
+
+                            try {
+                                val batch = supabase.postgrest["kk_job"]
+                                    .select(filter = {
+                                        range(from = currentStart.toLong(), to = currentEnd.toLong())
+                                    })
+                                    .decodeList<KKJob>()
+
+                                val cleanedBatch = batch.map { kkJob ->
+                                    kkJob.copy(WorkingHours = cleanWorkingHours(kkJob.WorkingHours))
+                                }
+
+                                allKKJobs.addAll(cleanedBatch)
+
+                                if (batch.isEmpty() || batch.size < batchSize) {
+                                    break
+                                }
+
+                                currentStart += batchSize
+                            } catch (e: Exception) {
+                                Log.e("supabase", "Error fetching kk_jobs batch: ${e.message}", e)
+                                currentStart += batchSize
+                            }
+                        }
+                    }
+
+                    Log.d("supabase", "Retrieved ${allKKJobs.size} kk_jobs out of $totalCount total")
+
+                    // Verify we got all records
+                    if (allKKJobs.size < totalCount) {
+                        Log.w("supabase", "Warning: Retrieved fewer records than expected (${allKKJobs.size} vs $totalCount)")
+                    }
+
+                    // Log a sample job for debugging
+                    if (allKKJobs.isNotEmpty()) {
+                        val sample = allKKJobs.first()
+                        Log.d("supabase", "Sample kk_job: id=${sample.Id}, " +
+                                "title=${sample.Title}, " +
+                                "category=${sample.JobCategory}, " +
+                                "hours=${sample.WorkingHours}, " +
+                                "deadline=${sample.Deadline}")
+                    }
+
+                    allKKJobs
+                } catch (e: Exception) {
+                    Log.e("supabase", "Error in getKKJobs inner block: ${e.message}", e)
+                    e.printStackTrace()
+                    emptyList()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("supabase", "Error in getKKJobs: ${e.message}", e)
+            e.printStackTrace()
+            emptyList()
+        }
+    }
+
+    // Also add a function to get a specific kk_job by ID
+    suspend fun getKKJobById(kkJobId: Int): KKJob? {
+        return try {
+            withContext(Dispatchers.IO) {
+                val response = supabase.postgrest.from("kk_job")
+                    .select(
+                        filter = {
+                            eq("id", kkJobId)
+                        }
+                    )
+                    .decodeSingleOrNull<KKJob>()
+
+                if (response != null) {
+                    Log.d(TAG, "Retrieved kk_job with ID: $kkJobId")
+
+                    // Clean the WorkingHours field if present
+                    response.copy(WorkingHours = cleanWorkingHours(response.WorkingHours))
+                } else {
+                    Log.d(TAG, "No kk_job found with ID: $kkJobId")
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching kk_job by ID: ${e.message}")
+            null
         }
     }
 }
