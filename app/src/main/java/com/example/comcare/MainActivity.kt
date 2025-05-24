@@ -983,7 +983,7 @@ fun PlaceComparisonApp(
                             .padding(horizontal = 16.dp),
                         contentPadding = PaddingValues(vertical = 8.dp)
                     ) {
-                        // Today's Facilities Section
+                        // 오늘의 시설
                         item {
                             Card(
                                 modifier = Modifier
@@ -1032,11 +1032,16 @@ fun PlaceComparisonApp(
                                             )
                                         }
 
-                                        // kk_facility 데이터인 경우 추가 정보 표시
-                                        if (randomPlace.id.startsWith("kk_")) {
+                                        // kk_facility 또는 kk_facility2 데이터인 경우 추가 정보 표시
+                                        if (randomPlace.id.startsWith("kk_") || randomPlace.id.startsWith("kk2_")) {
                                             Spacer(modifier = Modifier.height(4.dp))
+                                            val facilityType = if (randomPlace.id.startsWith("kk2_")) {
+                                                "※ 경기도 복지시설 (유형2)"
+                                            } else {
+                                                "※ 경기도 복지시설"
+                                            }
                                             Text(
-                                                "※ 경기도 복지시설",
+                                                facilityType,
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = Color.Gray
                                             )
