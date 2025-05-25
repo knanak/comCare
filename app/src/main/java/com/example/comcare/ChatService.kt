@@ -27,6 +27,9 @@ class ChatService {
     private var exploreResults: List<ChatMessage> = emptyList()
     private var isExploreMode: Boolean = false
 
+    // 탐색 모드인지 추적하는 변수 추가
+    private var isCurrentlyExploring: Boolean = false
+
     // Create OkHttpClient with logging interceptor to see exactly what's happening
     private val client: OkHttpClient by lazy {
         val loggingInterceptor = HttpLoggingInterceptor().apply {
@@ -43,6 +46,8 @@ class ChatService {
 
     var responseCallback: ((String) -> Unit)? = null
     var navigationCallback: ((hasPrevious: Boolean, hasNext: Boolean, currentPage: Int, totalPages: Int) -> Unit)? = null
+
+    var exploreResponseCallback: ((String) -> Unit)? = null
 
     fun sendChatMessageToWorkflow(userId: String, message: String, sessionId: String) {
         Log.d(TAG, "==== STARTING NEW CHAT REQUEST ====")
@@ -194,6 +199,7 @@ class ChatService {
         exploreResults = results
         currentIndex = 0
         isExploreMode = true
+        isCurrentlyExploring = true  // 탐색 모드 플래그 설정
         currentResults = null // 일반 검색 결과 초기화
 
         // 네비게이션 콜백 호출
@@ -215,7 +221,12 @@ class ChatService {
                 val message = exploreResults[currentIndex]
 
                 Handler(Looper.getMainLooper()).post {
-                    responseCallback?.invoke(message.text)
+                    // 탐색 모드일 때는 exploreResponseCallback을 사용
+                    if (isCurrentlyExploring && exploreResponseCallback != null) {
+                        exploreResponseCallback?.invoke(message.text)
+                    } else {
+                        responseCallback?.invoke(message.text)
+                    }
 
                     // 네비게이션 상태 업데이트
                     val hasPrevious = currentIndex > 0
@@ -229,7 +240,7 @@ class ChatService {
             return
         }
 
-        // 일반 검색 모드
+        // 일반 검색 모드 (기존 코드 유지)
         currentResults?.let { results ->
             if (currentIndex >= 0 && currentIndex < results.length()) {
                 try {
@@ -414,7 +425,12 @@ class ChatService {
         currentResults = null
         currentIndex = 0
         isExploreMode = false
+        isCurrentlyExploring = false  // 탐색 모드 플래그 초기화
         exploreResults = emptyList()
+    }
+
+    fun isInExploreMode(): Boolean {
+        return isCurrentlyExploring
     }
 
     // 현재 결과가 있는지 확인

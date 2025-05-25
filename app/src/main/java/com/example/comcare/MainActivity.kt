@@ -2309,6 +2309,7 @@ fun ChatScreen(
 
     // Set up the callback to receive responses from n8n
     LaunchedEffect(Unit) {
+        // 일반 응답 콜백
         activity.chatService.responseCallback = { aiResponse ->
             Log.d("ChatScreen", "Received response: $aiResponse")
             // Replace any waiting messages with the actual response
@@ -2327,15 +2328,46 @@ fun ChatScreen(
                     // Update existing AI message when navigating through results
                     updatedMessages[lastAiMessageIndex] = ChatMessage(
                         text = aiResponse,
-                        isFromUser = false
+                        isFromUser = false,
+                        isExploreResult = false  // 일반 검색 결과
                     )
                 } else {
                     // Add new AI message for new queries
                     updatedMessages.add(ChatMessage(
                         text = aiResponse,
-                        isFromUser = false
+                        isFromUser = false,
+                        isExploreResult = false  // 일반 검색 결과
                     ))
                 }
+            }
+
+            messages = updatedMessages
+        }
+
+        // 탐색 응답 전용 콜백 추가
+        activity.chatService.exploreResponseCallback = { aiResponse ->
+            Log.d("ChatScreen", "Received explore response: $aiResponse")
+            val updatedMessages = messages.toMutableList()
+
+            // 탐색 네비게이션 중일 때 마지막 탐색 메시지 찾아서 업데이트
+            val lastExploreMessageIndex = updatedMessages.indexOfLast {
+                !it.isFromUser && !it.isWaiting && it.isExploreResult
+            }
+
+            if (lastExploreMessageIndex >= 0 && showNavigation) {
+                // 기존 탐색 메시지 업데이트
+                updatedMessages[lastExploreMessageIndex] = ChatMessage(
+                    text = aiResponse,
+                    isFromUser = false,
+                    isExploreResult = true  // 탐색 결과임을 유지
+                )
+            } else {
+                // 새로운 탐색 메시지 추가
+                updatedMessages.add(ChatMessage(
+                    text = aiResponse,
+                    isFromUser = false,
+                    isExploreResult = true  // 탐색 결과임을 표시
+                ))
             }
 
             messages = updatedMessages
@@ -2355,6 +2387,7 @@ fun ChatScreen(
     DisposableEffect(Unit) {
         onDispose {
             activity.chatService.responseCallback = null
+            activity.chatService.exploreResponseCallback = null
             activity.chatService.navigationCallback = null
         }
     }
@@ -2877,10 +2910,11 @@ private fun performExplore(
                     // UI 스레드에서 처리
                     activity.runOnUiThread {
                         if (generatedQuery != null && queryResponse != null) {
-                            // 생성된 질문을 메시지로 추가
+                            // 생성된 질문을 메시지로 추가 - isExploreResult = true
                             val exploreMessage = ChatMessage(
                                 text = "🔍 탐색: $generatedQuery",
-                                isFromUser = false
+                                isFromUser = false,
+                                isExploreResult = true  // 탐색 메시지임을 표시
                             )
                             var messages = currentMessages + exploreMessage
 
@@ -2891,7 +2925,8 @@ private fun performExplore(
                                     val content = queryResponse.optString("content", "응답 없음")
                                     val responseMessage = ChatMessage(
                                         text = content,
-                                        isFromUser = false
+                                        isFromUser = false,
+                                        isExploreResult = true  // 탐색 결과임을 표시
                                     )
                                     messages = messages + responseMessage
                                     updateMessages(messages)
@@ -2923,7 +2958,8 @@ private fun performExplore(
 
                                             searchResults.add(ChatMessage(
                                                 text = resultText.toString(),
-                                                isFromUser = false
+                                                isFromUser = false,
+                                                isExploreResult = true  // 탐색 결과임을 표시
                                             ))
                                         }
 
@@ -2945,7 +2981,8 @@ private fun performExplore(
                                     } else {
                                         val responseMessage = ChatMessage(
                                             text = "검색 결과가 없습니다.",
-                                            isFromUser = false
+                                            isFromUser = false,
+                                            isExploreResult = true  // 탐색 결과임을 표시
                                         )
                                         messages = messages + responseMessage
                                         updateMessages(messages)
@@ -3021,7 +3058,11 @@ fun MessageItem(message: ChatMessage) {
                 .widthIn(max = 280.dp)
                 .wrapContentWidth(),
             colors = CardDefaults.cardColors(
-                containerColor = if (message.isFromUser) Color(0xFFc6f584) else Color(0xFFE0E0E0)
+                containerColor = when {
+                    message.isFromUser -> Color(0xFFc6f584)  // 사용자 메시지
+                    message.isExploreResult -> Color(0xFFfacfbc)  // 탐색 결과 - 새로운 색상
+                    else -> Color(0xFFE0E0E0)  // 일반 AI 메시지
+                }
             ),
             shape = RoundedCornerShape(
                 topStart = if (message.isFromUser) 12.dp else 2.dp,
@@ -3135,5 +3176,6 @@ data class ChatMessage(
     val text: String,
     val isFromUser: Boolean,
     val timestamp: Long = System.currentTimeMillis(),
-    val isWaiting: Boolean = false
+    val isWaiting: Boolean = false,
+    val isExploreResult: Boolean = false
 )
