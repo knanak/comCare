@@ -90,6 +90,11 @@ class MainActivity : ComponentActivity() {
     private var userLongitude: Double = 0.0
     private var user_add: String = "" // 전체 주소를 저장하는 변수
 
+
+    // State 업데이트를 위한 콜백 추가
+    private var locationUpdateCallback: ((String, String) -> Unit)? = null
+
+
     companion object {
         private const val LOCATION_PERMISSION_REQUEST_CODE = 1001
         private const val TAG = "Location"
@@ -139,6 +144,17 @@ class MainActivity : ComponentActivity() {
             // 위치 정보를 State로 관리 - 초기값 설정
             var userCityState by remember { mutableStateOf("위치 확인 중...") }
             var userDistrictState by remember { mutableStateOf("위치 확인 중...") }
+
+            // State 업데이트 콜백 설정
+            DisposableEffect(Unit) {
+                locationUpdateCallback = { city, district ->
+                    userCityState = city
+                    userDistrictState = district
+                }
+                onDispose {
+                    locationUpdateCallback = null
+                }
+            }
 
             var locationPermissionGranted by remember { mutableStateOf(false) }
             var showLocationPermissionDialog by remember { mutableStateOf(false) }
@@ -270,8 +286,9 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
     // 위치 정보를 가져오는 함수
-    private fun getLastKnownLocation(callback: (String, String) -> Unit) {
+    fun getLastKnownLocation(callback: (String, String) -> Unit) {
         if (ActivityCompat.checkSelfPermission(
                 this,
                 Manifest.permission.ACCESS_FINE_LOCATION
@@ -295,6 +312,13 @@ class MainActivity : ComponentActivity() {
 
                 // Geocoder를 사용하여 좌표를 주소로 변환
                 getAddressFromLocation(location.latitude, location.longitude) { city, district ->
+                    // 클래스 변수 업데이트
+                    userCity = city
+                    userDistrict = district
+
+                    // State 업데이트 콜백 호출
+                    locationUpdateCallback?.invoke(city, district)
+
                     callback(city, district)
                 }
             } else {
@@ -307,6 +331,9 @@ class MainActivity : ComponentActivity() {
             callback("", "")
         }
     }
+
+    // 새로운 위치 데이터 요청
+// MainActivity.kt의 requestNewLocationData 함수 수정
 
     // 새로운 위치 데이터 요청
     private fun requestNewLocationData(callback: (String, String) -> Unit) {
@@ -339,6 +366,13 @@ class MainActivity : ComponentActivity() {
                     Log.d(TAG, "새로운 위치 정보 획득 - 위도: $userLatitude, 경도: $userLongitude")
 
                     getAddressFromLocation(location.latitude, location.longitude) { city, district ->
+                        // 클래스 변수 업데이트
+                        userCity = city
+                        userDistrict = district
+
+                        // State 업데이트 콜백 호출
+                        locationUpdateCallback?.invoke(city, district)
+
                         callback(city, district)
                     }
                 } else {
@@ -974,9 +1008,75 @@ fun PlaceComparisonApp(
 
         // Content based on the current section
         when (currentSection) {
+            // MainActivity.kt의 home 섹션 수정
+// when (currentSection) { "home" -> { 부분을 다음과 같이 수정:
+
             "home" -> {
                 // Define the new color
                 val highlightColor = Color(0xFFf3f04d) // The #f3f04d color
+
+                // 위치 권한 상태 확인
+                val context = LocalContext.current
+                var showLocationPermissionDialog by remember { mutableStateOf(false) }
+
+                // 위치 권한 런처
+                val locationPermissionLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.RequestMultiplePermissions()
+                ) { permissions ->
+                    val fineLocationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
+                    val coarseLocationGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
+
+                    if (fineLocationGranted || coarseLocationGranted) {
+                        // 권한이 승인되면 MainActivity의 위치 정보 가져오기 함수 호출
+                        (context as? MainActivity)?.let { activity ->
+                            activity.getLastKnownLocation { city, district ->
+                                // 위치 정보가 업데이트되면 자동으로 UI가 재구성됨
+                            }
+                        }
+                    }
+                }
+
+                // home 섹션 진입 시 위치 권한 확인
+                LaunchedEffect(currentSection) {
+                    if (currentSection == "home" && userCity == "위치 권한 없음") {
+                        // 권한이 없는 경우 다이얼로그 표시
+                        showLocationPermissionDialog = true
+                    }
+                }
+
+                // 위치 권한 요청 다이얼로그
+                if (showLocationPermissionDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showLocationPermissionDialog = false },
+                        title = { Text("위치 정보 필요") },
+                        text = {
+                            Text("오비서가 회원님 지역의 맞춤 정보를 제공하기 위해 위치 권한이 필요합니다. 위치 정보를 허용하시겠습니까?")
+                        },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    showLocationPermissionDialog = false
+                                    // 위치 권한 요청
+                                    locationPermissionLauncher.launch(
+                                        arrayOf(
+                                            Manifest.permission.ACCESS_FINE_LOCATION,
+                                            Manifest.permission.ACCESS_COARSE_LOCATION
+                                        )
+                                    )
+                                }
+                            ) {
+                                Text("허용")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(
+                                onClick = { showLocationPermissionDialog = false }
+                            ) {
+                                Text("거부")
+                            }
+                        }
+                    )
+                }
 
                 // Replace Column with a scrollable container
                 Box(
@@ -1010,14 +1110,15 @@ fun PlaceComparisonApp(
 
                                     // 사용자 위치 기반 필터링된 시설 목록
                                     val locationFilteredPlaces = remember(viewModel.filteredPlaces.value, userCity, userDistrict) {
-                                        if (userCity.isNotEmpty() && userDistrict.isNotEmpty()) {
-                                            // 사용자 위치 정보가 있는 경우
+                                        if (userCity.isNotEmpty() && userDistrict.isNotEmpty() &&
+                                            userCity != "위치 권한 없음" && userDistrict != "위치 권한 없음") {
+                                            // 유효한 위치 정보가 있는 경우
                                             viewModel.filteredPlaces.value.filter { place ->
                                                 place.address.contains(userCity) &&
                                                         (place.district == userDistrict || place.address.contains(userDistrict))
                                             }
                                         } else {
-                                            // 위치 정보가 없는 경우 전체 목록 사용
+                                            // 위치 정보가 없거나 권한이 없는 경우 전체 목록 사용
                                             viewModel.filteredPlaces.value
                                         }
                                     }
@@ -1091,18 +1192,6 @@ fun PlaceComparisonApp(
                                                 )
                                             }
                                         }
-                                    } else if (viewModel.filteredPlaces.value.isNotEmpty()) {
-                                        // 사용자 위치에 맞는 시설이 없지만 전체 시설 데이터는 있는 경우
-                                        Text(
-                                            "${userCity} ${userDistrict} 지역에 시설 정보가 없습니다.",
-                                            style = MaterialTheme.typography.bodyLarge
-                                        )
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                        Text(
-                                            "다른 지역의 시설을 확인해보세요.",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = Color.Gray
-                                        )
                                     } else {
                                         Text(
                                             "시설 정보를 불러오는 중...",
@@ -1135,8 +1224,9 @@ fun PlaceComparisonApp(
                                     // 사용자 위치 기반 필터링된 일자리 목록
                                     val allJobs = viewModel.jobs.value + viewModel.kkJobs.value
                                     val locationFilteredJobs = remember(allJobs, userCity, userDistrict) {
-                                        if (userCity.isNotEmpty() && userDistrict.isNotEmpty()) {
-                                            // 사용자 위치 정보가 있는 경우
+                                        if (userCity.isNotEmpty() && userDistrict.isNotEmpty() &&
+                                            userCity != "위치 권한 없음" && userDistrict != "위치 권한 없음") {
+                                            // 유효한 위치 정보가 있는 경우
                                             allJobs.filter { job ->
                                                 when (job) {
                                                     is SupabaseDatabaseHelper.Job -> {
@@ -1151,7 +1241,7 @@ fun PlaceComparisonApp(
                                                 }
                                             }
                                         } else {
-                                            // 위치 정보가 없는 경우 전체 목록 사용
+                                            // 위치 정보가 없거나 권한이 없는 경우 전체 목록 사용
                                             allJobs
                                         }
                                     }
@@ -1260,18 +1350,6 @@ fun PlaceComparisonApp(
                                                 )
                                             }
                                         }
-                                    } else if (allJobs.isNotEmpty()) {
-                                        // 사용자 위치에 맞는 일자리가 없지만 전체 일자리 데이터는 있는 경우
-                                        Text(
-                                            "${userCity} ${userDistrict} 지역에 일자리 정보가 없습니다.",
-                                            style = MaterialTheme.typography.bodyLarge
-                                        )
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                        Text(
-                                            "다른 지역의 일자리를 확인해보세요.",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = Color.Gray
-                                        )
                                     } else {
                                         Text(
                                             "일자리 정보를 불러오는 중...",
@@ -1306,8 +1384,9 @@ fun PlaceComparisonApp(
 
                                     // 사용자 위치 기반 필터링된 문화 강좌 목록
                                     val locationFilteredCultures = remember(allCultures, userCity, userDistrict) {
-                                        if (userCity.isNotEmpty() && userDistrict.isNotEmpty()) {
-                                            // 사용자 위치 정보가 있는 경우
+                                        if (userCity.isNotEmpty() && userDistrict.isNotEmpty() &&
+                                            userCity != "위치 권한 없음" && userDistrict != "위치 권한 없음") {
+                                            // 유효한 위치 정보가 있는 경우
                                             allCultures.filter { culture ->
                                                 when (culture) {
                                                     is SupabaseDatabaseHelper.Lecture -> {
@@ -1323,7 +1402,7 @@ fun PlaceComparisonApp(
                                                 }
                                             }
                                         } else {
-                                            // 위치 정보가 없는 경우 전체 목록 사용
+                                            // 위치 정보가 없거나 권한이 없는 경우 전체 목록 사용
                                             allCultures
                                         }
                                     }
@@ -1441,18 +1520,6 @@ fun PlaceComparisonApp(
                                                 )
                                             }
                                         }
-                                    } else if (allCultures.isNotEmpty()) {
-                                        // 사용자 위치에 맞는 문화 강좌가 없지만 전체 문화 데이터는 있는 경우
-                                        Text(
-                                            "${userCity} ${userDistrict} 지역에 문화 강좌 정보가 없습니다.",
-                                            style = MaterialTheme.typography.bodyLarge
-                                        )
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                        Text(
-                                            "다른 지역의 문화 강좌를 확인해보세요.",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = Color.Gray
-                                        )
                                     } else {
                                         Text(
                                             "문화 강좌 정보를 불러오는 중...",
