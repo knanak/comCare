@@ -2547,160 +2547,92 @@ fun ChatScreen(
                                 }
                             }
                         } else {
-                            // ChatScreen의 탐색 버튼 onClick 부분 수정
-                            // ChatScreen의 탐색 버튼 onClick 부분 수정
+                            // 위치 권한 확인을 위한 상태와 런처 추가
+                            var showLocationPermissionDialog by remember { mutableStateOf(false) }
+
+                            // 위치 권한 런처
+                            val locationPermissionLauncher = rememberLauncherForActivityResult(
+                                contract = ActivityResultContracts.RequestMultiplePermissions()
+                            ) { permissions ->
+                                val fineLocationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
+                                val coarseLocationGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
+
+                                if (fineLocationGranted || coarseLocationGranted) {
+                                    // 권한이 승인되면 위치 정보 가져오기
+                                    Toast.makeText(activity, "위치 정보를 가져오는 중...", Toast.LENGTH_SHORT).show()
+
+                                    // MainActivity의 위치 정보 가져오기 함수 호출
+                                    activity.getLastKnownLocation { city, district ->
+                                        if (city.isNotEmpty() && district.isNotEmpty()) {
+                                            // 위치 정보를 성공적으로 가져온 후 탐색 실행
+                                            performExplore(activity, city, district, messages) { newMessages ->
+                                                messages = newMessages
+                                            }
+                                        } else {
+                                            Toast.makeText(activity, "위치 정보를 가져올 수 없습니다.", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                } else {
+                                    Toast.makeText(activity, "위치 권한이 필요합니다.", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+
+                            // 위치 권한 요청 다이얼로그
+                            if (showLocationPermissionDialog) {
+                                AlertDialog(
+                                    onDismissRequest = { showLocationPermissionDialog = false },
+                                    title = { Text("위치 정보 필요") },
+                                    text = {
+                                        Text("탐색 기능은 회원님 지역의 맞춤 정보를 제공하기 위해 위치 권한이 필요합니다. 위치 정보를 허용하시겠습니까?")
+                                    },
+                                    confirmButton = {
+                                        TextButton(
+                                            onClick = {
+                                                showLocationPermissionDialog = false
+                                                // 위치 권한 요청
+                                                locationPermissionLauncher.launch(
+                                                    arrayOf(
+                                                        Manifest.permission.ACCESS_FINE_LOCATION,
+                                                        Manifest.permission.ACCESS_COARSE_LOCATION
+                                                    )
+                                                )
+                                            }
+                                        ) {
+                                            Text("허용")
+                                        }
+                                    },
+                                    dismissButton = {
+                                        TextButton(
+                                            onClick = {
+                                                showLocationPermissionDialog = false
+                                                Toast.makeText(activity, "위치 권한 없이는 탐색 기능을 사용할 수 없습니다.", Toast.LENGTH_SHORT).show()
+                                            }
+                                        ) {
+                                            Text("거부")
+                                        }
+                                    }
+                                )
+                            }
+
                             Button(
                                 onClick = {
-                                    // 탐색 시작 토스트 메시지 표시
-                                    Toast.makeText(activity, "탐색 시작", Toast.LENGTH_SHORT).show()
+                                    // 위치 권한 및 위치 정보 확인
+                                    val context = activity as Context
+                                    val hasLocationPermission = ContextCompat.checkSelfPermission(
+                                        context,
+                                        Manifest.permission.ACCESS_FINE_LOCATION
+                                    ) == PackageManager.PERMISSION_GRANTED
 
-                                    // 상세 디버깅 로그
-                                    Log.d("ExploreDebug", "=== 탐색 버튼 클릭 ===")
-                                    Log.d("ExploreDebug", "userCity: '$userCity'")
-                                    Log.d("ExploreDebug", "userDistrict: '$userDistrict'")
-
-                                    // 탐색 버튼 기능 - Flask 서버의 explore 엔드포인트로 연결
-                                    Thread {
-                                        try {
-                                            val url = URL("http://192.168.219.102:5000/explore")
-                                            val connection = url.openConnection() as HttpURLConnection
-                                            connection.requestMethod = "POST"
-                                            connection.setRequestProperty("Content-Type", "application/json")
-                                            connection.doOutput = true
-
-                                            // JSON 데이터 생성
-                                            val jsonObject = JSONObject().apply {
-                                                put("userCity", userCity)
-                                                put("userDistrict", userDistrict)
-                                            }
-
-                                            Log.d("ExploreDebug", "전송할 JSON: ${jsonObject.toString()}")
-
-                                            // 데이터 전송
-                                            connection.outputStream.use { os ->
-                                                val input = jsonObject.toString().toByteArray(Charsets.UTF_8)
-                                                os.write(input, 0, input.size)
-                                            }
-
-                                            // 응답 받기
-                                            val responseCode = connection.responseCode
-                                            if (responseCode == HttpURLConnection.HTTP_OK) {
-                                                val response = connection.inputStream.bufferedReader().use { it.readText() }
-                                                Log.d("ExploreResponse", "서버 응답: $response")
-
-                                                // JSON 응답 파싱
-                                                try {
-                                                    val responseJson = JSONObject(response)
-                                                    val generatedQuery = responseJson.optString("generated_query", null)
-                                                    val queryResponse = responseJson.optJSONObject("query_response")
-
-                                                    // UI 스레드에서 처리
-                                                    activity.runOnUiThread {
-                                                        if (generatedQuery != null && queryResponse != null) {
-                                                            // 생성된 질문을 메시지로 추가
-                                                            val exploreMessage = ChatMessage(
-                                                                text = "🔍 탐색: $generatedQuery",
-                                                                isFromUser = false
-                                                            )
-                                                            messages = messages + exploreMessage
-
-                                                            // 응답 처리
-                                                            val responseType = queryResponse.optString("type")
-                                                            when (responseType) {
-                                                                "llm" -> {
-                                                                    val content = queryResponse.optString("content", "응답 없음")
-                                                                    val responseMessage = ChatMessage(
-                                                                        text = content,
-                                                                        isFromUser = false
-                                                                    )
-                                                                    messages = messages + responseMessage
-
-                                                                    // LLM 응답은 단일 결과이므로 네비게이션 필요 없음
-                                                                    showNavigation = false
-                                                                }
-                                                                "pinecone" -> {
-                                                                    val results = queryResponse.optJSONArray("results")
-                                                                    val category = queryResponse.optString("category", "")
-
-                                                                    if (results != null && results.length() > 0) {
-                                                                        // 검색 결과를 개별 메시지로 저장
-                                                                        val searchResults = mutableListOf<ChatMessage>()
-
-                                                                        for (i in 0 until results.length()) {
-                                                                            val result = results.getJSONObject(i)
-                                                                            val title = result.optString("title", "제목 없음")
-                                                                            val content = result.optString("content", "내용 없음")
-                                                                            val resultCategory = result.optString("category", "")
-
-                                                                            val resultText = StringBuilder()
-                                                                            resultText.append("📋 ${category} 검색 결과 ${i + 1}/${results.length()}\n\n")
-                                                                            resultText.append("🏢 $title\n")
-                                                                            if (resultCategory.isNotEmpty()) {
-                                                                                resultText.append("📍 $resultCategory\n")
-                                                                            }
-                                                                            resultText.append("\n$content")
-
-                                                                            searchResults.add(ChatMessage(
-                                                                                text = resultText.toString(),
-                                                                                isFromUser = false
-                                                                            ))
-                                                                        }
-
-                                                                        // ChatService를 통해 검색 결과 설정
-                                                                        activity.chatService.setSearchResults(searchResults)
-
-                                                                        // 첫 번째 결과 표시
-                                                                        if (searchResults.isNotEmpty()) {
-                                                                            messages = messages + searchResults[0]
-
-                                                                            // 검색 결과가 여러 개인 경우 네비게이션 표시
-                                                                            if (searchResults.size > 1) {
-                                                                                showNavigation = true
-                                                                                hasPrevious = false
-                                                                                hasNext = true
-                                                                                currentPage = 1
-                                                                                totalPages = searchResults.size
-                                                                            } else {
-                                                                                showNavigation = false
-                                                                            }
-                                                                        }
-                                                                    } else {
-                                                                        val responseMessage = ChatMessage(
-                                                                            text = "검색 결과가 없습니다.",
-                                                                            isFromUser = false
-                                                                        )
-                                                                        messages = messages + responseMessage
-                                                                        showNavigation = false
-                                                                    }
-                                                                }
-                                                            }
-
-                                                            Toast.makeText(activity, "탐색이 완료되었습니다.", Toast.LENGTH_SHORT).show()
-                                                        } else {
-                                                            Toast.makeText(activity, "탐색 결과가 없습니다.", Toast.LENGTH_SHORT).show()
-                                                        }
-                                                    }
-                                                } catch (e: Exception) {
-                                                    Log.e("ExploreError", "JSON 파싱 오류: ${e.message}")
-                                                    activity.runOnUiThread {
-                                                        Toast.makeText(activity, "응답 처리 중 오류가 발생했습니다.", Toast.LENGTH_SHORT).show()
-                                                    }
-                                                }
-                                            } else {
-                                                Log.e("ExploreError", "HTTP error code: $responseCode")
-                                                activity.runOnUiThread {
-                                                    Toast.makeText(activity, "탐색 중 오류가 발생했습니다.", Toast.LENGTH_SHORT).show()
-                                                }
-                                            }
-
-                                            connection.disconnect()
-                                        } catch (e: Exception) {
-                                            Log.e("ExploreError", "Error: ${e.message}", e)
-                                            activity.runOnUiThread {
-                                                Toast.makeText(activity, "서버 연결에 실패했습니다.", Toast.LENGTH_SHORT).show()
-                                            }
+                                    if (!hasLocationPermission || userCity.isEmpty() || userDistrict.isEmpty() ||
+                                        userCity == "위치 권한 없음" || userDistrict == "위치 권한 없음") {
+                                        // 위치 권한이 없거나 위치 정보가 없는 경우 다이얼로그 표시
+                                        showLocationPermissionDialog = true
+                                    } else {
+                                        // 위치 정보가 있는 경우 탐색 실행
+                                        performExplore(activity, userCity, userDistrict, messages) { newMessages ->
+                                            messages = newMessages
                                         }
-                                    }.start()
+                                    }
                                 },
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = Color(0xFFfba064),
@@ -2889,6 +2821,164 @@ fun ChatScreen(
             }
         }
     }
+}
+
+// 탐색 실행 함수 (기존 탐색 로직을 함수로 분리)
+private fun performExplore(
+    activity: MainActivity,
+    userCity: String,
+    userDistrict: String,
+    currentMessages: List<ChatMessage>,
+    updateMessages: (List<ChatMessage>) -> Unit
+) {
+    // 탐색 시작 토스트 메시지 표시
+    Toast.makeText(activity, "탐색 시작", Toast.LENGTH_SHORT).show()
+
+    // 상세 디버깅 로그
+    Log.d("ExploreDebug", "=== 탐색 버튼 클릭 ===")
+    Log.d("ExploreDebug", "userCity: '$userCity'")
+    Log.d("ExploreDebug", "userDistrict: '$userDistrict'")
+
+    // 탐색 버튼 기능 - Flask 서버의 explore 엔드포인트로 연결
+    Thread {
+        try {
+            val url = URL("http://192.168.219.102:5000/explore")
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "POST"
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.doOutput = true
+
+            // JSON 데이터 생성
+            val jsonObject = JSONObject().apply {
+                put("userCity", userCity)
+                put("userDistrict", userDistrict)
+            }
+
+            Log.d("ExploreDebug", "전송할 JSON: ${jsonObject.toString()}")
+
+            // 데이터 전송
+            connection.outputStream.use { os ->
+                val input = jsonObject.toString().toByteArray(Charsets.UTF_8)
+                os.write(input, 0, input.size)
+            }
+
+            // 응답 받기
+            val responseCode = connection.responseCode
+            if (responseCode == HttpURLConnection.HTTP_OK) {
+                val response = connection.inputStream.bufferedReader().use { it.readText() }
+                Log.d("ExploreResponse", "서버 응답: $response")
+
+                // JSON 응답 파싱
+                try {
+                    val responseJson = JSONObject(response)
+                    val generatedQuery = responseJson.optString("generated_query", null)
+                    val queryResponse = responseJson.optJSONObject("query_response")
+
+                    // UI 스레드에서 처리
+                    activity.runOnUiThread {
+                        if (generatedQuery != null && queryResponse != null) {
+                            // 생성된 질문을 메시지로 추가
+                            val exploreMessage = ChatMessage(
+                                text = "🔍 탐색: $generatedQuery",
+                                isFromUser = false
+                            )
+                            var messages = currentMessages + exploreMessage
+
+                            // 응답 처리
+                            val responseType = queryResponse.optString("type")
+                            when (responseType) {
+                                "llm" -> {
+                                    val content = queryResponse.optString("content", "응답 없음")
+                                    val responseMessage = ChatMessage(
+                                        text = content,
+                                        isFromUser = false
+                                    )
+                                    messages = messages + responseMessage
+                                    updateMessages(messages)
+
+                                    // LLM 응답은 단일 결과이므로 네비게이션 필요 없음
+                                    activity.chatService.navigationCallback?.invoke(false, false, 0, 0)
+                                }
+                                "pinecone" -> {
+                                    val results = queryResponse.optJSONArray("results")
+                                    val category = queryResponse.optString("category", "")
+
+                                    if (results != null && results.length() > 0) {
+                                        // 검색 결과를 개별 메시지로 저장
+                                        val searchResults = mutableListOf<ChatMessage>()
+
+                                        for (i in 0 until results.length()) {
+                                            val result = results.getJSONObject(i)
+                                            val title = result.optString("title", "제목 없음")
+                                            val content = result.optString("content", "내용 없음")
+                                            val resultCategory = result.optString("category", "")
+
+                                            val resultText = StringBuilder()
+                                            resultText.append("📋 ${category} 검색 결과 ${i + 1}/${results.length()}\n\n")
+                                            resultText.append("🏢 $title\n")
+                                            if (resultCategory.isNotEmpty()) {
+                                                resultText.append("📍 $resultCategory\n")
+                                            }
+                                            resultText.append("\n$content")
+
+                                            searchResults.add(ChatMessage(
+                                                text = resultText.toString(),
+                                                isFromUser = false
+                                            ))
+                                        }
+
+                                        // ChatService를 통해 검색 결과 설정
+                                        activity.chatService.setSearchResults(searchResults)
+
+                                        // 첫 번째 결과 표시
+                                        if (searchResults.isNotEmpty()) {
+                                            messages = messages + searchResults[0]
+                                            updateMessages(messages)
+
+                                            // 검색 결과가 여러 개인 경우 네비게이션 표시
+                                            if (searchResults.size > 1) {
+                                                activity.chatService.navigationCallback?.invoke(
+                                                    false, true, 1, searchResults.size
+                                                )
+                                            }
+                                        }
+                                    } else {
+                                        val responseMessage = ChatMessage(
+                                            text = "검색 결과가 없습니다.",
+                                            isFromUser = false
+                                        )
+                                        messages = messages + responseMessage
+                                        updateMessages(messages)
+                                    }
+                                }
+                            }
+
+                            Toast.makeText(activity, "탐색이 완료되었습니다.", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(activity, "탐색 결과가 없습니다.", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e("ExploreError", "JSON 파싱 오류: ${e.message}")
+                    activity.runOnUiThread {
+                        Toast.makeText(activity, "응답 처리 중 오류가 발생했습니다.", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } else {
+                Log.e("ExploreError", "HTTP error code: $responseCode")
+                activity.runOnUiThread {
+                    Toast.makeText(activity, "탐색 중 오류가 발생했습니다.", Toast.LENGTH_SHORT).show()
+                }
+            }
+
+            connection.disconnect()
+        } catch (e: Exception) {
+            Log.e("ExploreError", "Error: ${e.message}", e)
+            activity.runOnUiThread {
+                Toast.makeText(activity, "서버 연결에 실패했습니다.", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }.start()
 }
 
 // Helper function to send a message
