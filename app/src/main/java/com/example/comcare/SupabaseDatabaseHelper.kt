@@ -1626,4 +1626,143 @@ class SupabaseDatabaseHelper(private val context: Context) {
             null
         }
     }
+
+    // SupabaseDatabaseHelper.kt에 추가할 내용
+
+    // 9. ICH_Facility2 data
+    @Serializable
+    data class ICHFacility2(
+        val Id: Int,
+        val Category: String? = null,
+        val Title: String? = null,
+        val Service1: String? = null,
+        val Service2: String? = null,
+        val Address: String? = null,
+        val Institution: String? = null,
+        val Tel: String? = null
+    )
+
+    suspend fun getICHFacility2s(): List<ICHFacility2> {
+        return try {
+            Log.d("supabase", "Starting getICHFacility2s")
+
+            withContext(Dispatchers.IO) {
+                try {
+                    // First get the total count
+                    val totalCount = supabase.postgrest["ich_facility2"]
+                        .select(head = true, count = Count.EXACT)
+                        .count() ?: 0L
+
+                    Log.d("supabase", "Total count of ich_facility2s: $totalCount")
+
+                    if (totalCount == 0L) {
+                        Log.d("supabase", "No facilities found in the 'ich_facility2' table")
+                        return@withContext emptyList<ICHFacility2>()
+                    }
+
+                    // Use the same approach - first make a test request
+                    val testBatch = supabase.postgrest["ich_facility2"]
+                        .select()
+                        .decodeList<ICHFacility2>()
+
+                    // The batch size is whatever limit Supabase applied to our first request
+                    val batchSize = testBatch.size
+                    Log.d("supabase", "Detected batch size from Supabase: $batchSize")
+
+                    // Now we know the batch size, fetch all records
+                    val allICHFacility2s = mutableListOf<ICHFacility2>()
+
+                    // Add the first batch
+                    allICHFacility2s.addAll(testBatch)
+
+                    var currentStart = batchSize
+
+                    // Continue fetching until we have all records
+                    while (currentStart < totalCount) {
+                        val currentEnd = currentStart + batchSize - 1
+                        Log.d("supabase", "Fetching ich_facility2s batch: $currentStart to $currentEnd")
+
+                        try {
+                            // Fetch a batch using range
+                            val batch = supabase.postgrest["ich_facility2"]
+                                .select(filter = {
+                                    range(from = currentStart.toLong(), to = currentEnd.toLong())
+                                })
+                                .decodeList<ICHFacility2>()
+
+                            Log.d("supabase", "Fetched batch of ${batch.size} ich_facility2s")
+
+                            allICHFacility2s.addAll(batch)
+
+                            // If we got an empty batch or fewer items than requested, we might be done
+                            if (batch.isEmpty() || batch.size < batchSize) {
+                                break
+                            }
+
+                            // Move to next batch
+                            currentStart += batchSize
+                        } catch (e: Exception) {
+                            Log.e("supabase", "Error fetching ich_facility2s batch $currentStart-$currentEnd: ${e.message}", e)
+                            e.printStackTrace()
+                            // Continue to next batch despite error
+                            currentStart += batchSize
+                        }
+                    }
+
+                    Log.d("supabase", "Retrieved ${allICHFacility2s.size} ich_facility2s out of $totalCount total")
+
+                    // Verify we got all records
+                    if (allICHFacility2s.size < totalCount) {
+                        Log.w("supabase", "Warning: Retrieved fewer records than expected (${allICHFacility2s.size} vs $totalCount)")
+                    }
+
+                    // Log a sample facility for debugging
+                    if (allICHFacility2s.isNotEmpty()) {
+                        val sample = allICHFacility2s.first()
+                        Log.d("supabase", "Sample ich_facility2: id=${sample.Id}, " +
+                                "title=${sample.Title}, " +
+                                "category=${sample.Category}, " +
+                                "address=${sample.Address}, " +
+                                "institution=${sample.Institution}")
+                    }
+
+                    allICHFacility2s
+                } catch (e: Exception) {
+                    Log.e("supabase", "Error in getICHFacility2s inner block: ${e.message}", e)
+                    e.printStackTrace()
+                    emptyList()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("supabase", "Error in getICHFacility2s: ${e.message}", e)
+            e.printStackTrace()
+            emptyList()
+        }
+    }
+
+    // Also add a function to get a specific ich_facility2 by ID
+    suspend fun getICHFacility2ById(ichFacility2Id: Int): ICHFacility2? {
+        return try {
+            withContext(Dispatchers.IO) {
+                val response = supabase.postgrest.from("ich_facility2")
+                    .select(
+                        filter = {
+                            eq("id", ichFacility2Id)
+                        }
+                    )
+                    .decodeSingleOrNull<ICHFacility2>()
+
+                if (response != null) {
+                    Log.d(TAG, "Retrieved ich_facility2 with ID: $ichFacility2Id")
+                    response
+                } else {
+                    Log.d(TAG, "No ich_facility2 found with ID: $ichFacility2Id")
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching ich_facility2 by ID: ${e.message}")
+            null
+        }
+    }
 }

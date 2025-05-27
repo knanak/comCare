@@ -174,6 +174,13 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
     val isLoadingICHCultures: Boolean
         get() = _isLoadingICHCultures.value
 
+    // ich_facility2 관련 추가
+    private val _ichFacility2s = mutableStateOf<List<SupabaseDatabaseHelper.ICHFacility2>>(emptyList())
+    val ichFacility2s: State<List<SupabaseDatabaseHelper.ICHFacility2>> = _ichFacility2s
+
+    private val _isLoadingICHFacility2s = mutableStateOf<Boolean>(false)
+    val isLoadingICHFacility2s: Boolean
+        get() = _isLoadingICHFacility2s.value
     init {
         // Fetch data when ViewModel is initialized
         fetchPlacesData()
@@ -184,6 +191,7 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
         fetchKKFacilitiesData()
         fetchKKFacility2sData()
         fetchICHFacilitiesData()
+        fetchICHFacility2sData()
         fetchICHJobsData()
         fetchICHCulturesData()
     }
@@ -238,15 +246,20 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
                     fetchKKFacility2DataAsPlaces()
                 }
 
-                // Get ICH Facility data (추가)
+                // Get ICH Facility data
                 val ichFacilityData = withContext(Dispatchers.IO) {
                     fetchICHFacilityDataAsPlaces()
                 }
 
-                // Combine all datasets (ich_facility 포함)
-                val combinedData = apiData + supabaseData + kkFacilityData + kkFacility2Data + ichFacilityData
+                // Get ICH Facility2 data (추가)
+                val ichFacility2Data = withContext(Dispatchers.IO) {
+                    fetchICHFacility2DataAsPlaces()
+                }
 
-                // Process the combined data - 미리 정의된 데이터를 사용하므로 processLocationCategories 호출하지 않음
+                // Combine all datasets (ich_facility2 포함)
+                val combinedData = apiData + supabaseData + kkFacilityData + kkFacility2Data + ichFacilityData + ichFacility2Data
+
+                // Process the combined data
                 processServiceCategories(combinedData)
 
                 _allPlaces.value = combinedData
@@ -255,7 +268,7 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
                 Log.d("PlaceViewModel", "Data fetch complete: ${combinedData.size} total items " +
                         "(${apiData.size} API, ${supabaseData.size} Supabase, " +
                         "${kkFacilityData.size} KK Facility, ${kkFacility2Data.size} KK Facility2, " +
-                        "${ichFacilityData.size} ICH Facility)")
+                        "${ichFacilityData.size} ICH Facility, ${ichFacility2Data.size} ICH Facility2)")
 
             } catch (e: Exception) {
                 Log.e("PlaceViewModel", "Error fetching data", e)
@@ -268,6 +281,112 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
 
                 // Process sample data
                 processServiceCategories(sampleData)
+            }
+        }
+    }
+
+    private suspend fun fetchICHFacility2DataAsPlaces(): List<Place> {
+        return try {
+            Log.d("PlaceViewModel", "Starting ICH Facility2 data fetch as Places")
+
+            val ichFacility2s = supabaseHelper.getICHFacility2s()
+            Log.d("PlaceViewModel", "ICH Facility2 getICHFacility2s returned ${ichFacility2s.size} items")
+
+            if (ichFacility2s.isEmpty()) {
+                Log.d("PlaceViewModel", "ICH Facility2 returned empty list")
+                return emptyList()
+            }
+
+            // ICH Facility2 데이터를 Place 객체로 매핑
+            val places = ichFacility2s.map { facility ->
+                try {
+                    // 주소에서 도시와 구/군 정보 추출
+                    val addressParts = facility.Address?.trim()?.split(" ") ?: emptyList()
+                    val city = if (addressParts.isNotEmpty()) addressParts[0] else ""
+                    val district = if (addressParts.size > 1) addressParts[1] else ""
+
+                    Place(
+                        id = "ich2_${facility.Id}",
+                        name = facility.Title ?: "이름 없음",
+                        facilityCode = "",
+                        facilityKind = facility.Service2 ?: "",
+                        facilityKindDetail = facility.Service1 ?: "복지시설",
+                        district = district,
+                        address = facility.Address ?: "",
+                        tel = facility.Tel ?: "",
+                        zipCode = "",
+                        service1 = listOf(facility.Service1 ?: "복지시설"),
+                        service2 = listOf(facility.Service2 ?: ""),
+                        rating = "",
+                        rating_year = "",
+                        full = "0",
+                        now = "0",
+                        wating = "0",
+                        bus = ""
+                    )
+                } catch (e: Exception) {
+                    Log.e("PlaceViewModel", "Error converting ich_facility2: ${facility.Id}", e)
+                    null
+                }
+            }.filterNotNull()
+
+            Log.d("PlaceViewModel", "ICH Facility2 data fetch complete: ${places.size} items")
+            places
+
+        } catch (e: Exception) {
+            Log.e("PlaceViewModel", "Error fetching ICH Facility2 data", e)
+            emptyList()
+        }
+    }
+
+    fun fetchICHFacility2sData() {
+        viewModelScope.launch {
+            try {
+                Log.d("PlaceViewModel", "Starting ich_facility2s data fetch")
+                _isLoadingICHFacility2s.value = true
+
+                val ichFacility2sData = withContext(Dispatchers.IO) {
+                    try {
+                        val ichFacility2s = supabaseHelper.getICHFacility2s()
+                        Log.d("PlaceViewModel", "Supabase getICHFacility2s returned ${ichFacility2s.size} items")
+
+                        if (ichFacility2s.isEmpty()) {
+                            Log.d("PlaceViewModel", "Supabase ich_facility2s returned empty list")
+                        } else {
+                            // Log first ich_facility2 for debugging
+                            val firstICHFacility2 = ichFacility2s.firstOrNull()
+                            if (firstICHFacility2 != null) {
+                                Log.d(
+                                    "PlaceViewModel", "Sample ich_facility2 data: Id=${firstICHFacility2.Id}, " +
+                                            "title=${firstICHFacility2.Title}, " +
+                                            "category=${firstICHFacility2.Category}, " +
+                                            "address=${firstICHFacility2.Address}"
+                                )
+                            }
+                        }
+                        ichFacility2s
+                    } catch (e: Exception) {
+                        Log.e(
+                            "PlaceViewModel",
+                            "Error in getICHFacility2s Dispatchers.IO block: ${e.message}",
+                            e
+                        )
+                        emptyList()
+                    }
+                }
+
+                // Update the ich_facility2s value with the fetched data
+                _ichFacility2s.value = ichFacility2sData
+
+                // 기존 장소 데이터 다시 가져오기
+                fetchPlacesData()
+
+                Log.d("PlaceViewModel", "ICH_Facility2s data fetch complete: ${ichFacility2sData.size} items")
+            } catch (e: Exception) {
+                Log.e("PlaceViewModel", "Error fetching ich_facility2s data: ${e.message}", e)
+                _ichFacility2s.value = emptyList()
+            } finally {
+                _isLoadingICHFacility2s.value = false
             }
         }
     }
