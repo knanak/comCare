@@ -107,18 +107,14 @@ class MainActivity : ComponentActivity() {
     }
 
     // Add this nested class inside MainActivity
+// MainActivity의 PlaceViewModelFactory 클래스 수정
     class PlaceViewModelFactory(
-        private val supabaseHelper: SupabaseDatabaseHelper,
-        private val userCity: String,
-        private val userDistrict: String
+        private val supabaseHelper: SupabaseDatabaseHelper
     ) : ViewModelProvider.Factory {
         override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(PlaceViewModel::class.java)) {
                 @Suppress("UNCHECKED_CAST")
-                return PlaceViewModel(supabaseHelper).apply {
-                    // 위치 정보 초기화
-                    setUserLocation(userCity, userDistrict)
-                } as T
+                return PlaceViewModel(supabaseHelper) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }
@@ -142,7 +138,7 @@ class MainActivity : ComponentActivity() {
 
             var locationPermissionGranted by remember { mutableStateOf(false) }
             var showLocationPermissionDialog by remember { mutableStateOf(false) }
-            var viewModelFactory by remember { mutableStateOf(PlaceViewModelFactory(supabaseHelper, "", "")) }
+            var viewModelFactory by remember { mutableStateOf(PlaceViewModelFactory(supabaseHelper)) }
 
             // 위치 권한 런처
             val locationPermissionLauncher = rememberLauncherForActivityResult(
@@ -157,10 +153,10 @@ class MainActivity : ComponentActivity() {
                     getLastKnownLocation { city, district ->
                         userCity = city
                         userDistrict = district
-                        // State 업데이트 - 여기가 중요!
+                        // State 업데이트
                         userCityState = city
                         userDistrictState = district
-                        viewModelFactory = PlaceViewModelFactory(supabaseHelper, city, district)
+                        // viewModelFactory 업데이트 제거 - 더 이상 필요 없음
                         Log.d(TAG, "위치 권한 승인 - 위치 정보 획득 완료")
                         Log.d(TAG, "사용자 위치 State 업데이트: $city $district")
                     }
@@ -184,10 +180,10 @@ class MainActivity : ComponentActivity() {
                         getLastKnownLocation { city, district ->
                             userCity = city
                             userDistrict = district
-                            // State 업데이트 - 여기가 중요!
+                            // State 업데이트
                             userCityState = city
                             userDistrictState = district
-                            viewModelFactory = PlaceViewModelFactory(supabaseHelper, city, district)
+                            // viewModelFactory 업데이트 제거
                             Log.d(TAG, "기존 위치 권한 있음 - 위치 정보 획득 완료")
                             Log.d(TAG, "사용자 위치 State 업데이트: $city $district")
                         }
@@ -203,7 +199,6 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
-
             PlaceComparisonTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),

@@ -20,6 +20,32 @@ import kotlin.Exception
 import com.example.comcare.OPEN_API_KEY
 
 class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewModel() {
+    // 미리 정의된 도시와 구/군 데이터
+    private val predefinedCities = listOf("전체", "서울특별시", "경기도", "인천광역시")
+
+    private val predefinedDistricts = mapOf(
+        "전체" to listOf("전체"),
+        "서울특별시" to listOf(
+            "전체", "강남구", "강동구", "강북구", "강서구", "관악구",
+            "광진구", "구로구", "금천구", "노원구", "도봉구",
+            "동대문구", "동작구", "마포구", "서대문구", "서초구",
+            "성동구", "성북구", "송파구", "양천구", "영등포구",
+            "용산구", "은평구", "종로구", "중구", "중랑구"
+        ),
+        "경기도" to listOf(
+            "전체", "가평군", "고양시", "과천시", "광명시", "광주시",
+            "구리시", "군포시", "김포시", "남양주시", "동두천시",
+            "부천시", "성남시", "수원시", "시흥시", "안산시",
+            "안성시", "안양시", "양주시", "양평군", "여주시",
+            "연천군", "오산시", "용인시", "의왕시", "의정부시",
+            "이천시", "파주시", "평택시", "포천시", "하남시", "화성시"
+        ),
+        "인천광역시" to listOf(
+            "전체", "강화군", "계양구", "남동구", "동구", "미추홀구",
+            "부평구", "서구", "연수구", "옹진군", "중구"
+        )
+    )
+
     // 사용자 위치 정보 추가
     private var userCity: String = ""
     private var userDistrict: String = ""
@@ -30,11 +56,11 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
     private val _filteredPlaces = mutableStateOf<List<Place>>(emptyList())
     val filteredPlaces: State<List<Place>> = _filteredPlaces
 
-    // Location hierarchy
-    private val _cities = mutableStateOf<List<String>>(listOf("전체"))
+    // Location hierarchy - 미리 정의된 데이터 사용
+    private val _cities = mutableStateOf<List<String>>(predefinedCities)
     val cities: State<List<String>> = _cities
 
-    private val _districts = mutableStateOf<Map<String, List<String>>>(mapOf("전체" to listOf("전체")))
+    private val _districts = mutableStateOf<Map<String, List<String>>>(predefinedDistricts)
     val districts: State<Map<String, List<String>>> = _districts
 
     // Service hierarchy
@@ -77,11 +103,11 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
     val isLoadingKKJobs: Boolean
         get() = _isLoadingKKJobs.value
 
-    // 통합된 job 위치 정보 (job + kk_job)
-    private val _jobCities = mutableStateOf<List<String>>(listOf("전체"))
+    // 통합된 job 위치 정보 - 미리 정의된 데이터 사용
+    private val _jobCities = mutableStateOf<List<String>>(predefinedCities)
     val jobCities: State<List<String>> = _jobCities
 
-    private val _jobDistricts = mutableStateOf<Map<String, List<String>>>(mapOf("전체" to listOf("전체")))
+    private val _jobDistricts = mutableStateOf<Map<String, List<String>>>(predefinedDistricts)
     val jobDistricts: State<Map<String, List<String>>> = _jobDistricts
 
     // kk_culture 관련 추가
@@ -95,11 +121,11 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
     val isLoadingKKCultures: Boolean
         get() = _isLoadingKKCultures.value
 
-    // 통합된 culture 위치 정보 (lecture + kk_culture)
-    private val _cultureCities = mutableStateOf<List<String>>(listOf("전체"))
+    // 통합된 culture 위치 정보 - 미리 정의된 데이터 사용
+    private val _cultureCities = mutableStateOf<List<String>>(predefinedCities)
     val cultureCities: State<List<String>> = _cultureCities
 
-    private val _cultureDistricts = mutableStateOf<Map<String, List<String>>>(mapOf("전체" to listOf("전체")))
+    private val _cultureDistricts = mutableStateOf<Map<String, List<String>>>(predefinedDistricts)
     val cultureDistricts: State<Map<String, List<String>>> = _cultureDistricts
 
     // kk_facility 관련 추가
@@ -201,8 +227,7 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
                 // Combine all datasets (ich_facility 포함)
                 val combinedData = apiData + supabaseData + kkFacilityData + kkFacility2Data + ichFacilityData
 
-                // Process the combined data
-                processLocationCategories(combinedData)
+                // Process the combined data - 미리 정의된 데이터를 사용하므로 processLocationCategories 호출하지 않음
                 processServiceCategories(combinedData)
 
                 _allPlaces.value = combinedData
@@ -223,7 +248,6 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
                 _filteredPlaces.value = sampleData
 
                 // Process sample data
-                processLocationCategories(sampleData)
                 processServiceCategories(sampleData)
             }
         }
@@ -326,7 +350,7 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
                 // Update the ich_facilities value with the fetched data
                 _ichFacilities.value = ichFacilitiesData
 
-                // 기존 장소 데이터 다시 가져오기 (통합된 위치 정보 업데이트를 위해)
+                // 기존 장소 데이터 다시 가져오기
                 fetchPlacesData()
 
                 Log.d("PlaceViewModel", "ICH_Facilities data fetch complete: ${ichFacilitiesData.size} items")
@@ -436,7 +460,7 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
                 // Update the kk_facilities value with the fetched data
                 _kkFacilities.value = kkFacilitiesData
 
-                // 기존 장소 데이터 다시 가져오기 (통합된 위치 정보 업데이트를 위해)
+                // 기존 장소 데이터 다시 가져오기
                 fetchPlacesData()
 
                 Log.d("PlaceViewModel", "KK_Facilities data fetch complete: ${kkFacilitiesData.size} items")
@@ -543,7 +567,7 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
                 // Update the kk_facility2s value with the fetched data
                 _kkFacility2s.value = kkFacility2sData
 
-                // 기존 장소 데이터 다시 가져오기 (통합된 위치 정보 업데이트를 위해)
+                // 기존 장소 데이터 다시 가져오기
                 fetchPlacesData()
 
                 Log.d("PlaceViewModel", "KK_Facility2s data fetch complete: ${kkFacility2sData.size} items")
@@ -555,7 +579,6 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
             }
         }
     }
-
 
     // 주소에서 도시와 구/군 정보를 추출하는 함수들
     private fun extractCity(address: String): String {
@@ -642,99 +665,6 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
         } catch (e: Exception) {
             Log.e("PlaceViewModel", "Error fetching Supabase data", e)
             emptyList()
-        }
-    }
-
-// PlaceViewModel.kt의 processLocationCategories 함수 수정
-
-    private fun processLocationCategories(places: List<Place>) {
-        // Extract unique cities from addresses
-        val citySet = mutableSetOf<String>()
-        val districtMap = mutableMapOf<String, MutableSet<String>>()
-
-        // Always include "전체" (All) option
-        citySet.add("전체")
-        districtMap["전체"] = mutableSetOf("전체")
-
-        // Extract city and district information from places
-        places.forEach { place ->
-            // Process the address to extract city and district
-            val addressParts = place.address.split(" ")
-
-            if (addressParts.isNotEmpty()) {
-                // 첫 번째 부분을 도시로 사용
-                val city = addressParts[0]
-
-                if (city.isNotEmpty()) {
-                    // Add city if not already added
-                    citySet.add(city)
-
-                    // Initialize district set for this city if needed
-                    if (!districtMap.containsKey(city)) {
-                        districtMap[city] = mutableSetOf("전체")
-                    }
-
-                    // district 필드가 있으면 우선 사용
-                    if (place.district.isNotEmpty()) {
-                        districtMap[city]?.add(place.district)
-                    }
-
-                    // 주소에서도 구/군 정보 추출 시도
-                    if (addressParts.size >= 2) {
-                        val secondPart = addressParts[1]
-
-                        // 두 번째 부분이 구/군/시로 끝나는 경우 district로 추가
-                        if (secondPart.endsWith("구") || secondPart.endsWith("군") || secondPart.endsWith("시")) {
-                            districtMap[city]?.add(secondPart)
-
-                            // ich_facility 데이터인 경우 로그 출력
-                            if (place.id.startsWith("ich_")) {
-                                Log.d("LocationCategories", "ICH facility - City: $city, District from address: $secondPart")
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Convert sets to sorted lists for UI
-        _cities.value = citySet.toList().sorted()
-
-        // Ensure "전체" is always first in cities list
-        if (_cities.value.contains("전체")) {
-            val citiesList = _cities.value.toMutableList()
-            citiesList.remove("전체")
-            citiesList.add(0, "전체")
-            _cities.value = citiesList
-        }
-
-        // Convert district sets to sorted lists with "전체" always first
-        val districtMapSorted = mutableMapOf<String, List<String>>()
-        districtMap.forEach { (city, districts) ->
-            // Create a sorted list of districts
-            val sortedDistricts = districts.filter { it != "전체" }.sorted().toMutableList()
-
-            // Add "전체" at the beginning
-            sortedDistricts.add(0, "전체")
-
-            districtMapSorted[city] = sortedDistricts
-        }
-        _districts.value = districtMapSorted
-
-        // Log the extracted location data
-        _districts.value.forEach { (city, districts) ->
-            Log.d("LocationCategories", "City: $city, Districts: ${districts.joinToString(", ")}")
-        }
-
-        // ich_facility 관련 디버깅 로그
-        val ichFacilities = places.filter { it.id.startsWith("ich_") }
-        if (ichFacilities.isNotEmpty()) {
-            Log.d("LocationCategories", "Total ICH facilities: ${ichFacilities.size}")
-            val ichDistricts = ichFacilities.map { place ->
-                val parts = place.address.split(" ")
-                if (parts.size >= 2) parts[1] else "Unknown"
-            }.distinct()
-            Log.d("LocationCategories", "ICH Districts found: ${ichDistricts.joinToString(", ")}")
         }
     }
 
@@ -1082,9 +1012,6 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
     var lastSearchServiceCategory: String = "전체"
     var lastSearchServiceSubcategory: String = "전체"
 
-    // Apply filters
-// PlaceViewModel.kt의 filterPlaces 함수 수정
-
     fun filterPlaces(
         selectedCity: String,
         selectedDistrict: String,
@@ -1165,85 +1092,6 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
             Log.d("FilterDebug", "Filtered results for 인천광역시 $selectedDistrict: ${_filteredPlaces.value.size} items")
         }
     }
-    // job과 kk_job의 위치 정보를 통합하는 함수
-    private fun processAllJobLocationCategories() {
-        val citySet = mutableSetOf<String>()
-        val districtMap = mutableMapOf<String, MutableSet<String>>()
-
-        // Always include "전체" (All) option
-        citySet.add("전체")
-        districtMap["전체"] = mutableSetOf("전체")
-
-        // Process regular jobs
-        _jobs.value.forEach { job ->
-            val location = job.Location ?: return@forEach
-            val addressParts = location.trim().split(" ")
-
-            if (addressParts.isNotEmpty()) {
-                // 서울특별시 처리
-                if (location.contains("서울")) {
-                    citySet.add("서울특별시")
-                    if (!districtMap.containsKey("서울특별시")) {
-                        districtMap["서울특별시"] = mutableSetOf("전체")
-                    }
-                    // 구 정보 추출
-                    addressParts.forEach { part ->
-                        if (part.endsWith("구")) {
-                            districtMap["서울특별시"]?.add(part)
-                        }
-                    }
-                }
-            }
-        }
-
-        // Process kk_jobs
-        _kkJobs.value.forEach { kkJob ->
-            val location = kkJob.Address ?: return@forEach
-            val addressParts = location.trim().split(" ")
-
-            if (addressParts.size >= 2) {
-                val city = addressParts[0] // 첫 번째 부분이 시/도 (예: "경기도")
-                val district = addressParts[1] // 두 번째 부분이 시/군/구 (예: "평택시")
-
-                if (city.isNotEmpty()) {
-                    citySet.add(city)
-
-                    if (!districtMap.containsKey(city)) {
-                        districtMap[city] = mutableSetOf("전체")
-                    }
-
-                    if (district.isNotEmpty()) {
-                        districtMap[city]?.add(district)
-                    }
-                }
-            }
-        }
-
-        // Convert sets to sorted lists
-        _jobCities.value = citySet.toList().sorted()
-
-        // Ensure "전체" is always first
-        if (_jobCities.value.contains("전체")) {
-            val citiesList = _jobCities.value.toMutableList()
-            citiesList.remove("전체")
-            citiesList.add(0, "전체")
-            _jobCities.value = citiesList
-        }
-
-        // Convert district sets to sorted lists with "전체" always first
-        val districtMapSorted = mutableMapOf<String, List<String>>()
-        districtMap.forEach { (city, districts) ->
-            val sortedDistricts = districts.filter { it != "전체" }.sorted().toMutableList()
-            sortedDistricts.add(0, "전체")
-            districtMapSorted[city] = sortedDistricts
-        }
-        _jobDistricts.value = districtMapSorted
-
-        Log.d("JobLocation", "Combined cities: ${_jobCities.value}")
-        _jobDistricts.value.forEach { (city, districts) ->
-            Log.d("JobLocation", "City: $city, Districts: $districts")
-        }
-    }
 
     private fun fetchJobsData() {
         viewModelScope.launch {
@@ -1283,11 +1131,6 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
 
                 // Update the jobs value with the fetched data
                 _jobs.value = jobsData
-
-                // 통합 위치 정보 처리 (KK_Job 데이터도 로드된 후에 실행)
-                if (_kkJobs.value.isNotEmpty()) {
-                    processAllJobLocationCategories()
-                }
 
                 Log.d("PlaceViewModel", "Jobs data fetch complete: ${jobsData.size} items")
             } catch (e: Exception) {
@@ -1331,7 +1174,6 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
         Log.d("PlaceViewModel", "Filtered jobs: ${_filteredJobs.value.size} of ${_jobs.value.size} with city='$selectedCity', district='$selectedDistrict'")
     }
 
-    // fetchLectureData 함수 수정 - 통합 위치 정보 처리 추가
     fun fetchLectureData() {
         viewModelScope.launch {
             try {
@@ -1371,11 +1213,6 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
                 _lectures.value = lectureData
                 // Initialize filtered lectures with all lectures
                 _filteredLectures.value = lectureData
-
-                // 통합 위치 정보 처리 (KK_Culture 데이터도 로드된 후에 실행)
-                if (_kkCultures.value.isNotEmpty()) {
-                    processAllCultureLocationCategories()
-                }
 
                 Log.d("PlaceViewModel", "Lectures data fetch complete: ${lectureData.size} items")
             } catch (e: Exception) {
@@ -1489,9 +1326,6 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
                 _kkJobs.value = kkJobsData
                 _filteredKKJobs.value = kkJobsData
 
-                // 통합 위치 정보 처리
-                processAllJobLocationCategories()
-
                 Log.d("PlaceViewModel", "KK_Jobs data fetch complete: ${kkJobsData.size} items")
             } catch (e: Exception) {
                 Log.e("PlaceViewModel", "Error fetching kk_jobs data: ${e.message}", e)
@@ -1548,88 +1382,6 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
         return _filteredJobs.value.size + _filteredKKJobs.value.size
     }
 
-
-    private fun processAllCultureLocationCategories() {
-        val citySet = mutableSetOf<String>()
-        val districtMap = mutableMapOf<String, MutableSet<String>>()
-
-        // Always include "전체" (All) option
-        citySet.add("전체")
-        districtMap["전체"] = mutableSetOf("전체")
-
-        // Process regular lectures (서울특별시 데이터)
-        _lectures.value.forEach { lecture ->
-            val institution = lecture.Institution ?: ""
-
-            // Extract region from the REGION marker
-            val regionMarker = "[REGION:"
-            val regionStart = institution.indexOf(regionMarker)
-
-            if (regionStart >= 0) {
-                val regionEnd = institution.indexOf("]", regionStart)
-                if (regionEnd > regionStart) {
-                    val fullRegion = institution.substring(regionStart + regionMarker.length, regionEnd)
-                    val parts = fullRegion.split(" ")
-
-                    if (parts.isNotEmpty()) {
-                        val city = parts[0] // "서울특별시"
-                        citySet.add(city)
-
-                        if (!districtMap.containsKey(city)) {
-                            districtMap[city] = mutableSetOf("전체")
-                        }
-
-                        if (parts.size > 1) {
-                            val district = parts.subList(1, parts.size).joinToString(" ")
-                            districtMap[city]?.add(district)
-                        }
-                    }
-                }
-            }
-        }
-
-        // Process kk_cultures (경기도 등 다른 지역 데이터)
-        _kkCultures.value.forEach { kkCulture ->
-            val city = "경기도" // kk_culture의 city는 항상 경기도로 고정
-            val district = kkCulture.Category ?: return@forEach // Category를 district로 사용
-
-            if (district.isNotEmpty()) {
-                citySet.add(city)
-
-                if (!districtMap.containsKey(city)) {
-                    districtMap[city] = mutableSetOf("전체")
-                }
-
-                districtMap[city]?.add(district)
-            }
-        }
-
-        // Convert sets to sorted lists
-        _cultureCities.value = citySet.toList().sorted()
-
-        // Ensure "전체" is always first
-        if (_cultureCities.value.contains("전체")) {
-            val citiesList = _cultureCities.value.toMutableList()
-            citiesList.remove("전체")
-            citiesList.add(0, "전체")
-            _cultureCities.value = citiesList
-        }
-
-        // Convert district sets to sorted lists with "전체" always first
-        val districtMapSorted = mutableMapOf<String, List<String>>()
-        districtMap.forEach { (city, districts) ->
-            val sortedDistricts = districts.filter { it != "전체" }.sorted().toMutableList()
-            sortedDistricts.add(0, "전체")
-            districtMapSorted[city] = sortedDistricts
-        }
-        _cultureDistricts.value = districtMapSorted
-
-        Log.d("CultureLocation", "Combined cities: ${_cultureCities.value}")
-        _cultureDistricts.value.forEach { (city, districts) ->
-            Log.d("CultureLocation", "City: $city, Districts: $districts")
-        }
-    }
-
     fun fetchKKCulturesData() {
         viewModelScope.launch {
             try {
@@ -1669,9 +1421,6 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
                 // Update the kk_cultures value with the fetched data
                 _kkCultures.value = kkCulturesData
                 _filteredKKCultures.value = kkCulturesData
-
-                // 통합 위치 정보 처리
-                processAllCultureLocationCategories()
 
                 Log.d("PlaceViewModel", "KK_Cultures data fetch complete: ${kkCulturesData.size} items")
             } catch (e: Exception) {
@@ -1721,14 +1470,8 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
         Log.d("PlaceViewModel", "Filtered all cultures - Regular: ${_filteredLectures.value.size}, KK: ${_filteredKKCultures.value.size}")
     }
 
-
     // 통합된 필터링된 문화 강좌 개수를 반환하는 함수
     fun getTotalFilteredCulturesCount(): Int {
         return _filteredLectures.value.size + _filteredKKCultures.value.size
     }
-
-
-
-
-
 }
