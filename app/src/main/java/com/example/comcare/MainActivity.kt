@@ -79,7 +79,7 @@ import java.net.URL
 
 class MainActivity : ComponentActivity() {
 
-    val chatService = ChatService()
+    lateinit var chatService: ChatService  // lazy initialization으로 변경
     private var currentUserId: String = "guest" // Default value
 
     // 위치 관련 변수 추가
@@ -122,6 +122,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        chatService = ChatService(this)
+        RequestCounterHelper.init(this)
 
         // FusedLocationProviderClient 초기화
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
@@ -3032,36 +3035,55 @@ fun ChatScreen(
 
     // Set up the callback to receive responses from n8n
     LaunchedEffect(Unit) {
+        // 일반 응답 콜백
         activity.chatService.responseCallback = { aiResponse ->
             Log.d("ChatScreen", "Received response: $aiResponse")
-            // Replace any waiting messages with the actual response
-            val updatedMessages = messages.toMutableList()
-            val waitingIndex = updatedMessages.indexOfLast { it.isWaiting }
 
-            if (waitingIndex >= 0) {
-                updatedMessages[waitingIndex] = ChatMessage(
-                    text = aiResponse,
-                    isFromUser = false
-                )
-            } else {
-                // Find the last AI message and update it, or add new one
-                val lastAiMessageIndex = updatedMessages.indexOfLast { !it.isFromUser && !it.isWaiting }
-                if (lastAiMessageIndex >= 0 && showNavigation) {
-                    // Update existing AI message when navigating through results
-                    updatedMessages[lastAiMessageIndex] = ChatMessage(
+            // 탐색 모드가 아닌 경우에만 처리
+            if (!activity.chatService.isInExploreMode()) {
+                // Replace any waiting messages with the actual response
+                val updatedMessages = messages.toMutableList()
+                val waitingIndex = updatedMessages.indexOfLast { it.isWaiting }
+
+                if (waitingIndex >= 0) {
+                    updatedMessages[waitingIndex] = ChatMessage(
                         text = aiResponse,
                         isFromUser = false
                     )
                 } else {
-                    // Add new AI message for new queries
                     updatedMessages.add(ChatMessage(
                         text = aiResponse,
                         isFromUser = false
                     ))
                 }
+                messages = updatedMessages
+            }
+        }
+
+        // 탐색 모드 전용 콜백
+        activity.chatService.exploreResponseCallback = { aiResponse ->
+            Log.d("ChatScreen", "Received explore response: $aiResponse")
+
+            // 탐색 모드에서의 응답 처리
+            val lastExploreIndex = messages.indexOfLast {
+                it.text.startsWith("📋") && !it.isFromUser
             }
 
-            messages = updatedMessages
+            if (lastExploreIndex >= 0) {
+                // 기존 탐색 결과를 업데이트
+                val updatedMessages = messages.toMutableList()
+                updatedMessages[lastExploreIndex] = ChatMessage(
+                    text = aiResponse,
+                    isFromUser = false
+                )
+                messages = updatedMessages
+            } else {
+                // 새로운 탐색 결과 추가
+                messages = messages + ChatMessage(
+                    text = aiResponse,
+                    isFromUser = false
+                )
+            }
         }
 
         // Set up navigation callback
@@ -3074,14 +3096,16 @@ fun ChatScreen(
         }
     }
 
-    // Clean up callback when leaving the screen
+// Clean up callback when leaving the screen
     DisposableEffect(Unit) {
         onDispose {
             activity.chatService.responseCallback = null
             activity.chatService.navigationCallback = null
+            activity.chatService.exploreResponseCallback = null
+            // 탐색 모드 초기화
+            activity.chatService.clearResults()
         }
     }
-
     // Check for microphone permission
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -3193,14 +3217,15 @@ fun ChatScreen(
                         if (hasPrevious) {
                             Button(
                                 onClick = {
+                                    // ChatService를 통해 이전 결과 표시
                                     activity.chatService.showPreviousResult()
                                 },
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFFc6f584), // 연두색으로 변경
+                                    containerColor = Color(0xFFc6f584),
                                     contentColor = Color.Black
                                 ),
                                 modifier = Modifier.weight(1f),
-                                contentPadding = PaddingValues(horizontal = 2.dp, vertical = 2.dp) // 패딩 더 줄임
+                                contentPadding = PaddingValues(horizontal = 2.dp, vertical = 2.dp)
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
@@ -3209,22 +3234,21 @@ fun ChatScreen(
                                     Icon(
                                         imageVector = Icons.Default.ArrowBack,
                                         contentDescription = "Previous",
-                                        modifier = Modifier.size(24.dp) // 아이콘 크기 증가
+                                        modifier = Modifier.size(24.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(2.dp)) // 간격 줄임
+                                    Spacer(modifier = Modifier.width(2.dp))
                                     Text(
                                         "이전",
-                                        style = MaterialTheme.typography.headlineSmall, // 텍스트 크기 대폭 증가
+                                        style = MaterialTheme.typography.headlineSmall,
                                         fontWeight = FontWeight.Bold
                                     )
                                 }
                             }
                         } else {
-                            // 첫 번째 결과일 때는 빈 공간
                             Spacer(modifier = Modifier.weight(1f))
                         }
 
-                        // Page indicator
+// Page indicator
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier
@@ -3233,24 +3257,25 @@ fun ChatScreen(
                         ) {
                             Text(
                                 text = "$currentPage / $totalPages",
-                                style = MaterialTheme.typography.headlineMedium, // 텍스트 크기 대폭 증가
+                                style = MaterialTheme.typography.headlineMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFFc6f584) // 연두색으로 변경
+                                color = Color(0xFFc6f584)
                             )
                         }
 
-                        // Next button - 마지막 결과가 아닐 때는 '다음', 마지막일 때는 '탐색'
+// Next button
                         if (hasNext) {
                             Button(
                                 onClick = {
+                                    // ChatService를 통해 다음 결과 표시
                                     activity.chatService.showNextResult()
                                 },
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFFc6f584), // 연두색으로 변경
+                                    containerColor = Color(0xFFc6f584),
                                     contentColor = Color.Black
                                 ),
                                 modifier = Modifier.weight(1f),
-                                contentPadding = PaddingValues(horizontal = 2.dp, vertical = 2.dp) // 패딩 더 줄임
+                                contentPadding = PaddingValues(horizontal = 2.dp, vertical = 2.dp)
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
@@ -3258,22 +3283,33 @@ fun ChatScreen(
                                 ) {
                                     Text(
                                         "다음",
-                                        style = MaterialTheme.typography.headlineSmall, // 텍스트 크기 대폭 증가
+                                        style = MaterialTheme.typography.headlineSmall,
                                         fontWeight = FontWeight.Bold
                                     )
-                                    Spacer(modifier = Modifier.width(2.dp)) // 간격 줄임
+                                    Spacer(modifier = Modifier.width(2.dp))
                                     Icon(
                                         imageVector = Icons.Default.ArrowForward,
                                         contentDescription = "Next",
-                                        modifier = Modifier.size(24.dp) // 아이콘 크기 증가
+                                        modifier = Modifier.size(24.dp)
                                     )
                                 }
                             }
                         } else {
-                            // ChatScreen의 탐색 버튼 onClick 부분 수정
-                            // ChatScreen의 탐색 버튼 onClick 부분 수정
                             Button(
                                 onClick = {
+                                    // 채팅 횟수 확인
+                                    if (!RequestCounterHelper.canSendMessage()) {
+                                        Toast.makeText(activity, "오늘 채팅 갯수 도달", Toast.LENGTH_LONG).show()
+
+                                        // 채팅 한도 도달 메시지를 채팅창에 추가
+                                        val limitMessage = ChatMessage(
+                                            text = "오늘 채팅 갯수 도달\n내일 다시 이용해 주세요.",
+                                            isFromUser = false
+                                        )
+                                        messages = messages + limitMessage
+                                        return@Button
+                                    }
+
                                     // 탐색 시작 토스트 메시지 표시
                                     Toast.makeText(activity, "탐색 시작", Toast.LENGTH_SHORT).show()
 
@@ -3285,7 +3321,11 @@ fun ChatScreen(
                                     // 탐색 버튼 기능 - Flask 서버의 explore 엔드포인트로 연결
                                     Thread {
                                         try {
+                                            // 요청 전에 카운트 증가
+                                            RequestCounterHelper.incrementRequestCount()
+
                                             val url = URL("http://192.168.219.102:5000/explore")
+//                                            val url = URL("https://coral-app-fjt8m.ondigitalocean.app/explore")
                                             val connection = url.openConnection() as HttpURLConnection
                                             connection.requestMethod = "POST"
                                             connection.setRequestProperty("Content-Type", "application/json")
@@ -3372,7 +3412,33 @@ fun ChatScreen(
                                                                         // ChatService를 통해 검색 결과 설정
                                                                         activity.chatService.setSearchResults(searchResults)
 
-                                                                        // 첫 번째 결과 표시
+                                                                        // ChatService의 콜백을 통해 결과를 표시하도록 설정
+                                                                        // 탐색 모드용 콜백 설정
+                                                                        activity.chatService.exploreResponseCallback = { aiResponse ->
+                                                                            Log.d("ExploreResponse", "Received explore response: $aiResponse")
+                                                                            // 기존 메시지 리스트를 업데이트
+                                                                            val lastIndex = messages.indexOfLast {
+                                                                                it.text.startsWith("📋") && !it.isFromUser
+                                                                            }
+
+                                                                            if (lastIndex >= 0) {
+                                                                                // 기존 검색 결과를 업데이트
+                                                                                val updatedMessages = messages.toMutableList()
+                                                                                updatedMessages[lastIndex] = ChatMessage(
+                                                                                    text = aiResponse,
+                                                                                    isFromUser = false
+                                                                                )
+                                                                                messages = updatedMessages
+                                                                            } else {
+                                                                                // 새로운 검색 결과 추가
+                                                                                messages = messages + ChatMessage(
+                                                                                    text = aiResponse,
+                                                                                    isFromUser = false
+                                                                                )
+                                                                            }
+                                                                        }
+
+                                                                        // 첫 번째 결과를 수동으로 표시
                                                                         if (searchResults.isNotEmpty()) {
                                                                             messages = messages + searchResults[0]
 

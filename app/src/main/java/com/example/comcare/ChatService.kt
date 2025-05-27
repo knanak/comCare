@@ -1,5 +1,7 @@
 package com.example.comcare
 
+import android.content.Context
+import android.content.SharedPreferences
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -12,12 +14,20 @@ import org.json.JSONException
 import org.json.JSONObject
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+import java.util.Calendar
+import java.util.Date
 
-class ChatService {
+class ChatService(private val context: Context) {
     private val TAG = "ChatService"
 
     private val url = "http://192.168.219.102:5000/query"
 //    private val url = "https://coral-app-fjt8m.ondigitalocean.app/query"
+
+    // SharedPreferences for storing count and date
+    private val sharedPrefs: SharedPreferences = context.getSharedPreferences("ChatPrefs", Context.MODE_PRIVATE)
+    private val REQUEST_COUNT_KEY = "request_count"
+    private val LAST_REQUEST_DATE_KEY = "last_request_date"
+    private val MAX_REQUESTS_PER_DAY = 2
 
     // 현재 검색 결과들을 저장하는 변수
     private var currentResults: JSONArray? = null
@@ -49,7 +59,77 @@ class ChatService {
 
     var exploreResponseCallback: ((String) -> Unit)? = null
 
+    // 오늘 날짜 확인 및 카운트 초기화
+    private fun checkAndResetDailyCount() {
+        val today = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+
+        val lastRequestDate = sharedPrefs.getLong(LAST_REQUEST_DATE_KEY, 0)
+        val lastRequestCalendar = Calendar.getInstance().apply {
+            timeInMillis = lastRequestDate
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+
+        // 날짜가 바뀌었으면 카운트 초기화
+        if (today != lastRequestCalendar) {
+            sharedPrefs.edit().apply {
+                putInt(REQUEST_COUNT_KEY, 0)
+                putLong(LAST_REQUEST_DATE_KEY, System.currentTimeMillis())
+                apply()
+            }
+            Log.d(TAG, "Daily count reset - new day started")
+        }
+    }
+
+    // 현재 요청 카운트 가져오기
+    fun getCurrentRequestCount(): Int {
+        checkAndResetDailyCount()
+        return sharedPrefs.getInt(REQUEST_COUNT_KEY, 0)
+    }
+
+    // 요청 카운트 증가
+    private fun incrementRequestCount() {
+        checkAndResetDailyCount()
+        val currentCount = sharedPrefs.getInt(REQUEST_COUNT_KEY, 0)
+        sharedPrefs.edit().apply {
+            putInt(REQUEST_COUNT_KEY, currentCount + 1)
+            putLong(LAST_REQUEST_DATE_KEY, System.currentTimeMillis())
+            apply()
+        }
+        Log.d(TAG, "Request count incremented to: ${currentCount + 1}")
+    }
+
+    // 채팅 가능 여부 확인
+    fun canSendMessage(): Boolean {
+        checkAndResetDailyCount()
+        val currentCount = sharedPrefs.getInt(REQUEST_COUNT_KEY, 0)
+        return currentCount < MAX_REQUESTS_PER_DAY
+    }
+
+    // 남은 채팅 횟수 가져오기
+    fun getRemainingMessages(): Int {
+        checkAndResetDailyCount()
+        val currentCount = sharedPrefs.getInt(REQUEST_COUNT_KEY, 0)
+        return MAX_REQUESTS_PER_DAY - currentCount
+    }
+
     fun sendChatMessageToWorkflow(userId: String, message: String, sessionId: String) {
+        // 채팅 횟수 확인
+        if (!canSendMessage()) {
+            Log.d(TAG, "Daily chat limit reached")
+            Handler(Looper.getMainLooper()).post {
+                responseCallback?.invoke("오늘 채팅 갯수 도달")
+            }
+            return
+        }
+
         Log.d(TAG, "==== STARTING NEW CHAT REQUEST ====")
         Log.d(TAG, "Request to URL: $url")
         Log.d(TAG, "message: $message")
@@ -71,6 +151,9 @@ class ChatService {
 
         Log.d(TAG, "Request headers: ${request.headers}")
         Log.d(TAG, "Sending request...")
+
+        // 요청 카운트 증가
+        incrementRequestCount()
 
         // 새로운 검색 시작 시 초기화
         currentResults = null
