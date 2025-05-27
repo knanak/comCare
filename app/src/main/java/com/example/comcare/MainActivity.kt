@@ -90,11 +90,6 @@ class MainActivity : ComponentActivity() {
     private var userLongitude: Double = 0.0
     private var user_add: String = "" // 전체 주소를 저장하는 변수
 
-
-    // State 업데이트를 위한 콜백 추가
-    private var locationUpdateCallback: ((String, String) -> Unit)? = null
-
-
     companion object {
         private const val LOCATION_PERMISSION_REQUEST_CODE = 1001
         private const val TAG = "Location"
@@ -144,17 +139,6 @@ class MainActivity : ComponentActivity() {
             // 위치 정보를 State로 관리 - 초기값 설정
             var userCityState by remember { mutableStateOf("위치 확인 중...") }
             var userDistrictState by remember { mutableStateOf("위치 확인 중...") }
-
-            // State 업데이트 콜백 설정
-            DisposableEffect(Unit) {
-                locationUpdateCallback = { city, district ->
-                    userCityState = city
-                    userDistrictState = district
-                }
-                onDispose {
-                    locationUpdateCallback = null
-                }
-            }
 
             var locationPermissionGranted by remember { mutableStateOf(false) }
             var showLocationPermissionDialog by remember { mutableStateOf(false) }
@@ -249,8 +233,6 @@ class MainActivity : ComponentActivity() {
                     // 현재 위치 정보 로그
                     Log.d(TAG, "NavHost 렌더링 시점의 위치: City=$userCityState, District=$userDistrictState")
 
-                    // MainActivity.kt의 onCreate 내부 NavHost 부분 수정
-
                     NavHost(
                         navController = navController,
                         startDestination = "chat"
@@ -259,8 +241,6 @@ class MainActivity : ComponentActivity() {
                             PlaceComparisonApp(
                                 navController = navController,
                                 viewModel = viewModel,
-                                userCity = userCityState,  // State 값 전달
-                                userDistrict = userDistrictState  // State 값 전달
                             )
                         }
                         composable("searchResults") {
@@ -286,9 +266,8 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-
     // 위치 정보를 가져오는 함수
-    fun getLastKnownLocation(callback: (String, String) -> Unit) {
+    private fun getLastKnownLocation(callback: (String, String) -> Unit) {
         if (ActivityCompat.checkSelfPermission(
                 this,
                 Manifest.permission.ACCESS_FINE_LOCATION
@@ -312,13 +291,6 @@ class MainActivity : ComponentActivity() {
 
                 // Geocoder를 사용하여 좌표를 주소로 변환
                 getAddressFromLocation(location.latitude, location.longitude) { city, district ->
-                    // 클래스 변수 업데이트
-                    userCity = city
-                    userDistrict = district
-
-                    // State 업데이트 콜백 호출
-                    locationUpdateCallback?.invoke(city, district)
-
                     callback(city, district)
                 }
             } else {
@@ -331,9 +303,6 @@ class MainActivity : ComponentActivity() {
             callback("", "")
         }
     }
-
-    // 새로운 위치 데이터 요청
-// MainActivity.kt의 requestNewLocationData 함수 수정
 
     // 새로운 위치 데이터 요청
     private fun requestNewLocationData(callback: (String, String) -> Unit) {
@@ -366,13 +335,6 @@ class MainActivity : ComponentActivity() {
                     Log.d(TAG, "새로운 위치 정보 획득 - 위도: $userLatitude, 경도: $userLongitude")
 
                     getAddressFromLocation(location.latitude, location.longitude) { city, district ->
-                        // 클래스 변수 업데이트
-                        userCity = city
-                        userDistrict = district
-
-                        // State 업데이트 콜백 호출
-                        locationUpdateCallback?.invoke(city, district)
-
                         callback(city, district)
                     }
                 } else {
@@ -477,9 +439,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun PlaceComparisonApp(
     navController: NavController,
-    viewModel: PlaceViewModel,
-    userCity: String = "",
-    userDistrict: String = ""
+    viewModel: PlaceViewModel
 ) {
     var currentSection by remember { mutableStateOf("home") }
     var selectedCity by remember { mutableStateOf("전체") }
@@ -1008,75 +968,9 @@ fun PlaceComparisonApp(
 
         // Content based on the current section
         when (currentSection) {
-            // MainActivity.kt의 home 섹션 수정
-// when (currentSection) { "home" -> { 부분을 다음과 같이 수정:
-
             "home" -> {
                 // Define the new color
                 val highlightColor = Color(0xFFf3f04d) // The #f3f04d color
-
-                // 위치 권한 상태 확인
-                val context = LocalContext.current
-                var showLocationPermissionDialog by remember { mutableStateOf(false) }
-
-                // 위치 권한 런처
-                val locationPermissionLauncher = rememberLauncherForActivityResult(
-                    contract = ActivityResultContracts.RequestMultiplePermissions()
-                ) { permissions ->
-                    val fineLocationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
-                    val coarseLocationGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
-
-                    if (fineLocationGranted || coarseLocationGranted) {
-                        // 권한이 승인되면 MainActivity의 위치 정보 가져오기 함수 호출
-                        (context as? MainActivity)?.let { activity ->
-                            activity.getLastKnownLocation { city, district ->
-                                // 위치 정보가 업데이트되면 자동으로 UI가 재구성됨
-                            }
-                        }
-                    }
-                }
-
-                // home 섹션 진입 시 위치 권한 확인
-                LaunchedEffect(currentSection) {
-                    if (currentSection == "home" && userCity == "위치 권한 없음") {
-                        // 권한이 없는 경우 다이얼로그 표시
-                        showLocationPermissionDialog = true
-                    }
-                }
-
-                // 위치 권한 요청 다이얼로그
-                if (showLocationPermissionDialog) {
-                    AlertDialog(
-                        onDismissRequest = { showLocationPermissionDialog = false },
-                        title = { Text("위치 정보 필요") },
-                        text = {
-                            Text("오비서가 회원님 지역의 맞춤 정보를 제공하기 위해 위치 권한이 필요합니다. 위치 정보를 허용하시겠습니까?")
-                        },
-                        confirmButton = {
-                            TextButton(
-                                onClick = {
-                                    showLocationPermissionDialog = false
-                                    // 위치 권한 요청
-                                    locationPermissionLauncher.launch(
-                                        arrayOf(
-                                            Manifest.permission.ACCESS_FINE_LOCATION,
-                                            Manifest.permission.ACCESS_COARSE_LOCATION
-                                        )
-                                    )
-                                }
-                            ) {
-                                Text("허용")
-                            }
-                        },
-                        dismissButton = {
-                            TextButton(
-                                onClick = { showLocationPermissionDialog = false }
-                            ) {
-                                Text("거부")
-                            }
-                        }
-                    )
-                }
 
                 // Replace Column with a scrollable container
                 Box(
@@ -1089,7 +983,7 @@ fun PlaceComparisonApp(
                             .padding(horizontal = 16.dp),
                         contentPadding = PaddingValues(vertical = 8.dp)
                     ) {
-                        // 오늘의 시설
+                        // Today's Facilities Section
                         item {
                             Card(
                                 modifier = Modifier
@@ -1108,26 +1002,11 @@ fun PlaceComparisonApp(
 
                                     Spacer(modifier = Modifier.height(12.dp))
 
-                                    // 사용자 위치 기반 필터링된 시설 목록
-                                    val locationFilteredPlaces = remember(viewModel.filteredPlaces.value, userCity, userDistrict) {
-                                        if (userCity.isNotEmpty() && userDistrict.isNotEmpty() &&
-                                            userCity != "위치 권한 없음" && userDistrict != "위치 권한 없음") {
-                                            // 유효한 위치 정보가 있는 경우
-                                            viewModel.filteredPlaces.value.filter { place ->
-                                                place.address.contains(userCity) &&
-                                                        (place.district == userDistrict || place.address.contains(userDistrict))
-                                            }
-                                        } else {
-                                            // 위치 정보가 없거나 권한이 없는 경우 전체 목록 사용
-                                            viewModel.filteredPlaces.value
-                                        }
-                                    }
-
                                     // Get random place if available
-                                    if (locationFilteredPlaces.isNotEmpty()) {
+                                    if (viewModel.filteredPlaces.value.isNotEmpty()) {
                                         // Get a random place from the filtered places list
-                                        val randomPlace = remember(locationFilteredPlaces) {
-                                            locationFilteredPlaces.random()
+                                        val randomPlace = remember(viewModel.filteredPlaces.value) {
+                                            viewModel.filteredPlaces.value.random()
                                         }
 
                                         // Display the random place
@@ -1150,21 +1029,6 @@ fun PlaceComparisonApp(
                                             Text(
                                                 "시설 종류: ${randomPlace.service1.joinToString(", ")}",
                                                 style = MaterialTheme.typography.bodyMedium
-                                            )
-                                        }
-
-                                        // kk_facility 또는 kk_facility2 데이터인 경우 추가 정보 표시
-                                        if (randomPlace.id.startsWith("kk_") || randomPlace.id.startsWith("kk2_")) {
-                                            Spacer(modifier = Modifier.height(4.dp))
-                                            val facilityType = if (randomPlace.id.startsWith("kk2_")) {
-                                                "※ 경기도 복지시설 (유형2)"
-                                            } else {
-                                                "※ 경기도 복지시설"
-                                            }
-                                            Text(
-                                                facilityType,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = Color.Gray
                                             )
                                         }
 
@@ -1202,6 +1066,73 @@ fun PlaceComparisonApp(
                             }
                         }
 
+                        // Today's Policy Section
+//                        item {
+//                            Card(
+//                                modifier = Modifier
+//                                    .fillMaxWidth()
+//                                    .padding(vertical = 8.dp),
+//                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+//                            ) {
+//                                Column(modifier = Modifier.padding(16.dp)) {
+//                                    // Section Title with updated color
+//                                    Text(
+//                                        "오늘의 정책",
+//                                        style = MaterialTheme.typography.titleLarge,
+//                                        fontWeight = FontWeight.Bold,
+//                                        color = highlightColor, // Updated color
+//                                    )
+//
+//                                    Spacer(modifier = Modifier.height(12.dp))
+//
+//                                    // Since we don't have actual policy data, display a sample policy
+//                                    Text(
+//                                        "노인 일자리 사업",
+//                                        style = MaterialTheme.typography.titleMedium,
+//                                        fontWeight = FontWeight.Bold
+//                                    )
+//
+//                                    Spacer(modifier = Modifier.height(4.dp))
+//
+//                                    Text(
+//                                        "만 65세 이상 노인에게 일자리를 제공하는 정책입니다.",
+//                                        style = MaterialTheme.typography.bodyLarge
+//                                    )
+//
+//                                    Spacer(modifier = Modifier.height(4.dp))
+//
+//                                    Text(
+//                                        "지원금: 월 30만원",
+//                                        style = MaterialTheme.typography.bodyMedium
+//                                    )
+//
+//                                    Spacer(modifier = Modifier.height(12.dp))
+//
+//                                    // New "More" button with right alignment and updated color
+//                                    Row(
+//                                        modifier = Modifier.fillMaxWidth(),
+//                                        horizontalArrangement = Arrangement.End
+//                                    ) {
+//                                        Button(
+//                                            onClick = {
+//                                                currentSection = "seniorPolicies"
+//                                            },
+//                                            colors = ButtonDefaults.buttonColors(
+//                                                containerColor = highlightColor, // Updated color
+//                                                contentColor = Color.Black
+//                                            ),
+//                                            shape = RoundedCornerShape(8.dp)
+//                                        ) {
+//                                            Text(
+//                                                "더보기",
+//                                                fontWeight = FontWeight.Bold
+//                                            )
+//                                        }
+//                                    }
+//                                }
+//                            }
+//                        }
+
                         // Today's Jobs Section
                         item {
                             Card(
@@ -1221,110 +1152,46 @@ fun PlaceComparisonApp(
 
                                     Spacer(modifier = Modifier.height(12.dp))
 
-                                    // 사용자 위치 기반 필터링된 일자리 목록
-                                    val allJobs = viewModel.jobs.value + viewModel.kkJobs.value
-                                    val locationFilteredJobs = remember(allJobs, userCity, userDistrict) {
-                                        if (userCity.isNotEmpty() && userDistrict.isNotEmpty() &&
-                                            userCity != "위치 권한 없음" && userDistrict != "위치 권한 없음") {
-                                            // 유효한 위치 정보가 있는 경우
-                                            allJobs.filter { job ->
-                                                when (job) {
-                                                    is SupabaseDatabaseHelper.Job -> {
-                                                        val location = job.Location ?: ""
-                                                        location.contains(userCity) && location.contains(userDistrict)
-                                                    }
-                                                    is SupabaseDatabaseHelper.KKJob -> {
-                                                        val address = job.Address ?: ""
-                                                        address.contains(userCity) && address.contains(userDistrict)
-                                                    }
-                                                    else -> false
-                                                }
-                                            }
-                                        } else {
-                                            // 위치 정보가 없거나 권한이 없는 경우 전체 목록 사용
-                                            allJobs
-                                        }
-                                    }
-
                                     // Get random job if available
-                                    if (locationFilteredJobs.isNotEmpty()) {
-                                        // Get a random job from the filtered list
-                                        val randomJob = remember(locationFilteredJobs) {
-                                            locationFilteredJobs.random()
+                                    if (viewModel.jobs.value.isNotEmpty()) {
+                                        // Get a random job from the full list
+                                        val randomJob = remember(viewModel.jobs.value) {
+                                            viewModel.jobs.value.random()
                                         }
 
-                                        // Display the random job based on its type
-                                        when (randomJob) {
-                                            is SupabaseDatabaseHelper.Job -> {
-                                                Text(
-                                                    randomJob.JobTitle ?: "제목 없음",
-                                                    style = MaterialTheme.typography.titleMedium,
-                                                    fontWeight = FontWeight.Bold,
-                                                )
+                                        // Display the random job
+                                        Text(
+                                            randomJob.JobTitle ?: "제목 없음",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                        )
 
-                                                Spacer(modifier = Modifier.height(4.dp))
+                                        Spacer(modifier = Modifier.height(4.dp))
 
-                                                Row {
-                                                    Text(
-                                                        "근무형태: ",
-                                                        style = MaterialTheme.typography.bodyLarge,
-                                                        fontWeight = FontWeight.Bold
-                                                    )
-                                                    Text(
-                                                        randomJob.WorkingType ?: "정보 없음",
-                                                        style = MaterialTheme.typography.bodyLarge
-                                                    )
-                                                }
+                                        Row {
+                                            Text(
+                                                "근무형태: ",
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text(
+                                                randomJob.WorkingType ?: "정보 없음",
+                                                style = MaterialTheme.typography.bodyLarge
+                                            )
+                                        }
 
-                                                Spacer(modifier = Modifier.height(4.dp))
+                                        Spacer(modifier = Modifier.height(4.dp))
 
-                                                Row {
-                                                    Text(
-                                                        "급여: ",
-                                                        style = MaterialTheme.typography.bodyLarge,
-                                                        fontWeight = FontWeight.Bold
-                                                    )
-                                                    Text(
-                                                        randomJob.Salary ?: "정보 없음",
-                                                        style = MaterialTheme.typography.bodyLarge
-                                                    )
-                                                }
-                                            }
-                                            is SupabaseDatabaseHelper.KKJob -> {
-                                                Text(
-                                                    randomJob.Title ?: "제목 없음",
-                                                    style = MaterialTheme.typography.titleMedium,
-                                                    fontWeight = FontWeight.Bold,
-                                                )
-
-                                                Spacer(modifier = Modifier.height(4.dp))
-
-                                                Row {
-                                                    Text(
-                                                        "카테고리: ",
-                                                        style = MaterialTheme.typography.bodyLarge,
-                                                        fontWeight = FontWeight.Bold
-                                                    )
-                                                    Text(
-                                                        randomJob.Category ?: "정보 없음",
-                                                        style = MaterialTheme.typography.bodyLarge
-                                                    )
-                                                }
-
-                                                Spacer(modifier = Modifier.height(4.dp))
-
-                                                Row {
-                                                    Text(
-                                                        "위치: ",
-                                                        style = MaterialTheme.typography.bodyLarge,
-                                                        fontWeight = FontWeight.Bold
-                                                    )
-                                                    Text(
-                                                        randomJob.Address ?: "정보 없음",
-                                                        style = MaterialTheme.typography.bodyLarge
-                                                    )
-                                                }
-                                            }
+                                        Row {
+                                            Text(
+                                                "급여: ",
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text(
+                                                randomJob.Salary ?: "정보 없음",
+                                                style = MaterialTheme.typography.bodyLarge
+                                            )
                                         }
 
                                         Spacer(modifier = Modifier.height(12.dp))
@@ -1360,6 +1227,7 @@ fun PlaceComparisonApp(
                             }
                         }
 
+
                         // Today's Culture Section
                         item {
                             Card(
@@ -1382,36 +1250,11 @@ fun PlaceComparisonApp(
                                     // Get all cultures (lectures + kk_cultures)
                                     val allCultures = viewModel.lectures.value + viewModel.kkCultures.value
 
-                                    // 사용자 위치 기반 필터링된 문화 강좌 목록
-                                    val locationFilteredCultures = remember(allCultures, userCity, userDistrict) {
-                                        if (userCity.isNotEmpty() && userDistrict.isNotEmpty() &&
-                                            userCity != "위치 권한 없음" && userDistrict != "위치 권한 없음") {
-                                            // 유효한 위치 정보가 있는 경우
-                                            allCultures.filter { culture ->
-                                                when (culture) {
-                                                    is SupabaseDatabaseHelper.Lecture -> {
-                                                        val institution = culture.Institution ?: ""
-                                                        institution.contains(userCity) && institution.contains(userDistrict)
-                                                    }
-                                                    is SupabaseDatabaseHelper.KKCulture -> {
-                                                        // KKCulture는 경기도 데이터이므로 userCity가 경기도이고
-                                                        // Category가 userDistrict와 일치하는 경우
-                                                        userCity.contains("경기") && culture.Category == userDistrict
-                                                    }
-                                                    else -> false
-                                                }
-                                            }
-                                        } else {
-                                            // 위치 정보가 없거나 권한이 없는 경우 전체 목록 사용
-                                            allCultures
-                                        }
-                                    }
-
                                     // Get random culture if available
-                                    if (locationFilteredCultures.isNotEmpty()) {
-                                        // Get a random culture from the filtered list
-                                        val randomCulture = remember(locationFilteredCultures) {
-                                            locationFilteredCultures.random()
+                                    if (allCultures.isNotEmpty()) {
+                                        // Get a random culture from the combined list
+                                        val randomCulture = remember(allCultures) {
+                                            allCultures.random()
                                         }
 
                                         // Display the random culture based on its type
@@ -1533,6 +1376,608 @@ fun PlaceComparisonApp(
                         // Add extra space at the bottom for better scroll experience
                         item {
                             Spacer(modifier = Modifier.height(16.dp))
+                        }
+                    }
+                }
+            }
+
+
+            "longTermCare" -> {
+                // Long-term care facilities content
+                Text(
+                    "장기요양기관 정보",
+                    modifier = Modifier.padding(16.dp),
+                    style = MaterialTheme.typography.titleMedium
+                )
+
+                // Places List for long-term care facilities
+                if (places.isNotEmpty()) {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 16.dp)
+                    ) {
+                        items(places) { place ->
+                            PlaceCard(place = place)
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+                    }
+                } else {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("시설 정보를 불러오는 중...")
+                    }
+                }
+            }
+            "seniorPolicies" -> {
+                // Senior policies content
+                Text(
+                    "노인정책 정보",
+                    modifier = Modifier.padding(16.dp),
+                    style = MaterialTheme.typography.titleMedium
+                )
+
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("노인정책 정보 섹션")
+                }
+            }
+
+
+            "jobs" -> {
+                // Jobs content with pagination
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // Section header
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "노인 일자리 정보",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+
+                        Text(
+                            text = "총 ${viewModel.getTotalFilteredJobsCount()}개",
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                    }
+
+                    // Add location filter section
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            // Location Filter Title
+                            Text(
+                                "위치 검색:",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // City and District selection
+                            var expandedCityMenu by remember { mutableStateOf(false) }
+                            var expandedDistrictMenu by remember { mutableStateOf(false) }
+                            var selectedCity by remember { mutableStateOf("전체") }
+                            var selectedDistrict by remember { mutableStateOf("전체") }
+
+                            // 통합된 job cities 사용
+                            val availableDistricts = remember(selectedCity) {
+                                viewModel.jobDistricts.value[selectedCity] ?: listOf("전체")
+                            }
+
+                            // Reset district when city changes
+                            LaunchedEffect(selectedCity) {
+                                selectedDistrict = "전체"
+                                viewModel.filterAllJobs(selectedCity, selectedDistrict)
+                            }
+
+                            // City and District Dropdowns side by side
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                // City Dropdown
+                                Box(modifier = Modifier.weight(1f)) {
+                                    OutlinedButton(
+                                        onClick = { expandedCityMenu = true },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                selectedCity,
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text("▼")
+                                        }
+                                    }
+
+                                    DropdownMenu(
+                                        expanded = expandedCityMenu,
+                                        onDismissRequest = { expandedCityMenu = false }
+                                    ) {
+                                        viewModel.jobCities.value.forEach { city ->
+                                            DropdownMenuItem(
+                                                text = {
+                                                    Text(
+                                                        city,
+                                                        style = MaterialTheme.typography.bodyLarge
+                                                    )
+                                                },
+                                                onClick = {
+                                                    selectedCity = city
+                                                    expandedCityMenu = false
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // District Dropdown
+                                Box(modifier = Modifier.weight(1f)) {
+                                    OutlinedButton(
+                                        onClick = { expandedDistrictMenu = true },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                selectedDistrict,
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text("▼")
+                                        }
+                                    }
+
+                                    DropdownMenu(
+                                        expanded = expandedDistrictMenu,
+                                        onDismissRequest = { expandedDistrictMenu = false }
+                                    ) {
+                                        availableDistricts.forEach { district ->
+                                            DropdownMenuItem(
+                                                text = {
+                                                    Text(
+                                                        district,
+                                                        style = MaterialTheme.typography.bodyLarge
+                                                    )
+                                                },
+                                                onClick = {
+                                                    selectedDistrict = district
+                                                    expandedDistrictMenu = false
+                                                    viewModel.filterAllJobs(selectedCity, selectedDistrict)
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Divider(modifier = Modifier.padding(horizontal = 16.dp))
+
+                    // Jobs list with pagination
+                    val regularJobs = viewModel.filteredJobs.value
+                    val kkJobs = viewModel.filteredKKJobs.value
+
+                    // 통합된 일자리 리스트 생성
+                    val allJobs = regularJobs + kkJobs
+
+                    if (allJobs.isNotEmpty()) {
+                        // Pagination state
+                        var currentPage by remember { mutableStateOf(0) }
+                        val itemsPerPage = 5
+                        val totalPages = ceil(allJobs.size.toFloat() / itemsPerPage).toInt()
+
+                        // Calculate current page items
+                        val startIndex = currentPage * itemsPerPage
+                        val endIndex = minOf(startIndex + itemsPerPage, allJobs.size)
+                        val currentPageItems = allJobs.subList(startIndex, endIndex)
+
+                        Column(
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            // Main content area - shows jobs for current page
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth()
+                            ) {
+                                LazyColumn(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = 16.dp),
+                                    contentPadding = PaddingValues(vertical = 8.dp)
+                                ) {
+                                    items(currentPageItems) { job ->
+                                        when (job) {
+                                            is SupabaseDatabaseHelper.Job -> JobCard(job = job)
+                                            is SupabaseDatabaseHelper.KKJob -> KKJobCard(kkJob = job)
+                                        }
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                    }
+                                }
+                            }
+
+                            // Pagination controls
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp, horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Calculate which page numbers to show
+                                val pageGroupSize = 4
+                                val startPage = (currentPage / pageGroupSize) * pageGroupSize
+                                val endPage = minOf(startPage + pageGroupSize, totalPages)
+
+                                // Previous button
+                                if (startPage > 0) {
+                                    Text(
+                                        text = "이전",
+                                        modifier = Modifier
+                                            .clickable {
+                                                // Go to last page of previous group
+                                                currentPage = startPage - 1
+                                            }
+                                            .padding(horizontal = 12.dp, vertical = 4.dp),
+                                        color = Color(0xFF4A7C25),
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+
+                                // Page numbers
+                                for (i in startPage until endPage) {
+                                    val pageNumber = i + 1
+                                    Text(
+                                        text = pageNumber.toString(),
+                                        modifier = Modifier
+                                            .clickable { currentPage = i }
+                                            .padding(horizontal = 12.dp, vertical = 4.dp),
+                                        color = if (currentPage == i) Color(0xFF4A7C25) else Color(0xFF757575),
+                                        fontWeight = if (currentPage == i) FontWeight.Bold else FontWeight.Normal,
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                }
+
+                                // "다음" (next) button if there are more pages
+                                if (endPage < totalPages) {
+                                    Text(
+                                        text = "다음",
+                                        modifier = Modifier
+                                            .clickable { currentPage = endPage }
+                                            .padding(horizontal = 12.dp, vertical = 4.dp),
+                                        color = Color(0xFF4A7C25),
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    } else if (viewModel.isLoading || viewModel.isLoadingKKJobs) {
+                        // Show loading indicator
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                CircularProgressIndicator(color = Color(0xFF4A7C25))
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text("일자리 정보를 불러오는 중...")
+                            }
+                        }
+                    }
+                }
+            }
+
+
+            "culture" -> {
+                // Lectures content with pagination
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // Section header
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "시니어 문화강좌 정보",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+
+                        Text(
+                            text = "총 ${viewModel.getTotalFilteredCulturesCount()}개",
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                    }
+
+                    // Add location filter section
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            // Location Filter Title
+                            Text(
+                                "위치 검색:",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // City and District selection
+                            var expandedCityMenu by remember { mutableStateOf(false) }
+                            var expandedDistrictMenu by remember { mutableStateOf(false) }
+                            var selectedCity by remember { mutableStateOf("전체") }
+                            var selectedDistrict by remember { mutableStateOf("전체") }
+
+                            // 통합된 culture cities 사용
+                            val availableDistricts = remember(selectedCity) {
+                                viewModel.cultureDistricts.value[selectedCity] ?: listOf("전체")
+                            }
+
+                            // Reset district when city changes
+                            LaunchedEffect(selectedCity) {
+                                selectedDistrict = "전체"
+                                viewModel.filterAllCultures(selectedCity, selectedDistrict)
+                            }
+
+                            // City and District Dropdowns side by side
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                // City Dropdown
+                                Box(modifier = Modifier.weight(1f)) {
+                                    OutlinedButton(
+                                        onClick = { expandedCityMenu = true },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                selectedCity,
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text("▼")
+                                        }
+                                    }
+
+                                    DropdownMenu(
+                                        expanded = expandedCityMenu,
+                                        onDismissRequest = { expandedCityMenu = false }
+                                    ) {
+                                        viewModel.cultureCities.value.forEach { city ->
+                                            DropdownMenuItem(
+                                                text = {
+                                                    Text(
+                                                        city,
+                                                        style = MaterialTheme.typography.bodyLarge
+                                                    )
+                                                },
+                                                onClick = {
+                                                    selectedCity = city
+                                                    expandedCityMenu = false
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // District Dropdown
+                                Box(modifier = Modifier.weight(1f)) {
+                                    OutlinedButton(
+                                        onClick = { expandedDistrictMenu = true },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                selectedDistrict,
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text("▼")
+                                        }
+                                    }
+
+                                    DropdownMenu(
+                                        expanded = expandedDistrictMenu,
+                                        onDismissRequest = { expandedDistrictMenu = false }
+                                    ) {
+                                        availableDistricts.forEach { district ->
+                                            DropdownMenuItem(
+                                                text = {
+                                                    Text(
+                                                        district,
+                                                        style = MaterialTheme.typography.bodyLarge
+                                                    )
+                                                },
+                                                onClick = {
+                                                    selectedDistrict = district
+                                                    expandedDistrictMenu = false
+                                                    viewModel.filterAllCultures(selectedCity, selectedDistrict)
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Divider(modifier = Modifier.padding(horizontal = 16.dp))
+
+                    // 통합된 문화 강좌 리스트 (lectures + kk_cultures)
+                    val regularLectures = viewModel.filteredLectures.value
+                    val kkCultures = viewModel.filteredKKCultures.value
+
+                    // 통합된 문화 강좌 리스트 생성
+                    val allCultures = regularLectures + kkCultures
+
+                    if (allCultures.isNotEmpty()) {
+                        // Pagination state
+                        var currentPage by remember { mutableStateOf(0) }
+                        val itemsPerPage = 5
+                        val totalPages = ceil(allCultures.size.toFloat() / itemsPerPage).toInt()
+
+                        // Calculate current page items
+                        val startIndex = currentPage * itemsPerPage
+                        val endIndex = minOf(startIndex + itemsPerPage, allCultures.size)
+                        val currentPageItems = allCultures.subList(startIndex, endIndex)
+
+                        Column(
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            // Main content area - shows cultures for current page
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth()
+                            ) {
+                                LazyColumn(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = 16.dp),
+                                    contentPadding = PaddingValues(vertical = 8.dp)
+                                ) {
+                                    items(currentPageItems) { culture ->
+                                        when (culture) {
+                                            is SupabaseDatabaseHelper.Lecture -> LectureCard(lecture = culture)
+                                            is SupabaseDatabaseHelper.KKCulture -> KKCultureCard(kkCulture = culture)
+                                        }
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                    }
+                                }
+                            }
+
+                            // Pagination controls
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp, horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Calculate which page numbers to show
+                                val pageGroupSize = 4
+                                val startPage = (currentPage / pageGroupSize) * pageGroupSize
+                                val endPage = minOf(startPage + pageGroupSize, totalPages)
+
+                                if (startPage > 0) {
+                                    Text(
+                                        text = "이전",
+                                        modifier = Modifier
+                                            .clickable {
+                                                // Go to last page of previous group
+                                                currentPage = startPage - 1
+                                            }
+                                            .padding(horizontal = 12.dp, vertical = 4.dp),
+                                        color = Color(0xFF4A7C25),
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+
+                                // Page numbers
+                                for (i in startPage until endPage) {
+                                    val pageNumber = i + 1
+                                    Text(
+                                        text = pageNumber.toString(),
+                                        modifier = Modifier
+                                            .clickable { currentPage = i }
+                                            .padding(horizontal = 12.dp, vertical = 4.dp),
+                                        color = if (currentPage == i) Color(0xFF4A7C25) else Color(0xFF757575),
+                                        fontWeight = if (currentPage == i) FontWeight.Bold else FontWeight.Normal,
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                }
+
+                                // "다음" (next) button if there are more pages
+                                if (endPage < totalPages) {
+                                    Text(
+                                        text = "다음",
+                                        modifier = Modifier
+                                            .clickable { currentPage = endPage }
+                                            .padding(horizontal = 12.dp, vertical = 4.dp),
+                                        color = Color(0xFF4A7C25),
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    } else if (viewModel.isLoadingLectures || viewModel.isLoadingKKCultures) {
+                        // Show loading indicator
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                CircularProgressIndicator(color = Color(0xFF4A7C25))
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text("강좌 정보를 불러오는 중...")
+                            }
+                        }
+                    } else {
+                        // Show message when no data
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("강좌 정보가 없습니다")
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Button(
+                                    onClick = {
+                                        viewModel.fetchLectureData()
+                                        viewModel.fetchKKCulturesData()
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFFc6f584),
+                                        contentColor = Color.Black
+                                    )
+                                ) {
+                                    Text("새로고침")
+                                }
+                            }
                         }
                     }
                 }
@@ -2309,7 +2754,6 @@ fun ChatScreen(
 
     // Set up the callback to receive responses from n8n
     LaunchedEffect(Unit) {
-        // 일반 응답 콜백
         activity.chatService.responseCallback = { aiResponse ->
             Log.d("ChatScreen", "Received response: $aiResponse")
             // Replace any waiting messages with the actual response
@@ -2328,46 +2772,15 @@ fun ChatScreen(
                     // Update existing AI message when navigating through results
                     updatedMessages[lastAiMessageIndex] = ChatMessage(
                         text = aiResponse,
-                        isFromUser = false,
-                        isExploreResult = false  // 일반 검색 결과
+                        isFromUser = false
                     )
                 } else {
                     // Add new AI message for new queries
                     updatedMessages.add(ChatMessage(
                         text = aiResponse,
-                        isFromUser = false,
-                        isExploreResult = false  // 일반 검색 결과
+                        isFromUser = false
                     ))
                 }
-            }
-
-            messages = updatedMessages
-        }
-
-        // 탐색 응답 전용 콜백 추가
-        activity.chatService.exploreResponseCallback = { aiResponse ->
-            Log.d("ChatScreen", "Received explore response: $aiResponse")
-            val updatedMessages = messages.toMutableList()
-
-            // 탐색 네비게이션 중일 때 마지막 탐색 메시지 찾아서 업데이트
-            val lastExploreMessageIndex = updatedMessages.indexOfLast {
-                !it.isFromUser && !it.isWaiting && it.isExploreResult
-            }
-
-            if (lastExploreMessageIndex >= 0 && showNavigation) {
-                // 기존 탐색 메시지 업데이트
-                updatedMessages[lastExploreMessageIndex] = ChatMessage(
-                    text = aiResponse,
-                    isFromUser = false,
-                    isExploreResult = true  // 탐색 결과임을 유지
-                )
-            } else {
-                // 새로운 탐색 메시지 추가
-                updatedMessages.add(ChatMessage(
-                    text = aiResponse,
-                    isFromUser = false,
-                    isExploreResult = true  // 탐색 결과임을 표시
-                ))
             }
 
             messages = updatedMessages
@@ -2387,7 +2800,6 @@ fun ChatScreen(
     DisposableEffect(Unit) {
         onDispose {
             activity.chatService.responseCallback = null
-            activity.chatService.exploreResponseCallback = null
             activity.chatService.navigationCallback = null
         }
     }
@@ -2580,92 +2992,160 @@ fun ChatScreen(
                                 }
                             }
                         } else {
-                            // 위치 권한 확인을 위한 상태와 런처 추가
-                            var showLocationPermissionDialog by remember { mutableStateOf(false) }
-
-                            // 위치 권한 런처
-                            val locationPermissionLauncher = rememberLauncherForActivityResult(
-                                contract = ActivityResultContracts.RequestMultiplePermissions()
-                            ) { permissions ->
-                                val fineLocationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
-                                val coarseLocationGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
-
-                                if (fineLocationGranted || coarseLocationGranted) {
-                                    // 권한이 승인되면 위치 정보 가져오기
-                                    Toast.makeText(activity, "위치 정보를 가져오는 중...", Toast.LENGTH_SHORT).show()
-
-                                    // MainActivity의 위치 정보 가져오기 함수 호출
-                                    activity.getLastKnownLocation { city, district ->
-                                        if (city.isNotEmpty() && district.isNotEmpty()) {
-                                            // 위치 정보를 성공적으로 가져온 후 탐색 실행
-                                            performExplore(activity, city, district, messages) { newMessages ->
-                                                messages = newMessages
-                                            }
-                                        } else {
-                                            Toast.makeText(activity, "위치 정보를 가져올 수 없습니다.", Toast.LENGTH_SHORT).show()
-                                        }
-                                    }
-                                } else {
-                                    Toast.makeText(activity, "위치 권한이 필요합니다.", Toast.LENGTH_SHORT).show()
-                                }
-                            }
-
-                            // 위치 권한 요청 다이얼로그
-                            if (showLocationPermissionDialog) {
-                                AlertDialog(
-                                    onDismissRequest = { showLocationPermissionDialog = false },
-                                    title = { Text("위치 정보 필요") },
-                                    text = {
-                                        Text("탐색 기능은 회원님 지역의 맞춤 정보를 제공하기 위해 위치 권한이 필요합니다. 위치 정보를 허용하시겠습니까?")
-                                    },
-                                    confirmButton = {
-                                        TextButton(
-                                            onClick = {
-                                                showLocationPermissionDialog = false
-                                                // 위치 권한 요청
-                                                locationPermissionLauncher.launch(
-                                                    arrayOf(
-                                                        Manifest.permission.ACCESS_FINE_LOCATION,
-                                                        Manifest.permission.ACCESS_COARSE_LOCATION
-                                                    )
-                                                )
-                                            }
-                                        ) {
-                                            Text("허용")
-                                        }
-                                    },
-                                    dismissButton = {
-                                        TextButton(
-                                            onClick = {
-                                                showLocationPermissionDialog = false
-                                                Toast.makeText(activity, "위치 권한 없이는 탐색 기능을 사용할 수 없습니다.", Toast.LENGTH_SHORT).show()
-                                            }
-                                        ) {
-                                            Text("거부")
-                                        }
-                                    }
-                                )
-                            }
-
+                            // ChatScreen의 탐색 버튼 onClick 부분 수정
+                            // ChatScreen의 탐색 버튼 onClick 부분 수정
                             Button(
                                 onClick = {
-                                    // 위치 권한 및 위치 정보 확인
-                                    val context = activity as Context
-                                    val hasLocationPermission = ContextCompat.checkSelfPermission(
-                                        context,
-                                        Manifest.permission.ACCESS_FINE_LOCATION
-                                    ) == PackageManager.PERMISSION_GRANTED
+                                    // 탐색 시작 토스트 메시지 표시
+                                    Toast.makeText(activity, "탐색 시작", Toast.LENGTH_SHORT).show()
 
-                                    if (!hasLocationPermission || userCity.isEmpty() || userDistrict.isEmpty() ||
-                                        userCity == "위치 권한 없음" || userDistrict == "위치 권한 없음") {
-                                        // 위치 권한이 없거나 위치 정보가 없는 경우 다이얼로그 표시
-                                        showLocationPermissionDialog = true
-                                    } else {
-                                        // 위치 정보가 있는 경우 탐색 실행
-                                        performExplore(activity, userCity, userDistrict, messages) { newMessages ->
-                                            messages = newMessages
+                                    // 상세 디버깅 로그
+                                    Log.d("ExploreDebug", "=== 탐색 버튼 클릭 ===")
+                                    Log.d("ExploreDebug", "userCity: '$userCity'")
+                                    Log.d("ExploreDebug", "userDistrict: '$userDistrict'")
+
+                                    // 탐색 버튼 기능 - Flask 서버의 explore 엔드포인트로 연결
+                                    Thread {
+                                        try {
+                                            val url = URL("http://192.168.219.102:5000/explore")
+                                            val connection = url.openConnection() as HttpURLConnection
+                                            connection.requestMethod = "POST"
+                                            connection.setRequestProperty("Content-Type", "application/json")
+                                            connection.doOutput = true
+
+                                            // JSON 데이터 생성
+                                            val jsonObject = JSONObject().apply {
+                                                put("userCity", userCity)
+                                                put("userDistrict", userDistrict)
+                                            }
+
+                                            Log.d("ExploreDebug", "전송할 JSON: ${jsonObject.toString()}")
+
+                                            // 데이터 전송
+                                            connection.outputStream.use { os ->
+                                                val input = jsonObject.toString().toByteArray(Charsets.UTF_8)
+                                                os.write(input, 0, input.size)
+                                            }
+
+                                            // 응답 받기
+                                            val responseCode = connection.responseCode
+                                            if (responseCode == HttpURLConnection.HTTP_OK) {
+                                                val response = connection.inputStream.bufferedReader().use { it.readText() }
+                                                Log.d("ExploreResponse", "서버 응답: $response")
+
+                                                // JSON 응답 파싱
+                                                try {
+                                                    val responseJson = JSONObject(response)
+                                                    val generatedQuery = responseJson.optString("generated_query", null)
+                                                    val queryResponse = responseJson.optJSONObject("query_response")
+
+                                                    // UI 스레드에서 처리
+                                                    activity.runOnUiThread {
+                                                        if (generatedQuery != null && queryResponse != null) {
+                                                            // 생성된 질문을 메시지로 추가
+                                                            val exploreMessage = ChatMessage(
+                                                                text = "🔍 탐색: $generatedQuery",
+                                                                isFromUser = false
+                                                            )
+                                                            messages = messages + exploreMessage
+
+                                                            // 응답 처리
+                                                            val responseType = queryResponse.optString("type")
+                                                            when (responseType) {
+                                                                "llm" -> {
+                                                                    val content = queryResponse.optString("content", "응답 없음")
+                                                                    val responseMessage = ChatMessage(
+                                                                        text = content,
+                                                                        isFromUser = false
+                                                                    )
+                                                                    messages = messages + responseMessage
+
+                                                                    // LLM 응답은 단일 결과이므로 네비게이션 필요 없음
+                                                                    showNavigation = false
+                                                                }
+                                                                "pinecone" -> {
+                                                                    val results = queryResponse.optJSONArray("results")
+                                                                    val category = queryResponse.optString("category", "")
+
+                                                                    if (results != null && results.length() > 0) {
+                                                                        // 검색 결과를 개별 메시지로 저장
+                                                                        val searchResults = mutableListOf<ChatMessage>()
+
+                                                                        for (i in 0 until results.length()) {
+                                                                            val result = results.getJSONObject(i)
+                                                                            val title = result.optString("title", "제목 없음")
+                                                                            val content = result.optString("content", "내용 없음")
+                                                                            val resultCategory = result.optString("category", "")
+
+                                                                            val resultText = StringBuilder()
+                                                                            resultText.append("📋 ${category} 검색 결과 ${i + 1}/${results.length()}\n\n")
+                                                                            resultText.append("🏢 $title\n")
+                                                                            if (resultCategory.isNotEmpty()) {
+                                                                                resultText.append("📍 $resultCategory\n")
+                                                                            }
+                                                                            resultText.append("\n$content")
+
+                                                                            searchResults.add(ChatMessage(
+                                                                                text = resultText.toString(),
+                                                                                isFromUser = false
+                                                                            ))
+                                                                        }
+
+                                                                        // ChatService를 통해 검색 결과 설정
+                                                                        activity.chatService.setSearchResults(searchResults)
+
+                                                                        // 첫 번째 결과 표시
+                                                                        if (searchResults.isNotEmpty()) {
+                                                                            messages = messages + searchResults[0]
+
+                                                                            // 검색 결과가 여러 개인 경우 네비게이션 표시
+                                                                            if (searchResults.size > 1) {
+                                                                                showNavigation = true
+                                                                                hasPrevious = false
+                                                                                hasNext = true
+                                                                                currentPage = 1
+                                                                                totalPages = searchResults.size
+                                                                            } else {
+                                                                                showNavigation = false
+                                                                            }
+                                                                        }
+                                                                    } else {
+                                                                        val responseMessage = ChatMessage(
+                                                                            text = "검색 결과가 없습니다.",
+                                                                            isFromUser = false
+                                                                        )
+                                                                        messages = messages + responseMessage
+                                                                        showNavigation = false
+                                                                    }
+                                                                }
+                                                            }
+
+                                                            Toast.makeText(activity, "탐색이 완료되었습니다.", Toast.LENGTH_SHORT).show()
+                                                        } else {
+                                                            Toast.makeText(activity, "탐색 결과가 없습니다.", Toast.LENGTH_SHORT).show()
+                                                        }
+                                                    }
+                                                } catch (e: Exception) {
+                                                    Log.e("ExploreError", "JSON 파싱 오류: ${e.message}")
+                                                    activity.runOnUiThread {
+                                                        Toast.makeText(activity, "응답 처리 중 오류가 발생했습니다.", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                }
+                                            } else {
+                                                Log.e("ExploreError", "HTTP error code: $responseCode")
+                                                activity.runOnUiThread {
+                                                    Toast.makeText(activity, "탐색 중 오류가 발생했습니다.", Toast.LENGTH_SHORT).show()
+                                                }
+                                            }
+
+                                            connection.disconnect()
+                                        } catch (e: Exception) {
+                                            Log.e("ExploreError", "Error: ${e.message}", e)
+                                            activity.runOnUiThread {
+                                                Toast.makeText(activity, "서버 연결에 실패했습니다.", Toast.LENGTH_SHORT).show()
+                                            }
                                         }
-                                    }
+                                    }.start()
                                 },
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = Color(0xFFfba064),
@@ -2856,168 +3336,6 @@ fun ChatScreen(
     }
 }
 
-// 탐색 실행 함수 (기존 탐색 로직을 함수로 분리)
-private fun performExplore(
-    activity: MainActivity,
-    userCity: String,
-    userDistrict: String,
-    currentMessages: List<ChatMessage>,
-    updateMessages: (List<ChatMessage>) -> Unit
-) {
-    // 탐색 시작 토스트 메시지 표시
-    Toast.makeText(activity, "탐색 시작", Toast.LENGTH_SHORT).show()
-
-    // 상세 디버깅 로그
-    Log.d("ExploreDebug", "=== 탐색 버튼 클릭 ===")
-    Log.d("ExploreDebug", "userCity: '$userCity'")
-    Log.d("ExploreDebug", "userDistrict: '$userDistrict'")
-
-    // 탐색 버튼 기능 - Flask 서버의 explore 엔드포인트로 연결
-    Thread {
-        try {
-            val url = URL("http://192.168.219.102:5000/explore")
-            val connection = url.openConnection() as HttpURLConnection
-            connection.requestMethod = "POST"
-            connection.setRequestProperty("Content-Type", "application/json")
-            connection.doOutput = true
-
-            // JSON 데이터 생성
-            val jsonObject = JSONObject().apply {
-                put("userCity", userCity)
-                put("userDistrict", userDistrict)
-            }
-
-            Log.d("ExploreDebug", "전송할 JSON: ${jsonObject.toString()}")
-
-            // 데이터 전송
-            connection.outputStream.use { os ->
-                val input = jsonObject.toString().toByteArray(Charsets.UTF_8)
-                os.write(input, 0, input.size)
-            }
-
-            // 응답 받기
-            val responseCode = connection.responseCode
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                val response = connection.inputStream.bufferedReader().use { it.readText() }
-                Log.d("ExploreResponse", "서버 응답: $response")
-
-                // JSON 응답 파싱
-                try {
-                    val responseJson = JSONObject(response)
-                    val generatedQuery = responseJson.optString("generated_query", null)
-                    val queryResponse = responseJson.optJSONObject("query_response")
-
-                    // UI 스레드에서 처리
-                    activity.runOnUiThread {
-                        if (generatedQuery != null && queryResponse != null) {
-                            // 생성된 질문을 메시지로 추가 - isExploreResult = true
-                            val exploreMessage = ChatMessage(
-                                text = "🔍 탐색: $generatedQuery",
-                                isFromUser = false,
-                                isExploreResult = true  // 탐색 메시지임을 표시
-                            )
-                            var messages = currentMessages + exploreMessage
-
-                            // 응답 처리
-                            val responseType = queryResponse.optString("type")
-                            when (responseType) {
-                                "llm" -> {
-                                    val content = queryResponse.optString("content", "응답 없음")
-                                    val responseMessage = ChatMessage(
-                                        text = content,
-                                        isFromUser = false,
-                                        isExploreResult = true  // 탐색 결과임을 표시
-                                    )
-                                    messages = messages + responseMessage
-                                    updateMessages(messages)
-
-                                    // LLM 응답은 단일 결과이므로 네비게이션 필요 없음
-                                    activity.chatService.navigationCallback?.invoke(false, false, 0, 0)
-                                }
-                                "pinecone" -> {
-                                    val results = queryResponse.optJSONArray("results")
-                                    val category = queryResponse.optString("category", "")
-
-                                    if (results != null && results.length() > 0) {
-                                        // 검색 결과를 개별 메시지로 저장
-                                        val searchResults = mutableListOf<ChatMessage>()
-
-                                        for (i in 0 until results.length()) {
-                                            val result = results.getJSONObject(i)
-                                            val title = result.optString("title", "제목 없음")
-                                            val content = result.optString("content", "내용 없음")
-                                            val resultCategory = result.optString("category", "")
-
-                                            val resultText = StringBuilder()
-                                            resultText.append("📋 ${category} 검색 결과 ${i + 1}/${results.length()}\n\n")
-                                            resultText.append("🏢 $title\n")
-                                            if (resultCategory.isNotEmpty()) {
-                                                resultText.append("📍 $resultCategory\n")
-                                            }
-                                            resultText.append("\n$content")
-
-                                            searchResults.add(ChatMessage(
-                                                text = resultText.toString(),
-                                                isFromUser = false,
-                                                isExploreResult = true  // 탐색 결과임을 표시
-                                            ))
-                                        }
-
-                                        // ChatService를 통해 검색 결과 설정
-                                        activity.chatService.setSearchResults(searchResults)
-
-                                        // 첫 번째 결과 표시
-                                        if (searchResults.isNotEmpty()) {
-                                            messages = messages + searchResults[0]
-                                            updateMessages(messages)
-
-                                            // 검색 결과가 여러 개인 경우 네비게이션 표시
-                                            if (searchResults.size > 1) {
-                                                activity.chatService.navigationCallback?.invoke(
-                                                    false, true, 1, searchResults.size
-                                                )
-                                            }
-                                        }
-                                    } else {
-                                        val responseMessage = ChatMessage(
-                                            text = "검색 결과가 없습니다.",
-                                            isFromUser = false,
-                                            isExploreResult = true  // 탐색 결과임을 표시
-                                        )
-                                        messages = messages + responseMessage
-                                        updateMessages(messages)
-                                    }
-                                }
-                            }
-
-                            Toast.makeText(activity, "탐색이 완료되었습니다.", Toast.LENGTH_SHORT).show()
-                        } else {
-                            Toast.makeText(activity, "탐색 결과가 없습니다.", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.e("ExploreError", "JSON 파싱 오류: ${e.message}")
-                    activity.runOnUiThread {
-                        Toast.makeText(activity, "응답 처리 중 오류가 발생했습니다.", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            } else {
-                Log.e("ExploreError", "HTTP error code: $responseCode")
-                activity.runOnUiThread {
-                    Toast.makeText(activity, "탐색 중 오류가 발생했습니다.", Toast.LENGTH_SHORT).show()
-                }
-            }
-
-            connection.disconnect()
-        } catch (e: Exception) {
-            Log.e("ExploreError", "Error: ${e.message}", e)
-            activity.runOnUiThread {
-                Toast.makeText(activity, "서버 연결에 실패했습니다.", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }.start()
-}
-
 // Helper function to send a message
 private fun sendMessage(
     messageText: String,
@@ -3058,11 +3376,7 @@ fun MessageItem(message: ChatMessage) {
                 .widthIn(max = 280.dp)
                 .wrapContentWidth(),
             colors = CardDefaults.cardColors(
-                containerColor = when {
-                    message.isFromUser -> Color(0xFFc6f584)  // 사용자 메시지
-                    message.isExploreResult -> Color(0xFFfacfbc)  // 탐색 결과 - 새로운 색상
-                    else -> Color(0xFFE0E0E0)  // 일반 AI 메시지
-                }
+                containerColor = if (message.isFromUser) Color(0xFFc6f584) else Color(0xFFE0E0E0)
             ),
             shape = RoundedCornerShape(
                 topStart = if (message.isFromUser) 12.dp else 2.dp,
@@ -3176,6 +3490,5 @@ data class ChatMessage(
     val text: String,
     val isFromUser: Boolean,
     val timestamp: Long = System.currentTimeMillis(),
-    val isWaiting: Boolean = false,
-    val isExploreResult: Boolean = false
+    val isWaiting: Boolean = false
 )

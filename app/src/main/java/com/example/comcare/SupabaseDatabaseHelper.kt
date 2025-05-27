@@ -1144,4 +1144,147 @@ class SupabaseDatabaseHelper(private val context: Context) {
             emptyList()
         }
     }
+
+    // SupabaseDatabaseHelper.kt에 추가할 내용
+
+    // 6. ICH_Facility data
+    @Serializable
+    data class ICHFacility(
+        val Id: Int,
+        val Category: String? = null,
+        val Title: String? = null,
+        val Service1: String? = null,
+        val Service2: String? = null,
+        val Rating: String? = null,
+        val Full: String? = null,
+        val Now: String? = null,
+        val Wating: String? = null,
+        val Bus: String? = null,
+        val Address: String? = null,
+        val Tel: String? = null,
+        val created_at: String? = null
+    )
+
+    suspend fun getICHFacilities(): List<ICHFacility> {
+        return try {
+            Log.d("supabase", "Starting getICHFacilities")
+
+            withContext(Dispatchers.IO) {
+                try {
+                    // First get the total count
+                    val totalCount = supabase.postgrest["ich_facility"]
+                        .select(head = true, count = Count.EXACT)
+                        .count() ?: 0L
+
+                    Log.d("supabase", "Total count of ich_facilities: $totalCount")
+
+                    if (totalCount == 0L) {
+                        Log.d("supabase", "No facilities found in the 'ich_facility' table")
+                        return@withContext emptyList<ICHFacility>()
+                    }
+
+                    // Use the same approach as getKKFacilities() - first make a test request
+                    val testBatch = supabase.postgrest["ich_facility"]
+                        .select()
+                        .decodeList<ICHFacility>()
+
+                    // The batch size is whatever limit Supabase applied to our first request
+                    val batchSize = testBatch.size
+                    Log.d("supabase", "Detected batch size from Supabase: $batchSize")
+
+                    // Now we know the batch size, fetch all records
+                    val allICHFacilities = mutableListOf<ICHFacility>()
+
+                    // Add the first batch
+                    allICHFacilities.addAll(testBatch)
+
+                    var currentStart = batchSize
+
+                    // Continue fetching until we have all records
+                    while (currentStart < totalCount) {
+                        val currentEnd = currentStart + batchSize - 1
+                        Log.d("supabase", "Fetching ich_facilities batch: $currentStart to $currentEnd")
+
+                        try {
+                            // Fetch a batch using range
+                            val batch = supabase.postgrest["ich_facility"]
+                                .select(filter = {
+                                    range(from = currentStart.toLong(), to = currentEnd.toLong())
+                                })
+                                .decodeList<ICHFacility>()
+
+                            Log.d("supabase", "Fetched batch of ${batch.size} ich_facilities")
+
+                            allICHFacilities.addAll(batch)
+
+                            // If we got an empty batch or fewer items than requested, we might be done
+                            if (batch.isEmpty() || batch.size < batchSize) {
+                                break
+                            }
+
+                            // Move to next batch
+                            currentStart += batchSize
+                        } catch (e: Exception) {
+                            Log.e("supabase", "Error fetching ich_facilities batch $currentStart-$currentEnd: ${e.message}", e)
+                            e.printStackTrace()
+                            // Continue to next batch despite error
+                            currentStart += batchSize
+                        }
+                    }
+
+                    Log.d("supabase", "Retrieved ${allICHFacilities.size} ich_facilities out of $totalCount total")
+
+                    // Verify we got all records
+                    if (allICHFacilities.size < totalCount) {
+                        Log.w("supabase", "Warning: Retrieved fewer records than expected (${allICHFacilities.size} vs $totalCount)")
+                    }
+
+                    // Log a sample facility for debugging
+                    if (allICHFacilities.isNotEmpty()) {
+                        val sample = allICHFacilities.first()
+                        Log.d("supabase", "Sample ich_facility: id=${sample.Id}, " +
+                                "title=${sample.Title}, " +
+                                "category=${sample.Category}, " +
+                                "address=${sample.Address}")
+                    }
+
+                    allICHFacilities
+                } catch (e: Exception) {
+                    Log.e("supabase", "Error in getICHFacilities inner block: ${e.message}", e)
+                    e.printStackTrace()
+                    emptyList()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("supabase", "Error in getICHFacilities: ${e.message}", e)
+            e.printStackTrace()
+            emptyList()
+        }
+    }
+
+    // Also add a function to get a specific ich_facility by ID
+    suspend fun getICHFacilityById(ichFacilityId: Int): ICHFacility? {
+        return try {
+            withContext(Dispatchers.IO) {
+                val response = supabase.postgrest.from("ich_facility")
+                    .select(
+                        filter = {
+                            eq("id", ichFacilityId)
+                        }
+                    )
+                    .decodeSingleOrNull<ICHFacility>()
+
+                if (response != null) {
+                    Log.d(TAG, "Retrieved ich_facility with ID: $ichFacilityId")
+                    response
+                } else {
+                    Log.d(TAG, "No ich_facility found with ID: $ichFacilityId")
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching ich_facility by ID: ${e.message}")
+            null
+        }
+    }
 }

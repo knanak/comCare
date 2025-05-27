@@ -118,6 +118,14 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
     val isLoadingKKFacility2s: Boolean
         get() = _isLoadingKKFacility2s.value
 
+    // ich_facility 관련 추가
+    private val _ichFacilities = mutableStateOf<List<SupabaseDatabaseHelper.ICHFacility>>(emptyList())
+    val ichFacilities: State<List<SupabaseDatabaseHelper.ICHFacility>> = _ichFacilities
+
+    private val _isLoadingICHFacilities = mutableStateOf<Boolean>(false)
+    val isLoadingICHFacilities: Boolean
+        get() = _isLoadingICHFacilities.value
+
     init {
         // Fetch data when ViewModel is initialized
         fetchPlacesData()
@@ -127,6 +135,7 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
         fetchKKCulturesData()
         fetchKKFacilitiesData()
         fetchKKFacility2sData()
+        fetchICHFacilitiesData()
     }
 
     // 사용자 위치 설정 함수 추가
@@ -184,8 +193,13 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
                     fetchKKFacility2DataAsPlaces()
                 }
 
-                // Combine all datasets
-                val combinedData = apiData + supabaseData + kkFacilityData + kkFacility2Data
+                // Get ICH Facility data (추가)
+                val ichFacilityData = withContext(Dispatchers.IO) {
+                    fetchICHFacilityDataAsPlaces()
+                }
+
+                // Combine all datasets (ich_facility 포함)
+                val combinedData = apiData + supabaseData + kkFacilityData + kkFacility2Data + ichFacilityData
 
                 // Process the combined data
                 processLocationCategories(combinedData)
@@ -196,7 +210,8 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
 
                 Log.d("PlaceViewModel", "Data fetch complete: ${combinedData.size} total items " +
                         "(${apiData.size} API, ${supabaseData.size} Supabase, " +
-                        "${kkFacilityData.size} KK Facility, ${kkFacility2Data.size} KK Facility2)")
+                        "${kkFacilityData.size} KK Facility, ${kkFacility2Data.size} KK Facility2, " +
+                        "${ichFacilityData.size} ICH Facility)")
 
             } catch (e: Exception) {
                 Log.e("PlaceViewModel", "Error fetching data", e)
@@ -210,6 +225,116 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
                 // Process sample data
                 processLocationCategories(sampleData)
                 processServiceCategories(sampleData)
+            }
+        }
+    }
+
+    // ICH Facility 데이터를 Place 객체로 변환
+    private suspend fun fetchICHFacilityDataAsPlaces(): List<Place> {
+        return try {
+            Log.d("PlaceViewModel", "Starting ICH Facility data fetch as Places")
+
+            val ichFacilities = supabaseHelper.getICHFacilities()
+            Log.d("PlaceViewModel", "ICH Facility getICHFacilities returned ${ichFacilities.size} items")
+
+            if (ichFacilities.isEmpty()) {
+                Log.d("PlaceViewModel", "ICH Facility returned empty list")
+                return emptyList()
+            }
+
+            // ICH Facility 데이터를 Place 객체로 매핑
+            val places = ichFacilities.map { facility ->
+                try {
+                    // 주소에서 도시와 구/군 정보 추출
+                    val addressParts = facility.Address?.trim()?.split(" ") ?: emptyList()
+                    val city = if (addressParts.isNotEmpty()) addressParts[0] else ""
+                    val district = if (addressParts.size > 1) addressParts[1] else ""
+
+                    // Rating에서 개행문자 제거
+                    val cleanRating = facility.Rating?.replace("\n", " ") ?: ""
+
+                    Place(
+                        id = "ich_${facility.Id}",
+                        name = facility.Title ?: "이름 없음",
+                        facilityCode = "",
+                        facilityKind = facility.Service2 ?: "",
+                        facilityKindDetail = facility.Service1 ?: "복지시설",
+                        district = district,
+                        address = facility.Address ?: "",
+                        tel = facility.Tel ?: "",
+                        zipCode = "",
+                        service1 = listOf(facility.Service1 ?: "복지시설"),
+                        service2 = listOf(facility.Service2 ?: ""),
+                        rating = cleanRating,
+                        rating_year = "",
+                        full = facility.Full ?: "0",
+                        now = facility.Now ?: "0",
+                        wating = facility.Wating ?: "0",
+                        bus = facility.Bus ?: ""
+                    )
+                } catch (e: Exception) {
+                    Log.e("PlaceViewModel", "Error converting ich_facility: ${facility.Id}", e)
+                    null
+                }
+            }.filterNotNull()
+
+            Log.d("PlaceViewModel", "ICH Facility data fetch complete: ${places.size} items")
+            places
+
+        } catch (e: Exception) {
+            Log.e("PlaceViewModel", "Error fetching ICH Facility data", e)
+            emptyList()
+        }
+    }
+
+    fun fetchICHFacilitiesData() {
+        viewModelScope.launch {
+            try {
+                Log.d("PlaceViewModel", "Starting ich_facilities data fetch")
+                _isLoadingICHFacilities.value = true
+
+                val ichFacilitiesData = withContext(Dispatchers.IO) {
+                    try {
+                        val ichFacilities = supabaseHelper.getICHFacilities()
+                        Log.d("PlaceViewModel", "Supabase getICHFacilities returned ${ichFacilities.size} items")
+
+                        if (ichFacilities.isEmpty()) {
+                            Log.d("PlaceViewModel", "Supabase ich_facilities returned empty list")
+                        } else {
+                            // Log first ich_facility for debugging
+                            val firstICHFacility = ichFacilities.firstOrNull()
+                            if (firstICHFacility != null) {
+                                Log.d(
+                                    "PlaceViewModel", "Sample ich_facility data: Id=${firstICHFacility.Id}, " +
+                                            "title=${firstICHFacility.Title}, " +
+                                            "category=${firstICHFacility.Category}, " +
+                                            "address=${firstICHFacility.Address}"
+                                )
+                            }
+                        }
+                        ichFacilities
+                    } catch (e: Exception) {
+                        Log.e(
+                            "PlaceViewModel",
+                            "Error in getICHFacilities Dispatchers.IO block: ${e.message}",
+                            e
+                        )
+                        emptyList()
+                    }
+                }
+
+                // Update the ich_facilities value with the fetched data
+                _ichFacilities.value = ichFacilitiesData
+
+                // 기존 장소 데이터 다시 가져오기 (통합된 위치 정보 업데이트를 위해)
+                fetchPlacesData()
+
+                Log.d("PlaceViewModel", "ICH_Facilities data fetch complete: ${ichFacilitiesData.size} items")
+            } catch (e: Exception) {
+                Log.e("PlaceViewModel", "Error fetching ich_facilities data: ${e.message}", e)
+                _ichFacilities.value = emptyList()
+            } finally {
+                _isLoadingICHFacilities.value = false
             }
         }
     }
@@ -520,6 +645,8 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
         }
     }
 
+// PlaceViewModel.kt의 processLocationCategories 함수 수정
+
     private fun processLocationCategories(places: List<Place>) {
         // Extract unique cities from addresses
         val citySet = mutableSetOf<String>()
@@ -531,11 +658,12 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
 
         // Extract city and district information from places
         places.forEach { place ->
-            // Process the address to extract city
+            // Process the address to extract city and district
             val addressParts = place.address.split(" ")
-            if (addressParts.size >= 2) {
-                val city = addressParts[0] // Usually the first part is the city (e.g., "서울특별시")
-                val district = place.district // Use the district field directly
+
+            if (addressParts.isNotEmpty()) {
+                // 첫 번째 부분을 도시로 사용
+                val city = addressParts[0]
 
                 if (city.isNotEmpty()) {
                     // Add city if not already added
@@ -546,9 +674,24 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
                         districtMap[city] = mutableSetOf("전체")
                     }
 
-                    // Add district to the city's district set
-                    if (district.isNotEmpty()) {
-                        districtMap[city]?.add(district)
+                    // district 필드가 있으면 우선 사용
+                    if (place.district.isNotEmpty()) {
+                        districtMap[city]?.add(place.district)
+                    }
+
+                    // 주소에서도 구/군 정보 추출 시도
+                    if (addressParts.size >= 2) {
+                        val secondPart = addressParts[1]
+
+                        // 두 번째 부분이 구/군/시로 끝나는 경우 district로 추가
+                        if (secondPart.endsWith("구") || secondPart.endsWith("군") || secondPart.endsWith("시")) {
+                            districtMap[city]?.add(secondPart)
+
+                            // ich_facility 데이터인 경우 로그 출력
+                            if (place.id.startsWith("ich_")) {
+                                Log.d("LocationCategories", "ICH facility - City: $city, District from address: $secondPart")
+                            }
+                        }
                     }
                 }
             }
@@ -580,7 +723,18 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
 
         // Log the extracted location data
         _districts.value.forEach { (city, districts) ->
-            Log.d("LocationCategories", "City: $city, Districts: $districts")
+            Log.d("LocationCategories", "City: $city, Districts: ${districts.joinToString(", ")}")
+        }
+
+        // ich_facility 관련 디버깅 로그
+        val ichFacilities = places.filter { it.id.startsWith("ich_") }
+        if (ichFacilities.isNotEmpty()) {
+            Log.d("LocationCategories", "Total ICH facilities: ${ichFacilities.size}")
+            val ichDistricts = ichFacilities.map { place ->
+                val parts = place.address.split(" ")
+                if (parts.size >= 2) parts[1] else "Unknown"
+            }.distinct()
+            Log.d("LocationCategories", "ICH Districts found: ${ichDistricts.joinToString(", ")}")
         }
     }
 
@@ -929,6 +1083,8 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
     var lastSearchServiceSubcategory: String = "전체"
 
     // Apply filters
+// PlaceViewModel.kt의 filterPlaces 함수 수정
+
     fun filterPlaces(
         selectedCity: String,
         selectedDistrict: String,
@@ -944,7 +1100,36 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
         _filteredPlaces.value = _allPlaces.value.filter { place ->
             // Location filtering
             val cityMatch = selectedCity == "전체" || place.address.contains(selectedCity)
-            val districtMatch = selectedDistrict == "전체" || place.district == selectedDistrict
+
+            // District filtering - district 필드와 주소 모두 확인
+            val districtMatch = if (selectedDistrict == "전체") {
+                true
+            } else {
+                // district 필드 확인
+                val fieldMatch = place.district == selectedDistrict
+
+                // 주소에서 district 확인
+                val addressParts = place.address.split(" ")
+                val addressMatch = if (addressParts.size >= 2) {
+                    addressParts[1] == selectedDistrict
+                } else {
+                    false
+                }
+
+                // 둘 중 하나라도 일치하면 true
+                fieldMatch || addressMatch
+            }
+
+            // 디버깅을 위한 로그 (ich_facility만)
+            if (place.id.startsWith("ich_") && selectedCity == "인천광역시") {
+                val addressParts = place.address.split(" ")
+                val addressDistrict = if (addressParts.size >= 2) addressParts[1] else "N/A"
+                Log.d("FilterDebug", "ICH facility: ${place.name}, " +
+                        "district field: '${place.district}', " +
+                        "address district: '$addressDistrict', " +
+                        "selected: '$selectedDistrict', " +
+                        "match: $districtMatch")
+            }
 
             // Service filtering - updated to use facilityKindDetail for category matching
             val serviceMatch = if (selectedServiceCategory == "전체") {
@@ -974,8 +1159,12 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
 
             cityMatch && districtMatch && serviceMatch
         }
-    }
 
+        // 결과 로그
+        if (selectedCity == "인천광역시") {
+            Log.d("FilterDebug", "Filtered results for 인천광역시 $selectedDistrict: ${_filteredPlaces.value.size} items")
+        }
+    }
     // job과 kk_job의 위치 정보를 통합하는 함수
     private fun processAllJobLocationCategories() {
         val citySet = mutableSetOf<String>()

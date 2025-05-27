@@ -16,8 +16,8 @@ import java.util.concurrent.TimeUnit
 class ChatService {
     private val TAG = "ChatService"
 
-    // URL을 Pinecone 서버 URL로 변경
     private val url = "http://192.168.219.102:5000/query"
+//    private val url = "https://coral-app-fjt8m.ondigitalocean.app/query"
 
     // 현재 검색 결과들을 저장하는 변수
     private var currentResults: JSONArray? = null
