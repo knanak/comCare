@@ -1450,4 +1450,180 @@ class SupabaseDatabaseHelper(private val context: Context) {
             null
         }
     }
+
+    // SupabaseDatabaseHelper.kt에 추가할 내용
+
+    // 8. ICH_Culture data
+    @Serializable
+    data class ICHCulture(
+        val Id: Int,
+        val Category: String? = null,
+        val Title: String? = null,
+        val Recruitment_period: String? = null,
+        val Education_period: String? = null,
+        val Date: String? = null,
+        val Quota: String? = null,
+        val Institution: String? = null,
+        val Address: String? = null,
+        val Tel: String? = null,
+        val Detail: String? = null,
+        val Fee: String? = null,
+        val created_at: String? = null
+    )
+
+    suspend fun getICHCultures(): List<ICHCulture> {
+        return try {
+            Log.d("supabase", "Starting getICHCultures")
+
+            withContext(Dispatchers.IO) {
+                try {
+                    // First get the total count
+                    val totalCount = supabase.postgrest["ich_culture"]
+                        .select(head = true, count = Count.EXACT)
+                        .count() ?: 0L
+
+                    Log.d("supabase", "Total count of ich_cultures: $totalCount")
+
+                    if (totalCount == 0L) {
+                        Log.d("supabase", "No cultures found in the 'ich_culture' table")
+                        return@withContext emptyList<ICHCulture>()
+                    }
+
+                    // Use the same approach as getKKCultures() - first make a test request
+                    val testBatch = supabase.postgrest["ich_culture"]
+                        .select()
+                        .decodeList<ICHCulture>()
+
+                    // The batch size is whatever limit Supabase applied to our first request
+                    val batchSize = testBatch.size
+                    Log.d("supabase", "Detected batch size from Supabase: $batchSize")
+
+                    // Now we know the batch size, fetch all records
+                    val allICHCultures = mutableListOf<ICHCulture>()
+
+                    // Clean the test batch data
+                    val cleanedFirstBatch = testBatch.map { ichCulture ->
+                        // Remove newlines from period fields
+                        val cleanedRecruitmentPeriod = ichCulture.Recruitment_period?.replace("\n", "")
+                        val cleanedEducationPeriod = ichCulture.Education_period?.replace("\n", "")
+
+                        ichCulture.copy(
+                            Recruitment_period = cleanedRecruitmentPeriod,
+                            Education_period = cleanedEducationPeriod
+                        )
+                    }
+
+                    // Add the cleaned first batch
+                    allICHCultures.addAll(cleanedFirstBatch)
+
+                    var currentStart = batchSize
+
+                    // Continue fetching until we have all records
+                    while (currentStart < totalCount) {
+                        val currentEnd = currentStart + batchSize - 1
+                        Log.d("supabase", "Fetching ich_cultures batch: $currentStart to $currentEnd")
+
+                        try {
+                            // Fetch a batch using range
+                            val batch = supabase.postgrest["ich_culture"]
+                                .select(filter = {
+                                    range(from = currentStart.toLong(), to = currentEnd.toLong())
+                                })
+                                .decodeList<ICHCulture>()
+
+                            Log.d("supabase", "Fetched batch of ${batch.size} ich_cultures")
+
+                            // Clean the batch data
+                            val cleanedBatch = batch.map { ichCulture ->
+                                // Remove newlines from period fields
+                                val cleanedRecruitmentPeriod = ichCulture.Recruitment_period?.replace("\n", "")
+                                val cleanedEducationPeriod = ichCulture.Education_period?.replace("\n", "")
+
+                                ichCulture.copy(
+                                    Recruitment_period = cleanedRecruitmentPeriod,
+                                    Education_period = cleanedEducationPeriod
+                                )
+                            }
+
+                            allICHCultures.addAll(cleanedBatch)
+
+                            // If we got an empty batch or fewer items than requested, we might be done
+                            if (batch.isEmpty() || batch.size < batchSize) {
+                                break
+                            }
+
+                            // Move to next batch
+                            currentStart += batchSize
+                        } catch (e: Exception) {
+                            Log.e("supabase", "Error fetching ich_cultures batch $currentStart-$currentEnd: ${e.message}", e)
+                            e.printStackTrace()
+                            // Continue to next batch despite error
+                            currentStart += batchSize
+                        }
+                    }
+
+                    Log.d("supabase", "Retrieved ${allICHCultures.size} ich_cultures out of $totalCount total")
+
+                    // Verify we got all records
+                    if (allICHCultures.size < totalCount) {
+                        Log.w("supabase", "Warning: Retrieved fewer records than expected (${allICHCultures.size} vs $totalCount)")
+                    }
+
+                    // Log a sample culture for debugging
+                    if (allICHCultures.isNotEmpty()) {
+                        val sample = allICHCultures.first()
+                        Log.d("supabase", "Sample ich_culture: id=${sample.Id}, " +
+                                "title=${sample.Title}, " +
+                                "institution=${sample.Institution}, " +
+                                "address=${sample.Address}, " +
+                                "category=${sample.Category}")
+                    }
+
+                    allICHCultures
+                } catch (e: Exception) {
+                    Log.e("supabase", "Error in getICHCultures inner block: ${e.message}", e)
+                    e.printStackTrace()
+                    emptyList()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("supabase", "Error in getICHCultures: ${e.message}", e)
+            e.printStackTrace()
+            emptyList()
+        }
+    }
+
+    // Also add a function to get a specific ich_culture by ID
+    suspend fun getICHCultureById(ichCultureId: Int): ICHCulture? {
+        return try {
+            withContext(Dispatchers.IO) {
+                val response = supabase.postgrest.from("ich_culture")
+                    .select(
+                        filter = {
+                            eq("id", ichCultureId)
+                        }
+                    )
+                    .decodeSingleOrNull<ICHCulture>()
+
+                if (response != null) {
+                    Log.d(TAG, "Retrieved ich_culture with ID: $ichCultureId")
+
+                    // Clean the period fields if present
+                    val cleanedRecruitmentPeriod = response.Recruitment_period?.replace("\n", "")
+                    val cleanedEducationPeriod = response.Education_period?.replace("\n", "")
+
+                    response.copy(
+                        Recruitment_period = cleanedRecruitmentPeriod,
+                        Education_period = cleanedEducationPeriod
+                    )
+                } else {
+                    Log.d(TAG, "No ich_culture found with ID: $ichCultureId")
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching ich_culture by ID: ${e.message}")
+            null
+        }
+    }
 }

@@ -1353,6 +1353,44 @@ fun PlaceComparisonApp(
                                                     )
                                                 }
                                             }
+                                            is SupabaseDatabaseHelper.ICHCulture -> {
+                                                // Display ich_culture
+                                                Text(
+                                                    randomCulture.Title ?: "강좌명 없음",
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    fontWeight = FontWeight.Bold,
+                                                )
+
+                                                Spacer(modifier = Modifier.height(4.dp))
+
+                                                Text(
+                                                    "기관: ${randomCulture.Institution ?: "정보 없음"}",
+                                                    style = MaterialTheme.typography.bodyLarge
+                                                )
+
+                                                Spacer(modifier = Modifier.height(4.dp))
+
+                                                // Show category as location for ich_culture
+                                                randomCulture.Category?.let { category ->
+                                                    Text(
+                                                        "지역: 인천광역시 $category",
+                                                        style = MaterialTheme.typography.bodyLarge
+                                                    )
+                                                    Spacer(modifier = Modifier.height(4.dp))
+                                                }
+
+                                                Row {
+                                                    Text(
+                                                        "수강료: ",
+                                                        style = MaterialTheme.typography.bodyLarge,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                    Text(
+                                                        randomCulture.Fee ?: "무료",
+                                                        style = MaterialTheme.typography.bodyLarge
+                                                    )
+                                                }
+                                            }
                                         }
 
                                         Spacer(modifier = Modifier.height(12.dp))
@@ -1367,6 +1405,7 @@ fun PlaceComparisonApp(
                                                     currentSection = "culture"
                                                     viewModel.fetchLectureData()
                                                     viewModel.fetchKKCulturesData()
+                                                    viewModel.fetchICHCulturesData()
                                                 },
                                                 colors = ButtonDefaults.buttonColors(
                                                     containerColor = highlightColor,
@@ -1874,9 +1913,10 @@ fun PlaceComparisonApp(
                     // 통합된 문화 강좌 리스트 (lectures + kk_cultures)
                     val regularLectures = viewModel.filteredLectures.value
                     val kkCultures = viewModel.filteredKKCultures.value
+                    val ichCultures = viewModel.filteredICHCultures.value
 
                     // 통합된 문화 강좌 리스트 생성
-                    val allCultures = regularLectures + kkCultures
+                    val allCultures = regularLectures + kkCultures + ichCultures
 
                     if (allCultures.isNotEmpty()) {
                         // Pagination state
@@ -1908,6 +1948,7 @@ fun PlaceComparisonApp(
                                         when (culture) {
                                             is SupabaseDatabaseHelper.Lecture -> LectureCard(lecture = culture)
                                             is SupabaseDatabaseHelper.KKCulture -> KKCultureCard(kkCulture = culture)
+                                            is SupabaseDatabaseHelper.ICHCulture -> ICHCultureCard(ichCulture = culture)
                                         }
                                         Spacer(modifier = Modifier.height(8.dp))
                                     }
@@ -1970,7 +2011,7 @@ fun PlaceComparisonApp(
                                 }
                             }
                         }
-                    } else if (viewModel.isLoadingLectures || viewModel.isLoadingKKCultures) {
+                    } else if (viewModel.isLoadingLectures || viewModel.isLoadingKKCultures || viewModel.isLoadingICHCultures)  {
                         // Show loading indicator
                         Box(
                             modifier = Modifier.fillMaxSize(),
@@ -1995,6 +2036,7 @@ fun PlaceComparisonApp(
                                     onClick = {
                                         viewModel.fetchLectureData()
                                         viewModel.fetchKKCulturesData()
+                                        viewModel.fetchICHCulturesData()
                                     },
                                     colors = ButtonDefaults.buttonColors(
                                         containerColor = Color(0xFFc6f584),
@@ -2737,6 +2779,134 @@ fun KKCultureCard(kkCulture: SupabaseDatabaseHelper.KKCulture) {
                         "마감" -> Color(0xFFF44336)
                         else -> Color.Gray
                     }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun ICHCultureCard(ichCulture: SupabaseDatabaseHelper.ICHCulture) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Culture Title
+            Text(
+                text = ichCulture.Title ?: "강좌명 없음",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = Color.Yellow,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Institution
+            Text(
+                text = "기관: ${ichCulture.Institution ?: "정보 없음"}",
+                style = MaterialTheme.typography.titleMedium
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Address
+            ichCulture.Address?.let { address ->
+                Text(
+                    text = "위치: $address",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+            }
+
+            // Category (이제 지역 정보로 표시)
+            ichCulture.Category?.let { category ->
+                Text(
+                    text = "지역: 인천광역시 $category",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+            }
+
+            // Recruitment Period
+            Row {
+                Text(
+                    "모집기간: ",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    ichCulture.Recruitment_period ?: "정보 없음",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Education Period
+            Row {
+                Text(
+                    "교육기간: ",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    ichCulture.Education_period ?: "정보 없음",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Date (교육 날짜)
+            ichCulture.Date?.let { date ->
+                Row {
+                    Text(
+                        "교육일시: ",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        date,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Bottom row with Fee and Quota
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                // Fee
+                Text(
+                    "수강료: ${ichCulture.Fee ?: "무료"}",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+
+                // Quota
+                Text(
+                    "정원: ${ichCulture.Quota ?: "제한없음"}",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            // Contact information if available
+            ichCulture.Tel?.let { tel ->
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "연락처: $tel",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.Gray
                 )
             }
         }

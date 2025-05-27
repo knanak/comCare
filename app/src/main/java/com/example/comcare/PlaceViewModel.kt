@@ -163,6 +163,17 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
     val isLoadingICHJobs: Boolean
         get() = _isLoadingICHJobs.value
 
+    // ich_culture 관련 추가
+    private val _ichCultures = mutableStateOf<List<SupabaseDatabaseHelper.ICHCulture>>(emptyList())
+    val ichCultures: State<List<SupabaseDatabaseHelper.ICHCulture>> = _ichCultures
+
+    private val _filteredICHCultures = mutableStateOf<List<SupabaseDatabaseHelper.ICHCulture>>(emptyList())
+    val filteredICHCultures: State<List<SupabaseDatabaseHelper.ICHCulture>> = _filteredICHCultures
+
+    private val _isLoadingICHCultures = mutableStateOf<Boolean>(false)
+    val isLoadingICHCultures: Boolean
+        get() = _isLoadingICHCultures.value
+
     init {
         // Fetch data when ViewModel is initialized
         fetchPlacesData()
@@ -174,6 +185,7 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
         fetchKKFacility2sData()
         fetchICHFacilitiesData()
         fetchICHJobsData()
+        fetchICHCulturesData()
     }
 
     // 사용자 위치 설정 함수 추가
@@ -188,17 +200,12 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
 
         // 위치가 설정되면 해당 지역으로 자동 필터링
         if (city.isNotEmpty()) {
-            // 시설 필터링
-            filterPlaces(city, district, "전체", "전체")
-            Log.d("PlaceViewModel", "시설 필터링 완료 - 결과: ${_filteredPlaces.value.size}개")
+            // ... 기존 코드 ...
 
-            // 일자리 필터링 (통합) - ICH 포함
-            filterAllJobs(city, district)
-            Log.d("PlaceViewModel", "일자리 필터링 완료 - 일반: ${_filteredJobs.value.size}개, KK: ${_filteredKKJobs.value.size}개, ICH: ${_filteredICHJobs.value.size}개")
-
-            // 문화 필터링 (통합)
+            // 문화 필터링 (통합) - ICH 포함
             filterAllCultures(city, district)
-            Log.d("PlaceViewModel", "문화 필터링 완료 - 일반: ${_filteredLectures.value.size}개, KK: ${_filteredKKCultures.value.size}개")
+            Log.d("PlaceViewModel", "문화 필터링 완료 - 일반: ${_filteredLectures.value.size}개, " +
+                    "KK: ${_filteredKKCultures.value.size}개, ICH: ${_filteredICHCultures.value.size}개")
         }
     }
 
@@ -1588,6 +1595,85 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
         Log.d("PlaceViewModel", "Filtered kk_cultures: ${_filteredKKCultures.value.size} of ${_kkCultures.value.size}")
     }
 
+    fun fetchICHCulturesData() {
+        viewModelScope.launch {
+            try {
+                Log.d("PlaceViewModel", "Starting ich_cultures data fetch")
+                _isLoadingICHCultures.value = true
+
+                val ichCulturesData = withContext(Dispatchers.IO) {
+                    try {
+                        val ichCultures = supabaseHelper.getICHCultures()
+                        Log.d("PlaceViewModel", "Supabase getICHCultures returned ${ichCultures.size} items")
+
+                        if (ichCultures.isEmpty()) {
+                            Log.d("PlaceViewModel", "Supabase ich_cultures returned empty list")
+                        } else {
+                            // Log first ich_culture for debugging
+                            val firstICHCulture = ichCultures.firstOrNull()
+                            if (firstICHCulture != null) {
+                                Log.d(
+                                    "PlaceViewModel", "Sample ich_culture data: Id=${firstICHCulture.Id}, " +
+                                            "title=${firstICHCulture.Title}, " +
+                                            "institution=${firstICHCulture.Institution}, " +
+                                            "address=${firstICHCulture.Address}, " +
+                                            "category=${firstICHCulture.Category}"
+                                )
+                            }
+                        }
+                        ichCultures
+                    } catch (e: Exception) {
+                        Log.e(
+                            "PlaceViewModel",
+                            "Error in getICHCultures Dispatchers.IO block: ${e.message}",
+                            e
+                        )
+                        emptyList()
+                    }
+                }
+
+                // Update the ich_cultures value with the fetched data
+                _ichCultures.value = ichCulturesData
+                _filteredICHCultures.value = ichCulturesData
+
+                Log.d("PlaceViewModel", "ICH_Cultures data fetch complete: ${ichCulturesData.size} items")
+            } catch (e: Exception) {
+                Log.e("PlaceViewModel", "Error fetching ich_cultures data: ${e.message}", e)
+                _ichCultures.value = emptyList()
+                _filteredICHCultures.value = emptyList()
+            } finally {
+                _isLoadingICHCultures.value = false
+            }
+        }
+    }
+
+    fun filterICHCultures(selectedCity: String, selectedDistrict: String) {
+        if (_ichCultures.value.isEmpty()) {
+            _filteredICHCultures.value = emptyList()
+            return
+        }
+
+        Log.d("PlaceViewModel", "Filtering ich_cultures with city='$selectedCity', district='$selectedDistrict'")
+
+        _filteredICHCultures.value = _ichCultures.value.filter { ichCulture ->
+            // ich_culture는 인천광역시 데이터
+            val cultureCity = "인천광역시"
+            val cultureDistrict = ichCulture.Category ?: "" // Category를 district로 사용
+
+            // City filtering
+            val cityMatch = selectedCity == "전체" || cultureCity == selectedCity
+
+            // District filtering
+            val districtMatch = selectedDistrict == "전체" || cultureDistrict == selectedDistrict
+
+            // Both conditions must match
+            cityMatch && districtMatch
+        }
+
+        Log.d("PlaceViewModel", "Filtered ich_cultures: ${_filteredICHCultures.value.size} of ${_ichCultures.value.size}")
+    }
+
+
     // 통합 필터링 함수
     fun filterAllCultures(selectedCity: String, selectedDistrict: String) {
         // Regular lectures 필터링
@@ -1596,12 +1682,17 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
         // KK_Cultures 필터링
         filterKKCultures(selectedCity, selectedDistrict)
 
-        Log.d("PlaceViewModel", "Filtered all cultures - Regular: ${_filteredLectures.value.size}, KK: ${_filteredKKCultures.value.size}")
+        // ICH_Cultures 필터링
+        filterICHCultures(selectedCity, selectedDistrict)
+
+        Log.d("PlaceViewModel", "Filtered all cultures - Regular: ${_filteredLectures.value.size}, " +
+                "KK: ${_filteredKKCultures.value.size}, ICH: ${_filteredICHCultures.value.size}")
     }
+
 
     // 통합된 필터링된 문화 강좌 개수를 반환하는 함수
     fun getTotalFilteredCulturesCount(): Int {
-        return _filteredLectures.value.size + _filteredKKCultures.value.size
+        return _filteredLectures.value.size + _filteredKKCultures.value.size + _filteredICHCultures.value.size
     }
 
     // PlaceViewModel.kt에 추가할 함수들
@@ -1671,11 +1762,18 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
                     kkCulture.Category == userDistrict
                 }.forEach { filteredCultures.add(it) }
             }
+
+            // ICH cultures 필터링 (인천광역시 데이터)
+            if (userCity == "인천광역시") {
+                _ichCultures.value.filter { ichCulture ->
+                    ichCulture.Category == userDistrict
+                }.forEach { filteredCultures.add(it) }
+            }
         }
 
         return if (filteredCultures.isEmpty()) {
             // 해당 지역에 데이터가 없으면 전체 데이터 반환
-            (_lectures.value + _kkCultures.value)
+            (_lectures.value + _kkCultures.value + _ichCultures.value)
         } else {
             filteredCultures
         }
