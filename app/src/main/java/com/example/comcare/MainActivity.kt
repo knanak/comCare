@@ -111,7 +111,7 @@ class MainActivity : ComponentActivity() {
     class PlaceViewModelFactory(
         private val supabaseHelper: SupabaseDatabaseHelper
     ) : ViewModelProvider.Factory {
-        override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+        override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(PlaceViewModel::class.java)) {
                 @Suppress("UNCHECKED_CAST")
                 return PlaceViewModel(supabaseHelper) as T
@@ -119,8 +119,6 @@ class MainActivity : ComponentActivity() {
             throw IllegalArgumentException("Unknown ViewModel class")
         }
     }
-
-// MainActivity의 onCreate 메서드 내부 setContent 부분 전체 수정
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -138,7 +136,9 @@ class MainActivity : ComponentActivity() {
 
             var locationPermissionGranted by remember { mutableStateOf(false) }
             var showLocationPermissionDialog by remember { mutableStateOf(false) }
-            var viewModelFactory by remember { mutableStateOf(PlaceViewModelFactory(supabaseHelper)) }
+
+            // PlaceViewModelFactory는 한 번만 생성
+            val viewModelFactory = remember { PlaceViewModelFactory(supabaseHelper) }
 
             // 위치 권한 런처
             val locationPermissionLauncher = rememberLauncherForActivityResult(
@@ -153,10 +153,9 @@ class MainActivity : ComponentActivity() {
                     getLastKnownLocation { city, district ->
                         userCity = city
                         userDistrict = district
-                        // State 업데이트
+                        // State 업데이트 - 여기가 중요!
                         userCityState = city
                         userDistrictState = district
-                        // viewModelFactory 업데이트 제거 - 더 이상 필요 없음
                         Log.d(TAG, "위치 권한 승인 - 위치 정보 획득 완료")
                         Log.d(TAG, "사용자 위치 State 업데이트: $city $district")
                     }
@@ -180,10 +179,9 @@ class MainActivity : ComponentActivity() {
                         getLastKnownLocation { city, district ->
                             userCity = city
                             userDistrict = district
-                            // State 업데이트
+                            // State 업데이트 - 여기가 중요!
                             userCityState = city
                             userDistrictState = district
-                            // viewModelFactory 업데이트 제거
                             Log.d(TAG, "기존 위치 권한 있음 - 위치 정보 획득 완료")
                             Log.d(TAG, "사용자 위치 State 업데이트: $city $district")
                         }
@@ -199,6 +197,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+
             PlaceComparisonTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
@@ -225,6 +224,17 @@ class MainActivity : ComponentActivity() {
                     // Use factory to create ViewModel with Supabase dependency
                     val viewModel: PlaceViewModel = viewModel(factory = viewModelFactory)
 
+                    // 위치 정보가 업데이트될 때마다 ViewModel에 설정
+                    LaunchedEffect(userCityState, userDistrictState) {
+                        if (userCityState != "위치 확인 중..." &&
+                            userCityState != "위치 권한 없음" &&
+                            userCityState.isNotEmpty() &&
+                            userDistrictState.isNotEmpty()) {
+                            viewModel.setUserLocation(userCityState, userDistrictState)
+                            Log.d(TAG, "ViewModel에 위치 정보 설정: $userCityState $userDistrictState")
+                        }
+                    }
+
                     // 현재 위치 정보 로그
                     Log.d(TAG, "NavHost 렌더링 시점의 위치: City=$userCityState, District=$userDistrictState")
 
@@ -236,6 +246,8 @@ class MainActivity : ComponentActivity() {
                             PlaceComparisonApp(
                                 navController = navController,
                                 viewModel = viewModel,
+                                userCity = userCityState,  // State 값 사용
+                                userDistrict = userDistrictState  // State 값 사용
                             )
                         }
                         composable("searchResults") {
@@ -434,8 +446,11 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun PlaceComparisonApp(
     navController: NavController,
-    viewModel: PlaceViewModel
+    viewModel: PlaceViewModel,
+    userCity: String = "",  // 파라미터 추가
+    userDistrict: String = ""  // 파라미터 추가
 ) {
+    Log.d("PlaceComparisonApp", "받은 위치 정보: City=$userCity, District=$userDistrict")
     var currentSection by remember { mutableStateOf("home") }
     var selectedCity by remember { mutableStateOf("전체") }
     var selectedDistrict by remember { mutableStateOf("전체") }
@@ -461,6 +476,13 @@ fun PlaceComparisonApp(
         viewModel.serviceSubcategories.value[selectedServiceCategory] ?: listOf("전체")
     }
 
+    LaunchedEffect(userCity, userDistrict) {
+        if (userCity.isNotEmpty() && userDistrict.isNotEmpty() &&
+            userCity != "위치 확인 중..." && userCity != "위치 권한 없음") {
+            viewModel.setUserLocation(userCity, userDistrict)
+        }
+    }
+
     // Reset district when city changes
     LaunchedEffect(selectedCity) {
         selectedDistrict = "전체"
@@ -479,6 +501,9 @@ fun PlaceComparisonApp(
     }
 
     val places = viewModel.filteredPlaces.value
+
+    val userCity = viewModel.getUserCity()
+    val userDistrict = viewModel.getUserDistrict()
 
     Column(modifier = Modifier.fillMaxSize()) {
         // App Bar with rounded corners
@@ -964,13 +989,10 @@ fun PlaceComparisonApp(
         // Content based on the current section
         when (currentSection) {
             "home" -> {
-                // Define the new color
-                val highlightColor = Color(0xFFf3f04d) // The #f3f04d color
+                val highlightColor = Color(0xFFf3f04d)
 
-                // Replace Column with a scrollable container
                 Box(
-                    modifier = Modifier
-                        .fillMaxSize()
+                    modifier = Modifier.fillMaxSize()
                 ) {
                     LazyColumn(
                         modifier = Modifier
@@ -987,24 +1009,23 @@ fun PlaceComparisonApp(
                                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                             ) {
                                 Column(modifier = Modifier.padding(16.dp)) {
-                                    // Section Title with updated color
                                     Text(
                                         "오늘의 시설",
                                         style = MaterialTheme.typography.titleLarge,
                                         fontWeight = FontWeight.Bold,
-                                        color = highlightColor, // Updated color
+                                        color = highlightColor,
                                     )
 
                                     Spacer(modifier = Modifier.height(12.dp))
 
-                                    // Get random place if available
-                                    if (viewModel.filteredPlaces.value.isNotEmpty()) {
-                                        // Get a random place from the filtered places list
-                                        val randomPlace = remember(viewModel.filteredPlaces.value) {
-                                            viewModel.filteredPlaces.value.random()
+                                    // 사용자 위치 기반 필터링된 시설 가져오기
+                                    val filteredPlaces = viewModel.getFilteredPlacesByUserLocation()
+
+                                    if (filteredPlaces.isNotEmpty()) {
+                                        val randomPlace = remember(filteredPlaces) {
+                                            filteredPlaces.random()
                                         }
 
-                                        // Display the random place
                                         Text(
                                             randomPlace.name,
                                             style = MaterialTheme.typography.titleMedium,
@@ -1029,7 +1050,6 @@ fun PlaceComparisonApp(
 
                                         Spacer(modifier = Modifier.height(12.dp))
 
-                                        // New "More" button with right alignment and updated color
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
                                             horizontalArrangement = Arrangement.End
@@ -1038,9 +1058,12 @@ fun PlaceComparisonApp(
                                                 onClick = {
                                                     currentSection = "welfareFacilities"
                                                     showFilters = true
+                                                    // 시설 섹션으로 이동 시 사용자 위치로 필터 설정
+                                                    selectedCity = if (userCity.isNotEmpty()) userCity else "전체"
+                                                    selectedDistrict = if (userDistrict.isNotEmpty()) userDistrict else "전체"
                                                 },
                                                 colors = ButtonDefaults.buttonColors(
-                                                    containerColor = highlightColor, // Updated color
+                                                    containerColor = highlightColor,
                                                     contentColor = Color.Black
                                                 ),
                                                 shape = RoundedCornerShape(8.dp)
@@ -1053,80 +1076,17 @@ fun PlaceComparisonApp(
                                         }
                                     } else {
                                         Text(
-                                            "시설 정보를 불러오는 중...",
+                                            if (userCity.isNotEmpty() && userDistrict.isNotEmpty()) {
+                                                "$userCity $userDistrict 지역의 시설 정보가 없습니다."
+                                            } else {
+                                                "시설 정보를 불러오는 중..."
+                                            },
                                             style = MaterialTheme.typography.bodyLarge
                                         )
                                     }
                                 }
                             }
                         }
-
-                        // Today's Policy Section
-//                        item {
-//                            Card(
-//                                modifier = Modifier
-//                                    .fillMaxWidth()
-//                                    .padding(vertical = 8.dp),
-//                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-//                            ) {
-//                                Column(modifier = Modifier.padding(16.dp)) {
-//                                    // Section Title with updated color
-//                                    Text(
-//                                        "오늘의 정책",
-//                                        style = MaterialTheme.typography.titleLarge,
-//                                        fontWeight = FontWeight.Bold,
-//                                        color = highlightColor, // Updated color
-//                                    )
-//
-//                                    Spacer(modifier = Modifier.height(12.dp))
-//
-//                                    // Since we don't have actual policy data, display a sample policy
-//                                    Text(
-//                                        "노인 일자리 사업",
-//                                        style = MaterialTheme.typography.titleMedium,
-//                                        fontWeight = FontWeight.Bold
-//                                    )
-//
-//                                    Spacer(modifier = Modifier.height(4.dp))
-//
-//                                    Text(
-//                                        "만 65세 이상 노인에게 일자리를 제공하는 정책입니다.",
-//                                        style = MaterialTheme.typography.bodyLarge
-//                                    )
-//
-//                                    Spacer(modifier = Modifier.height(4.dp))
-//
-//                                    Text(
-//                                        "지원금: 월 30만원",
-//                                        style = MaterialTheme.typography.bodyMedium
-//                                    )
-//
-//                                    Spacer(modifier = Modifier.height(12.dp))
-//
-//                                    // New "More" button with right alignment and updated color
-//                                    Row(
-//                                        modifier = Modifier.fillMaxWidth(),
-//                                        horizontalArrangement = Arrangement.End
-//                                    ) {
-//                                        Button(
-//                                            onClick = {
-//                                                currentSection = "seniorPolicies"
-//                                            },
-//                                            colors = ButtonDefaults.buttonColors(
-//                                                containerColor = highlightColor, // Updated color
-//                                                contentColor = Color.Black
-//                                            ),
-//                                            shape = RoundedCornerShape(8.dp)
-//                                        ) {
-//                                            Text(
-//                                                "더보기",
-//                                                fontWeight = FontWeight.Bold
-//                                            )
-//                                        }
-//                                    }
-//                                }
-//                            }
-//                        }
 
                         // Today's Jobs Section
                         item {
@@ -1137,61 +1097,93 @@ fun PlaceComparisonApp(
                                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                             ) {
                                 Column(modifier = Modifier.padding(16.dp)) {
-                                    // Section Title with updated color
                                     Text(
                                         "오늘의 일자리",
                                         style = MaterialTheme.typography.titleLarge,
                                         fontWeight = FontWeight.Bold,
-                                        color = highlightColor, // Updated color
+                                        color = highlightColor,
                                     )
 
                                     Spacer(modifier = Modifier.height(12.dp))
 
-                                    // Get random job if available
-                                    if (viewModel.jobs.value.isNotEmpty()) {
-                                        // Get a random job from the full list
-                                        val randomJob = remember(viewModel.jobs.value) {
-                                            viewModel.jobs.value.random()
+                                    // 사용자 위치 기반 필터링된 일자리 가져오기
+                                    val filteredJobs = viewModel.getFilteredJobsByUserLocation()
+
+                                    if (filteredJobs.isNotEmpty()) {
+                                        val randomJob = remember(filteredJobs) {
+                                            filteredJobs.random()
                                         }
 
-                                        // Display the random job
-                                        Text(
-                                            randomJob.JobTitle ?: "제목 없음",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold,
-                                        )
+                                        when (randomJob) {
+                                            is SupabaseDatabaseHelper.Job -> {
+                                                Text(
+                                                    randomJob.JobTitle ?: "제목 없음",
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    fontWeight = FontWeight.Bold,
+                                                )
 
-                                        Spacer(modifier = Modifier.height(4.dp))
+                                                Spacer(modifier = Modifier.height(4.dp))
 
-                                        Row {
-                                            Text(
-                                                "근무형태: ",
-                                                style = MaterialTheme.typography.bodyLarge,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                            Text(
-                                                randomJob.WorkingType ?: "정보 없음",
-                                                style = MaterialTheme.typography.bodyLarge
-                                            )
-                                        }
+                                                Row {
+                                                    Text(
+                                                        "근무형태: ",
+                                                        style = MaterialTheme.typography.bodyLarge,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                    Text(
+                                                        randomJob.WorkingType ?: "정보 없음",
+                                                        style = MaterialTheme.typography.bodyLarge
+                                                    )
+                                                }
 
-                                        Spacer(modifier = Modifier.height(4.dp))
+                                                Spacer(modifier = Modifier.height(4.dp))
 
-                                        Row {
-                                            Text(
-                                                "급여: ",
-                                                style = MaterialTheme.typography.bodyLarge,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                            Text(
-                                                randomJob.Salary ?: "정보 없음",
-                                                style = MaterialTheme.typography.bodyLarge
-                                            )
+                                                Row {
+                                                    Text(
+                                                        "급여: ",
+                                                        style = MaterialTheme.typography.bodyLarge,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                    Text(
+                                                        randomJob.Salary ?: "정보 없음",
+                                                        style = MaterialTheme.typography.bodyLarge
+                                                    )
+                                                }
+                                            }
+                                            is SupabaseDatabaseHelper.KKJob -> {
+                                                Text(
+                                                    randomJob.Title ?: "제목 없음",
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    fontWeight = FontWeight.Bold,
+                                                )
+
+                                                Spacer(modifier = Modifier.height(4.dp))
+
+                                                Text(
+                                                    "위치: ${randomJob.Address ?: "정보 없음"}",
+                                                    style = MaterialTheme.typography.bodyLarge
+                                                )
+
+                                                Spacer(modifier = Modifier.height(4.dp))
+
+                                                if (!randomJob.WorkingHours.isNullOrEmpty()) {
+                                                    Row {
+                                                        Text(
+                                                            "근무시간: ",
+                                                            style = MaterialTheme.typography.bodyLarge,
+                                                            fontWeight = FontWeight.Bold
+                                                        )
+                                                        Text(
+                                                            randomJob.WorkingHours,
+                                                            style = MaterialTheme.typography.bodyLarge
+                                                        )
+                                                    }
+                                                }
+                                            }
                                         }
 
                                         Spacer(modifier = Modifier.height(12.dp))
 
-                                        // New "More" button with right alignment and updated color
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
                                             horizontalArrangement = Arrangement.End
@@ -1201,7 +1193,7 @@ fun PlaceComparisonApp(
                                                     currentSection = "jobs"
                                                 },
                                                 colors = ButtonDefaults.buttonColors(
-                                                    containerColor = highlightColor, // Updated color
+                                                    containerColor = highlightColor,
                                                     contentColor = Color.Black
                                                 ),
                                                 shape = RoundedCornerShape(8.dp)
@@ -1214,14 +1206,17 @@ fun PlaceComparisonApp(
                                         }
                                     } else {
                                         Text(
-                                            "일자리 정보를 불러오는 중...",
+                                            if (userCity.isNotEmpty() && userDistrict.isNotEmpty()) {
+                                                "$userCity $userDistrict 지역의 일자리 정보가 없습니다."
+                                            } else {
+                                                "일자리 정보를 불러오는 중..."
+                                            },
                                             style = MaterialTheme.typography.bodyLarge
                                         )
                                     }
                                 }
                             }
                         }
-
 
                         // Today's Culture Section
                         item {
@@ -1232,24 +1227,21 @@ fun PlaceComparisonApp(
                                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                             ) {
                                 Column(modifier = Modifier.padding(16.dp)) {
-                                    // Section Title with updated color
                                     Text(
                                         "오늘의 문화",
                                         style = MaterialTheme.typography.titleLarge,
                                         fontWeight = FontWeight.Bold,
-                                        color = highlightColor, // Updated color
+                                        color = highlightColor,
                                     )
 
                                     Spacer(modifier = Modifier.height(12.dp))
 
-                                    // Get all cultures (lectures + kk_cultures)
-                                    val allCultures = viewModel.lectures.value + viewModel.kkCultures.value
+                                    // 사용자 위치 기반 필터링된 문화강좌 가져오기
+                                    val filteredCultures = viewModel.getFilteredCulturesByUserLocation()
 
-                                    // Get random culture if available
-                                    if (allCultures.isNotEmpty()) {
-                                        // Get a random culture from the combined list
-                                        val randomCulture = remember(allCultures) {
-                                            allCultures.random()
+                                    if (filteredCultures.isNotEmpty()) {
+                                        val randomCulture = remember(filteredCultures) {
+                                            filteredCultures.random()
                                         }
 
                                         // Display the random culture based on its type
@@ -1347,7 +1339,7 @@ fun PlaceComparisonApp(
                                                     viewModel.fetchKKCulturesData()
                                                 },
                                                 colors = ButtonDefaults.buttonColors(
-                                                    containerColor = highlightColor, // Updated color
+                                                    containerColor = highlightColor,
                                                     contentColor = Color.Black
                                                 ),
                                                 shape = RoundedCornerShape(8.dp)
@@ -1360,7 +1352,12 @@ fun PlaceComparisonApp(
                                         }
                                     } else {
                                         Text(
-                                            "문화 강좌 정보를 불러오는 중...",
+                                            if (userCity.isNotEmpty() && userDistrict.isNotEmpty() &&
+                                                userCity != "위치 확인 중..." && userCity != "위치 권한 없음") {
+                                                "$userCity $userDistrict 지역의 문화 강좌 정보가 없습니다."
+                                            } else {
+                                                "문화 강좌 정보를 불러오는 중..."
+                                            },
                                             style = MaterialTheme.typography.bodyLarge
                                         )
                                     }

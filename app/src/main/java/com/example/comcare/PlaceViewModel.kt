@@ -1474,4 +1474,75 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
     fun getTotalFilteredCulturesCount(): Int {
         return _filteredLectures.value.size + _filteredKKCultures.value.size
     }
+
+    // PlaceViewModel.kt에 추가할 함수들
+
+    // 사용자 위치 기반으로 시설 필터링
+    fun getFilteredPlacesByUserLocation(): List<Place> {
+
+        if (userCity.isEmpty() || userDistrict.isEmpty()) {
+            Log.d("PlaceViewModel_USER", "USER: ${userCity} $userDistrict")
+            return _allPlaces.value
+        }
+
+        return _allPlaces.value.filter { place ->
+            val cityMatch = place.address.contains(userCity)
+            val districtMatch = place.district == userDistrict ||
+                    place.address.contains(userDistrict)
+            cityMatch && districtMatch
+        }
+    }
+
+    // 사용자 위치 기반으로 일자리 필터링
+    fun getFilteredJobsByUserLocation(): List<Any> {
+        val filteredJobs = mutableListOf<Any>()
+
+        if (userCity.isNotEmpty() && userDistrict.isNotEmpty()) {
+            // Regular jobs 필터링
+            _jobs.value.filter { job ->
+                val location = job.Location ?: ""
+                location.contains(userCity) && location.contains(userDistrict)
+            }.forEach { filteredJobs.add(it) }
+
+            // KK jobs 필터링
+            _kkJobs.value.filter { kkJob ->
+                val location = kkJob.Address ?: ""
+                location.contains(userCity) && location.contains(userDistrict)
+            }.forEach { filteredJobs.add(it) }
+        }
+
+        return if (filteredJobs.isEmpty()) {
+            // 해당 지역에 데이터가 없으면 전체 데이터 반환
+            (_jobs.value + _kkJobs.value)
+        } else {
+            filteredJobs
+        }
+    }
+
+    // 사용자 위치 기반으로 문화강좌 필터링
+    fun getFilteredCulturesByUserLocation(): List<Any> {
+        val filteredCultures = mutableListOf<Any>()
+
+        if (userCity.isNotEmpty() && userDistrict.isNotEmpty()) {
+            // Regular lectures 필터링
+            _lectures.value.filter { lecture ->
+                val institution = lecture.Institution ?: ""
+                institution.contains(userCity) && institution.contains(userDistrict)
+            }.forEach { filteredCultures.add(it) }
+
+            // KK cultures 필터링 (경기도 데이터)
+            if (userCity == "경기도") {
+                _kkCultures.value.filter { kkCulture ->
+                    kkCulture.Category == userDistrict
+                }.forEach { filteredCultures.add(it) }
+            }
+        }
+
+        return if (filteredCultures.isEmpty()) {
+            // 해당 지역에 데이터가 없으면 전체 데이터 반환
+            (_lectures.value + _kkCultures.value)
+        } else {
+            filteredCultures
+        }
+    }
 }
