@@ -152,6 +152,17 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
     val isLoadingICHFacilities: Boolean
         get() = _isLoadingICHFacilities.value
 
+    // ich_job 관련 추가
+    private val _ichJobs = mutableStateOf<List<SupabaseDatabaseHelper.ICHJob>>(emptyList())
+    val ichJobs: State<List<SupabaseDatabaseHelper.ICHJob>> = _ichJobs
+
+    private val _filteredICHJobs = mutableStateOf<List<SupabaseDatabaseHelper.ICHJob>>(emptyList())
+    val filteredICHJobs: State<List<SupabaseDatabaseHelper.ICHJob>> = _filteredICHJobs
+
+    private val _isLoadingICHJobs = mutableStateOf<Boolean>(false)
+    val isLoadingICHJobs: Boolean
+        get() = _isLoadingICHJobs.value
+
     init {
         // Fetch data when ViewModel is initialized
         fetchPlacesData()
@@ -162,6 +173,7 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
         fetchKKFacilitiesData()
         fetchKKFacility2sData()
         fetchICHFacilitiesData()
+        fetchICHJobsData()
     }
 
     // 사용자 위치 설정 함수 추가
@@ -180,11 +192,11 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
             filterPlaces(city, district, "전체", "전체")
             Log.d("PlaceViewModel", "시설 필터링 완료 - 결과: ${_filteredPlaces.value.size}개")
 
-            // 일자리 필터링 (통합)
+            // 일자리 필터링 (통합) - ICH 포함
             filterAllJobs(city, district)
-            Log.d("PlaceViewModel", "일자리 필터링 완료 - 일반: ${_filteredJobs.value.size}개, KK: ${_filteredKKJobs.value.size}개")
+            Log.d("PlaceViewModel", "일자리 필터링 완료 - 일반: ${_filteredJobs.value.size}개, KK: ${_filteredKKJobs.value.size}개, ICH: ${_filteredICHJobs.value.size}개")
 
-            // 문화 필터링 (통합) - 수정
+            // 문화 필터링 (통합)
             filterAllCultures(city, district)
             Log.d("PlaceViewModel", "문화 필터링 완료 - 일반: ${_filteredLectures.value.size}개, KK: ${_filteredKKCultures.value.size}개")
         }
@@ -1366,6 +1378,120 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
         Log.d("PlaceViewModel", "Filtered kk_jobs: ${_filteredKKJobs.value.size} of ${_kkJobs.value.size}")
     }
 
+
+
+    // ICH Jobs 필터링 함수
+    fun fetchICHJobsData() {
+        Log.d("PlaceViewModel", "========== fetchICHJobsData START ==========")
+
+        viewModelScope.launch {
+            try {
+                Log.d("PlaceViewModel", "1. Entering viewModelScope.launch")
+                _isLoadingICHJobs.value = true
+                Log.d("PlaceViewModel", "2. Loading state set to true")
+
+                val ichJobsData = withContext(Dispatchers.IO) {
+                    try {
+                        Log.d("PlaceViewModel", "3. Inside Dispatchers.IO context")
+                        Log.d("PlaceViewModel", "4. About to call supabaseHelper.getICHJobs()")
+
+                        // supabaseHelper가 null이 아닌지 확인
+                        if (supabaseHelper == null) {
+                            Log.e("PlaceViewModel", "ERROR: supabaseHelper is null!")
+                            return@withContext emptyList<SupabaseDatabaseHelper.ICHJob>()
+                        }
+
+                        val startTime = System.currentTimeMillis()
+                        val ichJobs = supabaseHelper.getICHJobs()
+                        val endTime = System.currentTimeMillis()
+
+                        Log.d("PlaceViewModel", "5. getICHJobs() completed in ${endTime - startTime}ms")
+                        Log.d("PlaceViewModel", "6. Returned ${ichJobs.size} items")
+
+                        if (ichJobs.isEmpty()) {
+                            Log.w("PlaceViewModel", "WARNING: getICHJobs() returned empty list")
+                        } else {
+                            // 첫 번째 아이템 상세 로그
+                            val firstICHJob = ichJobs.firstOrNull()
+                            if (firstICHJob != null) {
+                                Log.d("PlaceViewModel", "First ICH Job details:")
+                                Log.d("PlaceViewModel", "  - Id: ${firstICHJob.Id}")
+                                Log.d("PlaceViewModel", "  - Title: ${firstICHJob.Title}")
+                                Log.d("PlaceViewModel", "  - Category: ${firstICHJob.Category}")
+                                Log.d("PlaceViewModel", "  - Address: ${firstICHJob.Address}")
+                                Log.d("PlaceViewModel", "  - WorkingHours: ${firstICHJob.WorkingHours}")
+                                Log.d("PlaceViewModel", "  - Deadline: ${firstICHJob.Deadline}")
+                            }
+
+                            // 처음 3개 아이템의 제목 로그
+                            ichJobs.take(3).forEachIndexed { index, job ->
+                                Log.d("PlaceViewModel", "ICH Job[$index]: ${job.Title}")
+                            }
+                        }
+
+                        ichJobs
+                    } catch (e: Exception) {
+                        Log.e("PlaceViewModel", "ERROR in Dispatchers.IO block: ${e.message}")
+                        Log.e("PlaceViewModel", "Exception type: ${e.javaClass.simpleName}")
+                        Log.e("PlaceViewModel", "Stack trace:", e)
+                        e.printStackTrace()
+                        emptyList()
+                    }
+                }
+
+                Log.d("PlaceViewModel", "7. Back from Dispatchers.IO, got ${ichJobsData.size} items")
+
+                // Update the ich_jobs value with the fetched data
+                _ichJobs.value = ichJobsData
+                _filteredICHJobs.value = ichJobsData
+
+                Log.d("PlaceViewModel", "8. State updated:")
+                Log.d("PlaceViewModel", "   - _ichJobs.value.size: ${_ichJobs.value.size}")
+                Log.d("PlaceViewModel", "   - _filteredICHJobs.value.size: ${_filteredICHJobs.value.size}")
+
+            } catch (e: Exception) {
+                Log.e("PlaceViewModel", "FATAL ERROR in fetchICHJobsData: ${e.message}")
+                Log.e("PlaceViewModel", "Exception type: ${e.javaClass.simpleName}")
+                e.printStackTrace()
+                _ichJobs.value = emptyList()
+                _filteredICHJobs.value = emptyList()
+            } finally {
+                _isLoadingICHJobs.value = false
+                Log.d("PlaceViewModel", "9. Loading state set to false")
+                Log.d("PlaceViewModel", "========== fetchICHJobsData END ==========")
+            }
+        }
+    }
+
+    fun filterICHJobs(selectedCity: String, selectedDistrict: String) {
+        if (_ichJobs.value.isEmpty()) {
+            _filteredICHJobs.value = emptyList()
+            return
+        }
+
+        Log.d("PlaceViewModel", "Filtering ich_jobs with city='$selectedCity', district='$selectedDistrict'")
+
+        _filteredICHJobs.value = _ichJobs.value.filter { ichJob ->
+            val location = ichJob.Address ?: ""
+            val addressParts = location.trim().split(" ")
+
+            // Extract city and district from the location
+            val jobCity = if (addressParts.isNotEmpty()) addressParts[0] else ""
+            val jobDistrict = if (addressParts.size > 1) addressParts[1] else ""
+
+            // City filtering
+            val cityMatch = selectedCity == "전체" || jobCity == selectedCity
+
+            // District filtering
+            val districtMatch = selectedDistrict == "전체" || jobDistrict == selectedDistrict
+
+            // Both conditions must match
+            cityMatch && districtMatch
+        }
+
+        Log.d("PlaceViewModel", "Filtered ich_jobs: ${_filteredICHJobs.value.size} of ${_ichJobs.value.size}")
+    }
+
     // 통합 필터링 함수
     fun filterAllJobs(selectedCity: String, selectedDistrict: String) {
         // Regular jobs 필터링
@@ -1374,12 +1500,15 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
         // KK_Jobs 필터링
         filterKKJobs(selectedCity, selectedDistrict)
 
-        Log.d("PlaceViewModel", "Filtered all jobs - Regular: ${_filteredJobs.value.size}, KK: ${_filteredKKJobs.value.size}")
+        // ICH_Jobs 필터링
+        filterICHJobs(selectedCity, selectedDistrict)
+
+        Log.d("PlaceViewModel", "Filtered all jobs - Regular: ${_filteredJobs.value.size}, KK: ${_filteredKKJobs.value.size}, ICH: ${_filteredICHJobs.value.size}")
     }
 
-    // 통합된 필터링된 일자리 개수를 반환하는 함수
+    // 통합된 필터링된 일자리 개수를 반환하는 함수 수정
     fun getTotalFilteredJobsCount(): Int {
-        return _filteredJobs.value.size + _filteredKKJobs.value.size
+        return _filteredJobs.value.size + _filteredKKJobs.value.size + _filteredICHJobs.value.size
     }
 
     fun fetchKKCulturesData() {
@@ -1509,11 +1638,17 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
                 val location = kkJob.Address ?: ""
                 location.contains(userCity) && location.contains(userDistrict)
             }.forEach { filteredJobs.add(it) }
+
+            // ICH jobs 필터링
+            _ichJobs.value.filter { ichJob ->
+                val location = ichJob.Address ?: ""
+                location.contains(userCity) && location.contains(userDistrict)
+            }.forEach { filteredJobs.add(it) }
         }
 
         return if (filteredJobs.isEmpty()) {
             // 해당 지역에 데이터가 없으면 전체 데이터 반환
-            (_jobs.value + _kkJobs.value)
+            (_jobs.value + _kkJobs.value + _ichJobs.value)
         } else {
             filteredJobs
         }

@@ -1180,6 +1180,36 @@ fun PlaceComparisonApp(
                                                     }
                                                 }
                                             }
+                                            is SupabaseDatabaseHelper.ICHJob -> {  // ICH Job 추가
+                                                Text(
+                                                    randomJob.Title ?: "제목 없음",
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    fontWeight = FontWeight.Bold,
+                                                )
+
+                                                Spacer(modifier = Modifier.height(4.dp))
+
+                                                Text(
+                                                    "위치: ${randomJob.Address ?: "정보 없음"}",
+                                                    style = MaterialTheme.typography.bodyLarge
+                                                )
+
+                                                Spacer(modifier = Modifier.height(4.dp))
+
+                                                if (!randomJob.WorkingHours.isNullOrEmpty()) {
+                                                    Row {
+                                                        Text(
+                                                            "근무시간: ",
+                                                            style = MaterialTheme.typography.bodyLarge,
+                                                            fontWeight = FontWeight.Bold
+                                                        )
+                                                        Text(
+                                                            randomJob.WorkingHours,
+                                                            style = MaterialTheme.typography.bodyLarge
+                                                        )
+                                                    }
+                                                }
+                                            }
                                         }
 
                                         Spacer(modifier = Modifier.height(12.dp))
@@ -1420,6 +1450,8 @@ fun PlaceComparisonApp(
             }
 
 
+// MainActivity.kt의 jobs 섹션 수정 부분
+
             "jobs" -> {
                 // Jobs content with pagination
                 Column(modifier = Modifier.fillMaxSize()) {
@@ -1573,9 +1605,10 @@ fun PlaceComparisonApp(
                     // Jobs list with pagination
                     val regularJobs = viewModel.filteredJobs.value
                     val kkJobs = viewModel.filteredKKJobs.value
+                    val ichJobs = viewModel.filteredICHJobs.value  // ICH jobs 추가
 
-                    // 통합된 일자리 리스트 생성
-                    val allJobs = regularJobs + kkJobs
+                    // 통합된 일자리 리스트 생성 (ICH jobs 포함)
+                    val allJobs = regularJobs + kkJobs + ichJobs
 
                     if (allJobs.isNotEmpty()) {
                         // Pagination state
@@ -1607,6 +1640,7 @@ fun PlaceComparisonApp(
                                         when (job) {
                                             is SupabaseDatabaseHelper.Job -> JobCard(job = job)
                                             is SupabaseDatabaseHelper.KKJob -> KKJobCard(kkJob = job)
+                                            is SupabaseDatabaseHelper.ICHJob -> ICHJobCard(ichJob = job)  // ICH job card 추가
                                         }
                                         Spacer(modifier = Modifier.height(8.dp))
                                     }
@@ -1670,7 +1704,7 @@ fun PlaceComparisonApp(
                                 }
                             }
                         }
-                    } else if (viewModel.isLoading || viewModel.isLoadingKKJobs) {
+                    } else if (viewModel.isLoading || viewModel.isLoadingKKJobs || viewModel.isLoadingICHJobs) {  // ICH jobs 로딩 상태 추가
                         // Show loading indicator
                         Box(
                             modifier = Modifier.fillMaxSize(),
@@ -2399,6 +2433,88 @@ fun KKJobCard(kkJob: SupabaseDatabaseHelper.KKJob) {
 
             // Deadline
             kkJob.Deadline?.let {
+                Text(
+                    "마감일: $it",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.align(Alignment.End)
+                )
+            }
+        }
+    }
+}
+
+// MainActivity.kt에 추가할 ICHJobCard 컴포저블
+
+@Composable
+fun ICHJobCard(ichJob: SupabaseDatabaseHelper.ICHJob) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Job Title
+            Text(
+                text = ichJob.Title ?: "제목 없음",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = Color.Yellow,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Category
+            Row {
+                Text(
+                    "카테고리: ",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    ichJob.Category ?: "정보 없음",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Location
+            Row {
+                Text(
+                    "위치: ",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    ichJob.Address ?: "정보 없음",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Working Hours
+            if (!ichJob.WorkingHours.isNullOrEmpty()) {
+                Row {
+                    Text(
+                        "근무시간: ",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        ichJob.WorkingHours,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Deadline
+            ichJob.Deadline?.let {
                 Text(
                     "마감일: $it",
                     style = MaterialTheme.typography.titleMedium,
