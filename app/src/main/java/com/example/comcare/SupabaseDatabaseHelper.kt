@@ -357,12 +357,16 @@ class SupabaseDatabaseHelper(private val context: Context) {
     @Serializable
     data class Lecture(
         val Id: Int,
+        val Category: String? = null,
         val Institution: String? = null,
+        val Address : String? = null,
         val Title: String? = null,
         val Recruitment_period: String? = null,
         val Education_period: String? = null,
         val Fee: String? = null,
-        val Quota: String? = null
+        val Quota: String? = null,
+        val Detail: String? = null,
+        val Tel: String? = null
     )
 
     suspend fun getLectures(): List<Lecture> {

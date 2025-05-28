@@ -70,6 +70,7 @@ import com.google.android.gms.location.Priority
 import android.location.Geocoder
 import java.util.Locale
 import android.content.Context
+import android.net.Uri
 import android.os.Build
 import android.provider.ContactsContract.CommonDataKinds.Website.URL
 import androidx.core.app.ActivityCompat
@@ -2570,7 +2571,6 @@ fun ICHJobCard(ichJob: SupabaseDatabaseHelper.ICHJob) {
         }
     }
 }
-
 // Update the LectureCard composable to display a clean Institution name
 @Composable
 fun LectureCard(lecture: SupabaseDatabaseHelper.Lecture) {
@@ -2594,6 +2594,8 @@ fun LectureCard(lecture: SupabaseDatabaseHelper.Lecture) {
             it
         }
     }
+
+    val context = LocalContext.current
 
     Card(
         modifier = Modifier
@@ -2649,33 +2651,61 @@ fun LectureCard(lecture: SupabaseDatabaseHelper.Lecture) {
                 )
             }
 
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Fee
+            Text(
+                "수강료: ${lecture.Fee ?: "무료"}",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+
+            // Tel if available
+            lecture.Tel?.let { tel ->
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "연락처: $tel",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.Gray
+                )
+            }
+
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Bottom row with Fee and Quota
+            // Apply button aligned to the right
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.End
             ) {
-                // Fee
-                Text(
-                    "수강료: ${lecture.Fee ?: "무료"}",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-
-                // Quota
-                Text(
-                    "정원: ${lecture.Quota ?: "제한없음"}",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
+                Button(
+                    onClick = {
+                        lecture.Detail?.let { url ->
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                            context.startActivity(intent)
+                        } ?: run {
+                            Toast.makeText(context, "신청 페이지 정보가 없습니다", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Yellow,
+                        contentColor = Color.Black
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        "신청",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
             }
         }
     }
 }
-
 @Composable
 fun KKCultureCard(kkCulture: SupabaseDatabaseHelper.KKCulture) {
+    val context = LocalContext.current
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -2749,40 +2779,53 @@ fun KKCultureCard(kkCulture: SupabaseDatabaseHelper.KKCulture) {
                 )
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
-            // Bottom row with Fee and Quota
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                // Fee (Fees -> Fee로 변경)
-                Text(
-                    "수강료: ${kkCulture.Fee ?: "무료"}",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
+            // Fee
+            Text(
+                "수강료: ${kkCulture.Fee ?: "무료"}",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
 
-                // Quota
+            // Tel if available
+            kkCulture.Tel?.let { tel ->
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    "정원: ${kkCulture.Quota ?: "제한없음"}",
+                    "연락처: $tel",
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+                    color = Color.Gray
                 )
             }
 
-            // State information if available
-            kkCulture.State?.let { state ->
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    "상태: $state",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = when(state) {
-                        "모집중" -> Color(0xFF4CAF50)
-                        "마감" -> Color(0xFFF44336)
-                        else -> Color.Gray
-                    }
-                )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Apply button aligned to the right
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                Button(
+                    onClick = {
+                        kkCulture.Detail?.let { url ->
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                            context.startActivity(intent)
+                        } ?: run {
+                            Toast.makeText(context, "신청 페이지 정보가 없습니다", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Yellow,
+                        contentColor = Color.Black
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        "신청",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
             }
         }
     }
@@ -2790,6 +2833,8 @@ fun KKCultureCard(kkCulture: SupabaseDatabaseHelper.KKCulture) {
 
 @Composable
 fun ICHCultureCard(ichCulture: SupabaseDatabaseHelper.ICHCulture) {
+    val context = LocalContext.current
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -2881,40 +2926,56 @@ fun ICHCultureCard(ichCulture: SupabaseDatabaseHelper.ICHCulture) {
                 Spacer(modifier = Modifier.height(4.dp))
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            // Fee
+            Text(
+                "수강료: ${ichCulture.Fee ?: "무료"}",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
 
-            // Bottom row with Fee and Quota
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                // Fee
-                Text(
-                    "수강료: ${ichCulture.Fee ?: "무료"}",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-
-                // Quota
-                Text(
-                    "정원: ${ichCulture.Quota ?: "제한없음"}",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            // Contact information if available
+            // Tel if available
             ichCulture.Tel?.let { tel ->
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     "연락처: $tel",
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.titleMedium,
                     color = Color.Gray
                 )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Apply button aligned to the right
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                Button(
+                    onClick = {
+                        ichCulture.Detail?.let { url ->
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                            context.startActivity(intent)
+                        } ?: run {
+                            Toast.makeText(context, "신청 페이지 정보가 없습니다", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Yellow,
+                        contentColor = Color.Black
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        "신청",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
             }
         }
     }
 }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
