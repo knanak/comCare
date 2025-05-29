@@ -484,7 +484,7 @@ fun LoginScreen(onLoginSuccess: (UserInfo) -> Unit) {
             )
 
             Text(
-                text = "시니어를 위한 똑똑한 비서",
+                text = "시니어를 위한 AI 검색 서비스",
                 style = MaterialTheme.typography.titleLarge,
                 color = Color.Black.copy(alpha = 0.7f),
                 modifier = Modifier.padding(bottom = 48.dp)
@@ -862,6 +862,7 @@ fun PlaceComparisonApp(
                 }
 
                 // 드롭다운 메뉴
+                val context = LocalContext.current
                 DropdownMenu(
                     expanded = showUserMenu,
                     onDismissRequest = { showUserMenu = false },
@@ -916,7 +917,7 @@ fun PlaceComparisonApp(
 
                     Divider()
 
-                    // 회원탈퇴
+                    // 회원 탈퇴
                     DropdownMenuItem(
                         text = {
                             Text(
@@ -925,26 +926,33 @@ fun PlaceComparisonApp(
                             )
                         },
                         onClick = {
-                            // 회원탈퇴
-                            UserApiClient.instance.unlink { error ->
-                                if (error != null) {
-                                    Log.d("KakaoLogout", "회원탈퇴 실패", error)
-                                } else {
-                                    Log.d("KakaoLogout", "회원탈퇴 성공")
-                                }
-                            }
-                            // 앱 재시작 또는 로그인 화면으로 이동
-                            navController.navigate("login") {
-                                popUpTo(navController.graph.startDestinationId) {
-                                    inclusive = true
-                                }
-                            }
                             showUserMenu = false
+
+                            // 앱 계정 탈퇴 페이지를 웹브라우저로 열기
+                            try {
+                                // 앱 계정 관리 페이지 URL (탈퇴 페이지)
+                                val kakaoAccountUrl = "https://accounts.kakao.com/weblogin/account/privacy_and_terms"
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(kakaoAccountUrl))
+                                context.startActivity(intent)
+
+                                Toast.makeText(
+                                    context,
+                                    "앱 계정 설정 페이지로 이동합니다.\n계정 탈퇴는 해당 페이지에서 진행해주세요.",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            } catch (e: Exception) {
+                                Log.e("KakaoUnlink", "웹페이지 열기 실패", e)
+                                Toast.makeText(
+                                    context,
+                                    "웹페이지를 열 수 없습니다.",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
                         },
                         leadingIcon = {
                             Icon(
                                 imageVector = Icons.Default.ExitToApp,
-                                contentDescription = "Logout",
+                                contentDescription = "Unlink",
                                 tint = Color.Red
                             )
                         }
@@ -2324,7 +2332,6 @@ fun PlaceComparisonApp(
         }
     }
 }
-
 @Composable
 fun SearchResultsScreen(
     viewModel: PlaceViewModel,
