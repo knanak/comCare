@@ -586,6 +586,9 @@ fun PlaceComparisonApp(
 
     var showFilters by remember { mutableStateOf(false) }
 
+    // 사용자 메뉴 표시 상태
+    var showUserMenu by remember { mutableStateOf(false) }
+
     // Get available districts for the selected city
     val availableDistricts = remember(selectedCity) {
         viewModel.districts.value[selectedCity] ?: listOf("전체")
@@ -797,23 +800,157 @@ fun PlaceComparisonApp(
             }
         }
 
-// Add Chat button - now directly below the navigation buttons
-        Button(
-            onClick = { navController.navigate("chat") },
+        // 오비서 버튼과 사용자 버튼을 포함하는 Row
+        Row(
             modifier = Modifier
-                .fillMaxWidth()  // Make button full width
+                .fillMaxWidth()
                 .padding(horizontal = 0.dp, vertical = 0.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFFc6f584),
-                contentColor = Color.Black
-            ),
-            shape = RectangleShape  // Make rectangular
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(
-                "오비서에게 물어보기",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
+            // 오비서에게 물어보기 버튼 (가로 크기 줄임)
+            Button(
+                onClick = { navController.navigate("chat") },
+                modifier = Modifier
+                    .weight(0.7f), // 전체의 70%만 차지
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFc6f584),
+                    contentColor = Color.Black
+                ),
+                shape = RectangleShape
+            ) {
+                Text(
+                    "오비서에게 물어보기",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            // 사용자 버튼 (남은 공간 차지)
+            Box(
+                modifier = Modifier.weight(0.3f) // 전체의 30% 차지
+            ) {
+                Button(
+                    onClick = { showUserMenu = !showUserMenu },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF9E9E9E), // 회색 배경
+                        contentColor = Color.White
+                    ),
+                    shape = RectangleShape,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        // 사용자 아이콘
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = "User",
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        // 사용자 이름 (닉네임)
+                        Text(
+                            text = userInfo?.nickname ?: "사용자",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+
+                // 드롭다운 메뉴
+                DropdownMenu(
+                    expanded = showUserMenu,
+                    onDismissRequest = { showUserMenu = false },
+                    modifier = Modifier.fillMaxWidth(0.5f)
+                ) {
+                    // 사용자 정보
+                    DropdownMenuItem(
+                        text = {
+                            Column {
+                                Text(
+                                    text = userInfo?.nickname ?: "사용자",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "ID: ${userInfo?.id ?: ""}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color.Gray
+                                )
+                            }
+                        },
+                        onClick = { /* 프로필 보기 등의 기능 */ },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.AccountCircle,
+                                contentDescription = "Profile"
+                            )
+                        }
+                    )
+
+                    Divider()
+
+                    // 위치 정보
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = if (userCity.isNotEmpty() && userDistrict.isNotEmpty()) {
+                                    "$userCity $userDistrict"
+                                } else {
+                                    "위치 정보 없음"
+                                }
+                            )
+                        },
+                        onClick = { /* 위치 설정 */ },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.LocationOn,
+                                contentDescription = "Location"
+                            )
+                        }
+                    )
+
+                    Divider()
+
+                    // 회원탈퇴
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = "회원 탈퇴",
+                                color = Color.Red
+                            )
+                        },
+                        onClick = {
+                            // 회원탈퇴
+                            UserApiClient.instance.unlink { error ->
+                                if (error != null) {
+                                    Log.d("KakaoLogout", "회원탈퇴 실패", error)
+                                } else {
+                                    Log.d("KakaoLogout", "회원탈퇴 성공")
+                                }
+                            }
+                            // 앱 재시작 또는 로그인 화면으로 이동
+                            navController.navigate("login") {
+                                popUpTo(navController.graph.startDestinationId) {
+                                    inclusive = true
+                                }
+                            }
+                            showUserMenu = false
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.ExitToApp,
+                                contentDescription = "Logout",
+                                tint = Color.Red
+                            )
+                        }
+                    )
+                }
+            }
         }
 
         // Add Chat button
