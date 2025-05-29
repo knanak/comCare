@@ -1249,8 +1249,8 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
                             val firstJob = jobs.firstOrNull()
                             if (firstJob != null) {
                                 Log.d(
-                                    "PlaceViewModel", "Sample job data: id=${firstJob.id}, " +
-                                            "title=${firstJob.JobTitle}, " +
+                                    "PlaceViewModel", "Sample job data: id=${firstJob.Id}, " +
+                                            "title=${firstJob.Title}, " +
                                             "category=${firstJob.JobCategory}"
                                 )
                             }
@@ -1295,7 +1295,7 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
 
         _filteredJobs.value = _jobs.value.filter { job ->
             // Extract location information from Location field
-            val location = job.Location ?: ""
+            val location = job.Address ?: ""
 
             // City filtering
             val cityMatch = selectedCity == "전체" ||
@@ -1814,21 +1814,97 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
         return _filteredLectures.value.size + _filteredKKCultures.value.size + _filteredICHCultures.value.size
     }
 
-    // PlaceViewModel.kt에 추가할 함수들
-
-    // 사용자 위치 기반으로 시설 필터링
     fun getFilteredPlacesByUserLocation(): List<Place> {
+        Log.d("PlaceViewModel", "getFilteredPlacesByUserLocation called - City: $userCity, District: $userDistrict")
 
-        if (userCity.isEmpty() || userDistrict.isEmpty()) {
-            Log.d("PlaceViewModel_USER", "USER: ${userCity} $userDistrict")
-            return _allPlaces.value
+        if (userCity.isEmpty() || userDistrict.isEmpty() ||
+            userCity == "위치 확인 중..." || userCity == "위치 권한 없음") {
+            Log.d("PlaceViewModel", "위치 정보가 유효하지 않음, 빈 리스트 반환")
+            return emptyList()
         }
 
-        return _allPlaces.value.filter { place ->
-            val cityMatch = place.address.contains(userCity)
-            val districtMatch = place.district == userDistrict ||
-                    place.address.contains(userDistrict)
-            cityMatch && districtMatch
+        val filteredPlaces = mutableListOf<Place>()
+
+        // 서울특별시 시설 필터링
+        if (userCity == "서울특별시") {
+            // API 데이터 (서울 열린데이터)
+            _allPlaces.value.filter { place ->
+                // API 데이터는 district 필드에 구 정보가 있음
+                place.district == userDistrict &&
+                        place.address.contains("서울")
+            }.forEach { filteredPlaces.add(it) }
+
+            // Supabase 데이터 (facility 테이블)
+            _allPlaces.value.filter { place ->
+                place.id.toIntOrNull() != null && // Supabase 데이터는 숫자 ID
+                        place.address.contains("서울") &&
+                        place.address.contains(userDistrict)
+            }.forEach {
+                if (!filteredPlaces.contains(it)) {
+                    filteredPlaces.add(it)
+                }
+            }
+        }
+
+        // 경기도 시설 필터링
+        if (userCity == "경기도") {
+            // KK Facility 데이터
+            _allPlaces.value.filter { place ->
+                place.id.startsWith("kk_") || place.id.startsWith("kk2_")
+            }.filter { place ->
+                val addressParts = place.address.trim().split(" ")
+                val placeDistrict = if (addressParts.size > 1) addressParts[1] else ""
+                placeDistrict == userDistrict || place.address.contains(userDistrict)
+            }.forEach { filteredPlaces.add(it) }
+
+            // 기타 경기도 시설
+            _allPlaces.value.filter { place ->
+                !place.id.startsWith("kk_") && !place.id.startsWith("kk2_") &&
+                        place.address.contains("경기") &&
+                        place.address.contains(userDistrict)
+            }.forEach {
+                if (!filteredPlaces.contains(it)) {
+                    filteredPlaces.add(it)
+                }
+            }
+        }
+
+        // 인천광역시 시설 필터링
+        if (userCity == "인천광역시") {
+            // ICH Facility 데이터
+            _allPlaces.value.filter { place ->
+                place.id.startsWith("ich_") || place.id.startsWith("ich2_")
+            }.filter { place ->
+                val addressParts = place.address.trim().split(" ")
+                val placeDistrict = if (addressParts.size > 1) addressParts[1] else ""
+                placeDistrict == userDistrict || place.address.contains(userDistrict)
+            }.forEach { filteredPlaces.add(it) }
+
+            // 기타 인천 시설
+            _allPlaces.value.filter { place ->
+                !place.id.startsWith("ich_") && !place.id.startsWith("ich2_") &&
+                        place.address.contains("인천") &&
+                        place.address.contains(userDistrict)
+            }.forEach {
+                if (!filteredPlaces.contains(it)) {
+                    filteredPlaces.add(it)
+                }
+            }
+        }
+
+        Log.d("PlaceViewModel", "필터링 결과: ${filteredPlaces.size}개 시설")
+
+        // 로그로 처음 3개 시설 출력
+        filteredPlaces.take(3).forEach { place ->
+            Log.d("PlaceViewModel", "시설: ${place.name} (${place.address})")
+        }
+
+        // 결과가 없을 경우 전체 데이터에서 무작위로 반환
+        return if (filteredPlaces.isEmpty()) {
+            Log.d("PlaceViewModel", "필터링 결과 없음, 전체 데이터에서 무작위 선택")
+            _allPlaces.value.shuffled().take(10)
+        } else {
+            filteredPlaces  // 전체 리스트 반환
         }
     }
 
@@ -1839,7 +1915,7 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
         if (userCity.isNotEmpty() && userDistrict.isNotEmpty()) {
             // Regular jobs 필터링
             _jobs.value.filter { job ->
-                val location = job.Location ?: ""
+                val location = job.Address ?: ""
                 location.contains(userCity) && location.contains(userDistrict)
             }.forEach { filteredJobs.add(it) }
 
@@ -1870,10 +1946,12 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
 
         if (userCity.isNotEmpty() && userDistrict.isNotEmpty()) {
             // Regular lectures 필터링
-            _lectures.value.filter { lecture ->
-                val institution = lecture.Institution ?: ""
-                institution.contains(userCity) && institution.contains(userDistrict)
-            }.forEach { filteredCultures.add(it) }
+            if (userCity == "서울특별시") {
+                _lectures.value.filter { lecture ->
+                    lecture.Category == userDistrict
+                }.forEach { filteredCultures.add(it) }
+
+            }
 
             // KK cultures 필터링 (경기도 데이터)
             if (userCity == "경기도") {
@@ -1896,5 +1974,9 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
         } else {
             filteredCultures
         }
+    }
+
+    fun isDataLoaded(): Boolean {
+        return _allPlaces.value.isNotEmpty()
     }
 }

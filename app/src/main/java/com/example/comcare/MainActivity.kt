@@ -1080,10 +1080,24 @@ fun PlaceComparisonApp(
                                         }
                                     } else {
                                         Text(
-                                            if (userCity.isNotEmpty() && userDistrict.isNotEmpty()) {
-                                                "$userCity $userDistrict 지역의 시설 정보가 없습니다."
-                                            } else {
-                                                "시설 정보를 불러오는 중..."
+                                            when {
+                                                // 위치 정보가 아직 로드되지 않은 경우
+                                                userCity.isEmpty() || userDistrict.isEmpty() ||
+                                                        userCity == "위치 확인 중..." -> {
+                                                    "위치 정보를 확인하는 중..."
+                                                }
+                                                // 위치 권한이 없는 경우
+                                                userCity == "위치 권한 없음" -> {
+                                                    "위치 권한이 필요합니다."
+                                                }
+                                                // 데이터가 아직 로드되지 않은 경우
+                                                !viewModel.isDataLoaded() -> {
+                                                    "시설 정보를 불러오는 중..."
+                                                }
+                                                // 데이터는 로드되었지만 해당 지역에 시설이 없는 경우
+                                                else -> {
+                                                    "$userCity $userDistrict 지역의 시설 정보가 없습니다."
+                                                }
                                             },
                                             style = MaterialTheme.typography.bodyLarge
                                         )
@@ -1121,7 +1135,7 @@ fun PlaceComparisonApp(
                                         when (randomJob) {
                                             is SupabaseDatabaseHelper.Job -> {
                                                 Text(
-                                                    randomJob.JobTitle ?: "제목 없음",
+                                                    randomJob.Title ?: "제목 없음",
                                                     style = MaterialTheme.typography.titleMedium,
                                                     fontWeight = FontWeight.Bold,
                                                 )
@@ -2327,7 +2341,7 @@ fun JobCard(job: SupabaseDatabaseHelper.Job) {
         Column(modifier = Modifier.padding(16.dp)) {
             // Job Title
             Text(
-                text = job.JobTitle ?: "제목 없음",
+                text = job.Title ?: "제목 없음",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = Color.Yellow,
@@ -2665,6 +2679,7 @@ fun LectureCard(lecture: SupabaseDatabaseHelper.Lecture) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     "연락처: $tel",
+                    fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.titleMedium,
                     color = Color.Gray
                 )
@@ -2794,6 +2809,7 @@ fun KKCultureCard(kkCulture: SupabaseDatabaseHelper.KKCulture) {
                 Text(
                     "연락처: $tel",
                     style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
                     color = Color.Gray
                 )
             }
@@ -2938,6 +2954,7 @@ fun ICHCultureCard(ichCulture: SupabaseDatabaseHelper.ICHCulture) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     "연락처: $tel",
+                    fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.titleMedium,
                     color = Color.Gray
                 )

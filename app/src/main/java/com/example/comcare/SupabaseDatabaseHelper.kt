@@ -221,8 +221,8 @@ class SupabaseDatabaseHelper(private val context: Context) {
     // 2. job data
     @Serializable
     data class Job(
-        val id: Int,
-        val JobTitle: String? = null,
+        val Id: Int,
+        val Title: String? = null,
         val DateOfRegistration: String? = null,
         val Deadline: String? = null,
         val JobCategory: String? = null,
@@ -231,15 +231,19 @@ class SupabaseDatabaseHelper(private val context: Context) {
         val Salary: String? = null,
         val SocialEnsurance: String? = null,
         val RetirementBenefit: String? = null,
-        val Location: String? = null,
+        val Address: String? = null,
+        val Category: String? = null,
         val WorkingHours: String? = null,
         val WorkingType: String? = null,
         val CompanyName: String? = null,
         val JobDescription: String? = null,
         val ApplicationMethod: String? = null,
         val ApplicationType: String? = null,
-        val document: String? = null
+        val Document: String? = null,
+        val Detail: String? = null
     )
+
+
 
     suspend fun getJobs(): List<Job> {
         return try {
@@ -332,8 +336,8 @@ class SupabaseDatabaseHelper(private val context: Context) {
                     // Log a sample job for debugging
                     if (allJobs.isNotEmpty()) {
                         val sample = allJobs.first()
-                        Log.d("supabase", "Sample job: id=${sample.id}, " +
-                                "title=${sample.JobTitle}, " +
+                        Log.d("supabase", "Sample job: id=${sample.Id}, " +
+                                "title=${sample.Title}, " +
                                 "category=${sample.JobCategory}, " +
                                 "hours=${sample.WorkingHours}, " +
                                 "deadline=${sample.Deadline}")
@@ -502,7 +506,6 @@ class SupabaseDatabaseHelper(private val context: Context) {
     @Serializable
     data class KKJob(
         val Id: Int,
-        val Category: String? = null,
         val Title: String? = null,
         val DateOfRegistration: String? = null,
         val Deadline: String? = null,
@@ -513,13 +516,15 @@ class SupabaseDatabaseHelper(private val context: Context) {
         val SocialEnsurance: String? = null,
         val RetirementBenefit: String? = null,
         val Address: String? = null,
+        val Category: String? = null,
         val WorkingHours: String? = null,
         val WorkingType: String? = null,
         val CompanyName: String? = null,
         val JobDescription: String? = null,
         val ApplicationMethod: String? = null,
         val ApplicationType: String? = null,
-        val document: String? = null
+        val Document: String? = null,
+        val Detail: String? = null
     )
 
     // Helper function to clean working hours
@@ -1292,13 +1297,11 @@ class SupabaseDatabaseHelper(private val context: Context) {
         }
     }
 
-    // SupabaseDatabaseHelper.kt에 추가할 내용
 
     // 7. ICH_Job data (KK_Job과 동일한 구조)
     @Serializable
     data class ICHJob(
         val Id: Int,
-        val Category: String? = null,
         val Title: String? = null,
         val DateOfRegistration: String? = null,
         val Deadline: String? = null,
@@ -1309,13 +1312,15 @@ class SupabaseDatabaseHelper(private val context: Context) {
         val SocialEnsurance: String? = null,
         val RetirementBenefit: String? = null,
         val Address: String? = null,
+        val Category: String? = null,
         val WorkingHours: String? = null,
         val WorkingType: String? = null,
         val CompanyName: String? = null,
         val JobDescription: String? = null,
         val ApplicationMethod: String? = null,
         val ApplicationType: String? = null,
-        val document: String? = null
+        val Document: String? = null,
+        val Detail: String? = null
     )
 
     suspend fun getICHJobs(): List<ICHJob> {
