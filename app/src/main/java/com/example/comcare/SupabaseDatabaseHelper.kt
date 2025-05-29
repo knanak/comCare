@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.util.Log
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.createSupabaseClient
+import io.github.jan.supabase.gotrue.providers.Kakao
 import io.github.jan.supabase.postgrest.Postgrest
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Count
@@ -15,6 +16,9 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+
+import io.github.jan.supabase.gotrue.GoTrue
+import io.github.jan.supabase.gotrue.gotrue
 
 
 class SupabaseDatabaseHelper(private val context: Context) {
@@ -30,7 +34,408 @@ class SupabaseDatabaseHelper(private val context: Context) {
         supabaseKey = SUPABASE_KEY
     ) {
         install(Postgrest)
+        install(GoTrue)
 
+    }
+
+    sealed class SignUpResult {
+        object Success : SignUpResult()
+        object UserExists : SignUpResult()
+        data class Error(val message: String) : SignUpResult()
+    }
+
+    // 사용자 데이터 클래스 (일반 로그인과 카카오 로그인 통합)
+    @Serializable
+    data class User(
+        val userId: String,              // 고유 사용자 ID (일반: 직접입력, 카카오: kakao_카카오ID)
+        val password: String? = null,    // 비밀번호 (카카오 로그인은 null)
+        val kakaoId: String? = null,     // 카카오 고유 ID
+        val email: String? = null,       // 이메일
+        val nickname: String? = null,    // 닉네임
+        val profileImage: String? = null,// 프로필 이미지 URL
+        val age: String = "미설정",      // 연령대
+        val gender: String = "미설정",   // 성별
+        val loginType: String = "normal",// 로그인 타입 (normal, kakao, oauth_kakao)
+        val supabaseUserId: String? = null, // Supabase Auth ID (OAuth 사용시)
+        val createdAt: String? = null
+    )
+
+    // Helper function to get ISO 8601 formatted timestamp
+    private fun getCurrentTimestampIso8601(): String {
+        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
+        sdf.timeZone = TimeZone.getTimeZone("UTC")
+        return sdf.format(Date())
+    }
+
+    // ========== 카카오 SDK 로그인 (기존 방식) ==========
+
+    // 카카오 SDK를 통한 로그인/회원가입
+    suspend fun loginOrCreateKakaoUser(
+        kakaoId: String,
+        email: String?,
+        nickname: String?,
+        profileImage: String?
+    ): Boolean {
+        return try {
+            Log.d(TAG, "Starting Kakao SDK login/create for kakaoId: $kakaoId")
+
+            withContext(Dispatchers.IO) {
+                try {
+                    val userId = "kakao_$kakaoId"
+
+                    // 기존 사용자 확인
+                    val existingUsers = supabase.postgrest["users"]
+                        .select(
+                            filter = {
+                                eq("userId", userId)
+                            }
+                        )
+                        .decodeList<User>()
+
+                    val existingUser = existingUsers.firstOrNull()
+
+                    if (existingUser != null) {
+                        Log.d(TAG, "Existing Kakao user found, updating info")
+
+                        // 기존 사용자 정보 업데이트
+                        val updateData = buildMap {
+                            email?.let { put("email", it) }
+                            nickname?.let { put("nickname", it) }
+                            profileImage?.let { put("profileImage", it) }
+                        }
+
+                        if (updateData.isNotEmpty()) {
+                            supabase.postgrest["users"]
+                                .update(updateData) {
+                                    eq("userId", userId)
+                                }
+                            Log.d(TAG, "Kakao user info updated successfully")
+                        }
+                        true
+                    } else {
+                        Log.d(TAG, "No existing Kakao user found, creating new user")
+
+                        // 새 사용자 생성
+                        val newUser = User(
+                            userId = userId,
+                            password = null,
+                            kakaoId = kakaoId,
+                            email = email,
+                            nickname = nickname,
+                            profileImage = profileImage,
+                            age = "미설정",
+                            gender = "미설정",
+                            loginType = "kakao",
+                            createdAt = getCurrentTimestampIso8601()
+                        )
+
+                        supabase.postgrest["users"]
+                            .insert(newUser)
+
+                        Log.d(TAG, "New Kakao user created successfully")
+                        true
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error in Kakao SDK login/create: ${e.message}", e)
+                    false
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in loginOrCreateKakaoUser: ${e.message}", e)
+            false
+        }
+    }
+
+    // ========== Supabase OAuth 카카오 로그인 ==========
+
+    // Supabase OAuth를 통한 카카오 로그인
+    suspend fun signInWithKakao(): Boolean {
+        return try {
+            Log.d(TAG, "Starting OAuth Kakao login")
+
+            withContext(Dispatchers.IO) {
+                try {
+                    // Supabase OAuth로 카카오 로그인
+                    supabase.gotrue.loginWith(Kakao)
+
+                    // 로그인 성공 후 세션 확인
+                    val session = supabase.gotrue.currentSessionOrNull()
+                    if (session != null) {
+                        Log.d(TAG, "Kakao OAuth login successful")
+
+                        // 현재 사용자 정보 가져오기
+                        val user = supabase.gotrue.currentUserOrNull()
+                        if (user != null) {
+                            Log.d(TAG, "OAuth User ID: ${user.id}")
+                            Log.d(TAG, "OAuth User email: ${user.email}")
+
+                            // 사용자 메타데이터에서 추가 정보 가져오기
+                            val metadata = user.userMetadata
+                            val kakaoId = metadata?.get("sub") as? String ?: user.id
+                            val nickname = metadata?.get("name") as? String
+                            val profileImage = metadata?.get("picture") as? String
+
+                            // users 테이블에 사용자 정보 저장/업데이트
+                            saveOrUpdateOAuthUser(
+                                supabaseUserId = user.id,
+                                kakaoId = kakaoId,
+                                email = user.email,
+                                nickname = nickname,
+                                profileImage = profileImage
+                            )
+                        }
+                        true
+                    } else {
+                        Log.e(TAG, "No session after Kakao OAuth login")
+                        false
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error in Kakao OAuth login: ${e.message}", e)
+                    false
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in signInWithKakao: ${e.message}", e)
+            false
+        }
+    }
+
+    // OAuth 사용자 정보를 users 테이블에 저장/업데이트
+    private suspend fun saveOrUpdateOAuthUser(
+        supabaseUserId: String,
+        kakaoId: String,
+        email: String?,
+        nickname: String?,
+        profileImage: String?
+    ): Boolean {
+        return try {
+            val userId = "kakao_$kakaoId"
+
+            // 기존 사용자 확인
+            val existingUsers = supabase.postgrest["users"]
+                .select(
+                    filter = {
+                        eq("userId", userId)
+                    }
+                )
+                .decodeList<User>()
+
+            val existingUser = existingUsers.firstOrNull()
+
+            if (existingUser != null) {
+                // 기존 사용자 정보 업데이트
+                val updateData = buildMap {
+                    email?.let { put("email", it) }
+                    nickname?.let { put("nickname", it) }
+                    profileImage?.let { put("profileImage", it) }
+                    put("supabaseUserId", supabaseUserId)
+                    put("loginType", "oauth_kakao")
+                }
+
+                supabase.postgrest["users"]
+                    .update(updateData) {
+                        eq("userId", userId)
+                    }
+            } else {
+                // 새 사용자 생성
+                val newUser = User(
+                    userId = userId,
+                    password = null,
+                    kakaoId = kakaoId,
+                    email = email,
+                    nickname = nickname,
+                    profileImage = profileImage,
+                    age = "미설정",
+                    gender = "미설정",
+                    loginType = "oauth_kakao",
+                    supabaseUserId = supabaseUserId,
+                    createdAt = getCurrentTimestampIso8601()
+                )
+
+                supabase.postgrest["users"]
+                    .insert(newUser)
+            }
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Error saving OAuth user: ${e.message}", e)
+            false
+        }
+    }
+
+    // ========== 공통 사용자 관리 함수들 ==========
+
+    // 카카오 ID로 사용자 정보 조회
+    suspend fun getKakaoUserInfo(kakaoId: String): User? {
+        return try {
+            withContext(Dispatchers.IO) {
+                val userId = "kakao_$kakaoId"
+
+                val users = supabase.postgrest["users"]
+                    .select(
+                        filter = {
+                            eq("userId", userId)
+                        }
+                    )
+                    .decodeList<User>()
+
+                users.firstOrNull()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting Kakao user info: ${e.message}", e)
+            null
+        }
+    }
+
+    // 현재 로그인된 OAuth 사용자 정보 가져오기
+    suspend fun getCurrentOAuthUser(): User? {
+        return try {
+            withContext(Dispatchers.IO) {
+                val currentUser = supabase.gotrue.currentUserOrNull()
+                if (currentUser != null) {
+                    // supabaseUserId로 사용자 조회
+                    val users = supabase.postgrest["users"]
+                        .select(
+                            filter = {
+                                eq("supabaseUserId", currentUser.id)
+                            }
+                        )
+                        .decodeList<User>()
+
+                    users.firstOrNull()
+                } else {
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting current OAuth user: ${e.message}", e)
+            null
+        }
+    }
+
+    // 카카오 사용자 추가 정보 업데이트
+    suspend fun updateKakaoUserAdditionalInfo(
+        kakaoId: String,
+        age: String? = null,
+        gender: String? = null
+    ): Boolean {
+        return try {
+            withContext(Dispatchers.IO) {
+                val userId = "kakao_$kakaoId"
+
+                val updateData = buildMap {
+                    age?.let { put("age", it) }
+                    gender?.let { put("gender", it) }
+                }
+
+                if (updateData.isNotEmpty()) {
+                    supabase.postgrest["users"]
+                        .update(updateData) {
+                            eq("userId", userId)
+                        }
+                    true
+                } else {
+                    true
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error updating additional info: ${e.message}", e)
+            false
+        }
+    }
+
+    // OAuth 로그아웃
+    suspend fun signOutKakao(): Boolean {
+        return try {
+            withContext(Dispatchers.IO) {
+                supabase.gotrue.logout()
+                Log.d(TAG, "Kakao OAuth sign out successful")
+                true
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error signing out: ${e.message}", e)
+            false
+        }
+    }
+
+    // 현재 OAuth 세션 확인
+    suspend fun isKakaoSessionValid(): Boolean {
+        return try {
+            withContext(Dispatchers.IO) {
+                val session = supabase.gotrue.currentSessionOrNull()
+                session != null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking session: ${e.message}", e)
+            false
+        }
+    }
+
+    // 일반 로그인 함수 (기존 사용자용)
+    suspend fun loginUser(userId: String, password: String): Boolean {
+        return try {
+            withContext(Dispatchers.IO) {
+                val users = supabase.postgrest["users"]
+                    .select(
+                        filter = {
+                            eq("userId", userId)
+                            eq("password", password)
+                        }
+                    )
+                    .decodeList<User>()
+
+                users.firstOrNull() != null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Login error: ${e.message}")
+            false
+        }
+    }
+
+    // 일반 회원가입 함수
+    suspend fun signupUser(
+        userId: String,
+        password: String,
+        age: String,
+        gender: String
+    ): Boolean {
+        return try {
+            withContext(Dispatchers.IO) {
+                // 이미 존재하는 사용자인지 확인
+                val existingUsers = supabase.postgrest["users"]
+                    .select(
+                        filter = {
+                            eq("userId", userId)
+                        }
+                    )
+                    .decodeList<User>()
+
+                if (existingUsers.isNotEmpty()) {
+                    return@withContext false
+                }
+
+                // 새 사용자 생성
+                val newUser = User(
+                    userId = userId,
+                    password = password,
+                    kakaoId = null,
+                    email = null,
+                    nickname = null,
+                    profileImage = null,
+                    age = age,
+                    gender = gender,
+                    loginType = "normal",
+                    createdAt = getCurrentTimestampIso8601()
+                )
+
+                supabase.postgrest["users"]
+                    .insert(newUser)
+
+                true
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Signup error: ${e.message}")
+            false
+        }
     }
 
     // 1. facilities data
@@ -51,11 +456,11 @@ class SupabaseDatabaseHelper(private val context: Context) {
     )
 
     // Helper function to get ISO 8601 formatted timestamp
-    private fun getCurrentTimestampIso8601(): String {
-        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
-        sdf.timeZone = TimeZone.getTimeZone("UTC")
-        return sdf.format(Date())
-    }
+//    private fun getCurrentTimestampIso8601(): String {
+//        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
+//        sdf.timeZone = TimeZone.getTimeZone("UTC")
+//        return sdf.format(Date())
+//    }
 
     suspend fun getFacilities(): List<facilities> {
         return try {

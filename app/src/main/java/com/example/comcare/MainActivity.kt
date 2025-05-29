@@ -22,7 +22,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.SemanticsProperties.ImeAction
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
@@ -36,13 +35,24 @@ import kotlinx.coroutines.delay
 import java.util.*
 import kotlin.math.ceil
 
+// 카카오 로그인 관련 imports
+import com.kakao.sdk.auth.model.OAuthToken
+import com.kakao.sdk.common.model.ClientError
+import com.kakao.sdk.common.model.ClientErrorCause
+import com.kakao.sdk.user.UserApiClient
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.sp
+import android.widget.Toast
+
+// 기존 imports 유지
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
-import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -51,7 +61,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.filled.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.core.content.ContextCompat
@@ -78,18 +87,28 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 
+// 사용자 정보 데이터 클래스
+data class UserInfo(
+    val id: Long,
+    val nickname: String,
+    val profileImageUrl: String?
+)
+
 class MainActivity : ComponentActivity() {
 
-    lateinit var chatService: ChatService  // lazy initialization으로 변경
-    private var currentUserId: String = "guest" // Default value
+    lateinit var chatService: ChatService
+    private var currentUserId: String = "guest"
 
-    // 위치 관련 변수 추가
+    // 사용자 정보 저장
+    private var userInfo: UserInfo? = null
+
+    // 위치 관련 변수
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private var userCity: String = ""
     private var userDistrict: String = ""
     private var userLatitude: Double = 0.0
     private var userLongitude: Double = 0.0
-    private var user_add: String = "" // 전체 주소를 저장하는 변수
+    private var user_add: String = ""
 
     companion object {
         private const val LOCATION_PERMISSION_REQUEST_CODE = 1001
@@ -97,9 +116,6 @@ class MainActivity : ComponentActivity() {
     }
 
     fun onMessageSent(message: String, sessionId: String) {
-        // Save message to local database, display in UI, etc.
-
-        // Then trigger the n8n workflow
         chatService.sendChatMessageToWorkflow(
             currentUserId,
             message,
@@ -107,8 +123,6 @@ class MainActivity : ComponentActivity() {
         )
     }
 
-    // Add this nested class inside MainActivity
-// MainActivity의 PlaceViewModelFactory 클래스 수정
     class PlaceViewModelFactory(
         private val supabaseHelper: SupabaseDatabaseHelper
     ) : ViewModelProvider.Factory {
@@ -126,22 +140,19 @@ class MainActivity : ComponentActivity() {
 
         chatService = ChatService(this)
         RequestCounterHelper.init(this)
-
-        // FusedLocationProviderClient 초기화
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
-
-        // Initialize Supabase helper
         val supabaseHelper = SupabaseDatabaseHelper(this)
 
         setContent {
-            // 위치 정보를 State로 관리 - 초기값 설정
             var userCityState by remember { mutableStateOf("위치 확인 중...") }
             var userDistrictState by remember { mutableStateOf("위치 확인 중...") }
-
             var locationPermissionGranted by remember { mutableStateOf(false) }
             var showLocationPermissionDialog by remember { mutableStateOf(false) }
 
-            // PlaceViewModelFactory는 한 번만 생성
+            // 로그인 상태 관리
+            var isLoggedIn by remember { mutableStateOf(false) }
+            var currentUserInfo by remember { mutableStateOf<UserInfo?>(null) }
+
             val viewModelFactory = remember { PlaceViewModelFactory(supabaseHelper) }
 
             // 위치 권한 런처
@@ -153,51 +164,45 @@ class MainActivity : ComponentActivity() {
 
                 if (fineLocationGranted || coarseLocationGranted) {
                     locationPermissionGranted = true
-                    // 권한이 승인되면 위치 정보 가져오기
                     getLastKnownLocation { city, district ->
                         userCity = city
                         userDistrict = district
-                        // State 업데이트 - 여기가 중요!
                         userCityState = city
                         userDistrictState = district
                         Log.d(TAG, "위치 권한 승인 - 위치 정보 획득 완료")
-                        Log.d(TAG, "사용자 위치 State 업데이트: $city $district")
                     }
                 } else {
-                    // 권한이 거부된 경우
                     showLocationPermissionDialog = true
                     userCityState = "위치 권한 없음"
                     userDistrictState = "위치 권한 없음"
                 }
             }
 
-            // 앱 시작 시 위치 권한 확인 및 요청
-            LaunchedEffect(Unit) {
-                when {
-                    ContextCompat.checkSelfPermission(
-                        this@MainActivity,
-                        Manifest.permission.ACCESS_FINE_LOCATION
-                    ) == PackageManager.PERMISSION_GRANTED -> {
-                        // 이미 권한이 있는 경우
-                        locationPermissionGranted = true
-                        getLastKnownLocation { city, district ->
-                            userCity = city
-                            userDistrict = district
-                            // State 업데이트 - 여기가 중요!
-                            userCityState = city
-                            userDistrictState = district
-                            Log.d(TAG, "기존 위치 권한 있음 - 위치 정보 획득 완료")
-                            Log.d(TAG, "사용자 위치 State 업데이트: $city $district")
+            // 로그인 후에만 위치 권한 확인
+            LaunchedEffect(isLoggedIn) {
+                if (isLoggedIn) {
+                    when {
+                        ContextCompat.checkSelfPermission(
+                            this@MainActivity,
+                            Manifest.permission.ACCESS_FINE_LOCATION
+                        ) == PackageManager.PERMISSION_GRANTED -> {
+                            locationPermissionGranted = true
+                            getLastKnownLocation { city, district ->
+                                userCity = city
+                                userDistrict = district
+                                userCityState = city
+                                userDistrictState = district
+                                Log.d(TAG, "기존 위치 권한 있음 - 위치 정보 획득 완료")
+                            }
                         }
-                    }
-                    else -> {
-                        // 권한 요청
-                        locationPermissionLauncher.launch(
-                            arrayOf(
-                                Manifest.permission.ACCESS_FINE_LOCATION,
-                                Manifest.permission.ACCESS_COARSE_LOCATION
+                        else -> {
+                            locationPermissionLauncher.launch(
+                                arrayOf(
+                                    Manifest.permission.ACCESS_FINE_LOCATION,
+                                    Manifest.permission.ACCESS_COARSE_LOCATION
+                                )
                             )
-                        )
+                        }
                     }
                 }
             }
@@ -207,77 +212,83 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    // 위치 권한 안내 다이얼로그
-                    if (showLocationPermissionDialog) {
-                        AlertDialog(
-                            onDismissRequest = { showLocationPermissionDialog = false },
-                            title = { Text("위치 권한 필요") },
-                            text = {
-                                Text("오비서 앱은 사용자님의 지역에 맞는 정보를 제공하기 위해 위치 권한이 필요합니다. 설정에서 위치 권한을 허용해주세요.")
-                            },
-                            confirmButton = {
-                                TextButton(onClick = { showLocationPermissionDialog = false }) {
-                                    Text("확인")
-                                }
+                    if (!isLoggedIn) {
+                        // 로그인 화면 표시
+                        LoginScreen(
+                            onLoginSuccess = { userInfo ->
+                                currentUserInfo = userInfo
+                                currentUserId = userInfo.id.toString()
+                                this@MainActivity.userInfo = userInfo
+                                isLoggedIn = true
                             }
                         )
-                    }
-
-                    val navController = rememberNavController()
-
-                    // Use factory to create ViewModel with Supabase dependency
-                    val viewModel: PlaceViewModel = viewModel(factory = viewModelFactory)
-
-                    // 위치 정보가 업데이트될 때마다 ViewModel에 설정
-                    LaunchedEffect(userCityState, userDistrictState) {
-                        if (userCityState != "위치 확인 중..." &&
-                            userCityState != "위치 권한 없음" &&
-                            userCityState.isNotEmpty() &&
-                            userDistrictState.isNotEmpty()) {
-                            viewModel.setUserLocation(userCityState, userDistrictState)
-                            Log.d(TAG, "ViewModel에 위치 정보 설정: $userCityState $userDistrictState")
-                        }
-                    }
-
-                    // 현재 위치 정보 로그
-                    Log.d(TAG, "NavHost 렌더링 시점의 위치: City=$userCityState, District=$userDistrictState")
-
-                    NavHost(
-                        navController = navController,
-                        startDestination = "chat"
-                    ) {
-                        composable("home") {
-                            PlaceComparisonApp(
-                                navController = navController,
-                                viewModel = viewModel,
-                                userCity = userCityState,  // State 값 사용
-                                userDistrict = userDistrictState  // State 값 사용
+                    } else {
+                        // 로그인 후 메인 화면 표시
+                        if (showLocationPermissionDialog) {
+                            AlertDialog(
+                                onDismissRequest = { showLocationPermissionDialog = false },
+                                title = { Text("위치 권한 필요") },
+                                text = {
+                                    Text("오비서 앱은 사용자님의 지역에 맞는 정보를 제공하기 위해 위치 권한이 필요합니다. 설정에서 위치 권한을 허용해주세요.")
+                                },
+                                confirmButton = {
+                                    TextButton(onClick = { showLocationPermissionDialog = false }) {
+                                        Text("확인")
+                                    }
+                                }
                             )
                         }
-                        composable("searchResults") {
-                            SearchResultsScreen(
-                                viewModel = viewModel,
-                                navController = navController
-                            )
-                        }
-                        composable("chat") {
-                            // 현재 State 값 로그
-                            Log.d(TAG, "ChatScreen으로 전달되는 위치: City=$userCityState, District=$userDistrictState")
 
-                            ChatScreen(
-                                activity = this@MainActivity,
-                                navController = navController,
-                                showBackButton = false,
-                                userCity = userCityState,  // State 값 사용
-                                userDistrict = userDistrictState  // State 값 사용
-                            )
+                        val navController = rememberNavController()
+                        val viewModel: PlaceViewModel = viewModel(factory = viewModelFactory)
+
+                        LaunchedEffect(userCityState, userDistrictState) {
+                            if (userCityState != "위치 확인 중..." &&
+                                userCityState != "위치 권한 없음" &&
+                                userCityState.isNotEmpty() &&
+                                userDistrictState.isNotEmpty()) {
+                                viewModel.setUserLocation(userCityState, userDistrictState)
+                                Log.d(TAG, "ViewModel에 위치 정보 설정: $userCityState $userDistrictState")
+                            }
+                        }
+
+                        NavHost(
+                            navController = navController,
+                            startDestination = "chat"
+                        ) {
+                            composable("home") {
+                                PlaceComparisonApp(
+                                    navController = navController,
+                                    viewModel = viewModel,
+                                    userCity = userCityState,
+                                    userDistrict = userDistrictState,
+                                    userInfo = currentUserInfo
+                                )
+                            }
+                            composable("searchResults") {
+                                SearchResultsScreen(
+                                    viewModel = viewModel,
+                                    navController = navController
+                                )
+                            }
+                            composable("chat") {
+                                ChatScreen(
+                                    activity = this@MainActivity,
+                                    navController = navController,
+                                    showBackButton = false,
+                                    userCity = userCityState,
+                                    userDistrict = userDistrictState,
+                                    userInfo = currentUserInfo
+                                )
+                            }
                         }
                     }
                 }
             }
         }
     }
-    // 위치 정보를 가져오는 함수
+
+    // 위치 정보를 가져오는 함수들은 그대로 유지
     private fun getLastKnownLocation(callback: (String, String) -> Unit) {
         if (ActivityCompat.checkSelfPermission(
                 this,
@@ -300,13 +311,11 @@ class MainActivity : ComponentActivity() {
 
                 Log.d(TAG, "위치 정보 획득 성공 - 위도: $userLatitude, 경도: $userLongitude")
 
-                // Geocoder를 사용하여 좌표를 주소로 변환
                 getAddressFromLocation(location.latitude, location.longitude) { city, district ->
                     callback(city, district)
                 }
             } else {
                 Log.d(TAG, "마지막 위치 정보가 없음 - 새로운 위치 요청")
-                // 마지막 위치가 없는 경우 현재 위치 요청
                 requestNewLocationData(callback)
             }
         }.addOnFailureListener { exception ->
@@ -315,7 +324,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // 새로운 위치 데이터 요청
     private fun requestNewLocationData(callback: (String, String) -> Unit) {
         if (ActivityCompat.checkSelfPermission(
                 this,
@@ -330,10 +338,10 @@ class MainActivity : ComponentActivity() {
 
         val locationRequest = LocationRequest.Builder(
             Priority.PRIORITY_HIGH_ACCURACY,
-            10000L // 10초
+            10000L
         ).apply {
-            setMinUpdateIntervalMillis(5000L) // 최소 5초
-            setMaxUpdates(1) // 한 번만 업데이트
+            setMinUpdateIntervalMillis(5000L)
+            setMaxUpdates(1)
         }.build()
 
         val locationCallback = object : LocationCallback() {
@@ -352,7 +360,6 @@ class MainActivity : ComponentActivity() {
                     Log.w(TAG, "새로운 위치 정보를 가져올 수 없습니다.")
                     callback("", "")
                 }
-                // 위치 업데이트 중지
                 fusedLocationClient.removeLocationUpdates(this)
             }
         }
@@ -364,7 +371,6 @@ class MainActivity : ComponentActivity() {
         )
     }
 
-    // 좌표를 주소로 변환하는 함수
     private fun getAddressFromLocation(latitude: Double, longitude: Double, callback: (String, String) -> Unit) {
         try {
             val geocoder = Geocoder(this, Locale.KOREAN)
@@ -373,28 +379,16 @@ class MainActivity : ComponentActivity() {
                 geocoder.getFromLocation(latitude, longitude, 1) { addresses ->
                     if (addresses.isNotEmpty()) {
                         val address = addresses[0]
-                        val city = address.adminArea ?: ""  // 시/도
-                        val district = address.subLocality ?: address.locality ?: ""  // 구/군
-
-                        // 전체 주소 생성 및 저장
+                        val city = address.adminArea ?: ""
+                        val district = address.subLocality ?: address.locality ?: ""
                         val fullAddress = address.getAddressLine(0) ?: ""
                         user_add = fullAddress
 
-                        // 상세 주소 정보 로그
                         Log.d(TAG, "========== 위치 정보 ==========")
                         Log.d(TAG, "전체 주소 (user_add): $user_add")
-//                        Log.d(TAG, "위도: $latitude")
-//                        Log.d(TAG, "경도: $longitude")
                         Log.d(TAG, "시/도: $city")
                         Log.d(TAG, "구/군: $district")
-//                        Log.d(TAG, "상세 주소 정보:")
-//                        Log.d(TAG, "  - 국가: ${address.countryName}")
-//                        Log.d(TAG, "  - 시/도 (adminArea): ${address.adminArea}")
-//                        Log.d(TAG, "  - 시/군/구 (locality): ${address.locality}")
-//                        Log.d(TAG, "  - 동/읍/면 (subLocality): ${address.subLocality}")
-//                        Log.d(TAG, "  - 도로명: ${address.thoroughfare}")
-//                        Log.d(TAG, "  - 상세주소: ${address.featureName}")
-//                        Log.d(TAG, "==============================")
+                        Log.d(TAG, "==============================")
 
                         callback(city, district)
                     } else {
@@ -408,28 +402,15 @@ class MainActivity : ComponentActivity() {
                 val addresses = geocoder.getFromLocation(latitude, longitude, 1)
                 if (!addresses.isNullOrEmpty()) {
                     val address = addresses[0]
-                    val city = address.adminArea ?: ""  // 시/도
-                    val district = address.subLocality ?: address.locality ?: ""  // 구/군
-
-                    // 전체 주소 생성 및 저장
+                    val city = address.adminArea ?: ""
+                    val district = address.subLocality ?: address.locality ?: ""
                     val fullAddress = address.getAddressLine(0) ?: ""
                     user_add = fullAddress
 
-                    // 상세 주소 정보 로그
                     Log.d(TAG, "========== 위치 정보 ==========")
-//                    Log.d(TAG, "전체 주소 (user_add): $user_add")
-//                    Log.d(TAG, "위도: $latitude")
-//                    Log.d(TAG, "경도: $longitude")
                     Log.d(TAG, "시/도: $city")
                     Log.d(TAG, "구/군: $district")
-//                    Log.d(TAG, "상세 주소 정보:")
-//                    Log.d(TAG, "  - 국가: ${address.countryName}")
-//                    Log.d(TAG, "  - 시/도 (adminArea): ${address.adminArea}")
-//                    Log.d(TAG, "  - 시/군/구 (locality): ${address.locality}")
-//                    Log.d(TAG, "  - 동/읍/면 (subLocality): ${address.subLocality}")
-//                    Log.d(TAG, "  - 도로명: ${address.thoroughfare}")
-//                    Log.d(TAG, "  - 상세주소: ${address.featureName}")
-//                    Log.d(TAG, "==============================")
+                    Log.d(TAG, "==============================")
 
                     callback(city, district)
                 } else {
@@ -446,13 +427,148 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@Composable
+fun LoginScreen(onLoginSuccess: (UserInfo) -> Unit) {
+    val context = LocalContext.current
+    val TAG = "KakaoLogin"
+
+    // 카카오 로그인 콜백
+    val callback: (OAuthToken?, Throwable?) -> Unit = { token, error ->
+        if (error != null) {
+            Log.e(TAG, "카카오 로그인 실패", error)
+            Toast.makeText(context, "로그인 실패: ${error.message}", Toast.LENGTH_SHORT).show()
+        } else if (token != null) {
+            Log.i(TAG, "카카오 로그인 성공 ${token.accessToken}")
+
+            // 사용자 정보 가져오기
+            UserApiClient.instance.me { user, error ->
+                if (error != null) {
+                    Log.e(TAG, "사용자 정보 요청 실패", error)
+                    Toast.makeText(context, "사용자 정보 요청 실패", Toast.LENGTH_SHORT).show()
+                } else if (user != null) {
+                    Log.i(TAG, "사용자 정보 요청 성공" +
+                            "\n회원번호: ${user.id}" +
+                            "\n닉네임: ${user.kakaoAccount?.profile?.nickname}" +
+                            "\n프로필사진: ${user.kakaoAccount?.profile?.thumbnailImageUrl}")
+
+                    val userInfo = UserInfo(
+                        id = user.id ?: 0L,
+                        nickname = user.kakaoAccount?.profile?.nickname ?: "사용자",
+                        profileImageUrl = user.kakaoAccount?.profile?.thumbnailImageUrl
+                    )
+
+                    onLoginSuccess(userInfo)
+                }
+            }
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFFc6f584)), // 앱의 메인 컬러 사용
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.padding(horizontal = 40.dp)
+        ) {
+            // 앱 로고나 타이틀
+            Text(
+                text = "오비서",
+                style = MaterialTheme.typography.displayLarge,
+                fontWeight = FontWeight.Bold,
+                color = Color.Black,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+
+            Text(
+                text = "시니어를 위한 똑똑한 비서",
+                style = MaterialTheme.typography.titleLarge,
+                color = Color.Black.copy(alpha = 0.7f),
+                modifier = Modifier.padding(bottom = 48.dp)
+            )
+
+            // 카카오 로그인 버튼
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .clickable {
+                        // 카카오톡 설치 여부 확인
+                        if (UserApiClient.instance.isKakaoTalkLoginAvailable(context)) {
+                            // 카카오톡으로 로그인
+                            UserApiClient.instance.loginWithKakaoTalk(context) { token, error ->
+                                if (error != null) {
+                                    Log.e(TAG, "카카오톡으로 로그인 실패", error)
+
+                                    // 사용자가 카카오톡 설치 후 로그인을 취소한 경우
+                                    if (error is ClientError && error.reason == ClientErrorCause.Cancelled) {
+                                        return@loginWithKakaoTalk
+                                    }
+
+                                    // 카카오톡에 연결된 카카오계정이 없는 경우, 카카오계정으로 로그인 시도
+                                    UserApiClient.instance.loginWithKakaoAccount(context, callback = callback)
+                                } else if (token != null) {
+                                    callback(token, null)
+                                }
+                            }
+                        } else {
+                            // 카카오톡이 설치되어 있지 않은 경우, 카카오계정으로 로그인
+                            UserApiClient.instance.loginWithKakaoAccount(context, callback = callback)
+                        }
+                    },
+                colors = CardDefaults.cardColors(
+                    containerColor = Color(0xFFFEE500) // 카카오 노란색
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 20.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // 카카오 로고 (실제로는 이미지 리소스를 사용해야 함)
+                    Icon(
+                        imageVector = Icons.Default.Person,
+                        contentDescription = "Kakao",
+                        tint = Color.Black,
+                        modifier = Modifier.size(24.dp)
+                    )
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    Text(
+                        text = "카카오 로그인",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                text = "간편하게 로그인하고 서비스를 이용해보세요",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.Black.copy(alpha = 0.6f)
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlaceComparisonApp(
     navController: NavController,
     viewModel: PlaceViewModel,
     userCity: String = "",  // 파라미터 추가
-    userDistrict: String = ""  // 파라미터 추가
+    userDistrict: String = "",  // 파라미터 추가
+    userInfo: UserInfo? = null  // 사용자 정보 추가
 ) {
     Log.d("PlaceComparisonApp", "받은 위치 정보: City=$userCity, District=$userDistrict")
     var currentSection by remember { mutableStateOf("home") }
@@ -3041,7 +3157,8 @@ fun ChatScreen(
     navController: NavController,
     showBackButton: Boolean = true,
     userCity: String = "",
-    userDistrict: String = ""
+    userDistrict: String = "",
+    userInfo: UserInfo? = null  // 사용자 정보 추가
 ) {
     // Use rememberSaveable to persist state across recompositions
     var messageText by rememberSaveable { mutableStateOf("") }

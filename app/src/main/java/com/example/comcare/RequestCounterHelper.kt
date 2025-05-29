@@ -10,7 +10,7 @@ object RequestCounterHelper {
     private const val PREFS_NAME = "ChatPrefs"
     private const val REQUEST_COUNT_KEY = "request_count"
     private const val LAST_REQUEST_DATE_KEY = "last_request_date"
-    private const val MAX_REQUESTS_PER_DAY = 10
+    private const val MAX_REQUESTS_PER_DAY = 7
 
     private var sharedPrefs: SharedPreferences? = null
 
