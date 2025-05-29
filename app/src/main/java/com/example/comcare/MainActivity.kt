@@ -2332,6 +2332,8 @@ fun PlaceCard(place: Place) {
 
 @Composable
 fun JobCard(job: SupabaseDatabaseHelper.Job) {
+    val context = LocalContext.current
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -2349,21 +2351,6 @@ fun JobCard(job: SupabaseDatabaseHelper.Job) {
             )
 
             Spacer(modifier = Modifier.height(8.dp))
-
-            // Job Category
-//            Row {
-//                Text(
-//                    "유형: ",
-//                    style = MaterialTheme.typography.bodyLarge,
-//                    fontWeight = FontWeight.Bold
-//                )
-//                Text(
-//                    job.JobCategory ?: "정보 없음",
-//                    style = MaterialTheme.typography.bodyLarge
-//                )
-//            }
-
-            Spacer(modifier = Modifier.height(4.dp))
 
             // Working Type
             Row {
@@ -2393,9 +2380,9 @@ fun JobCard(job: SupabaseDatabaseHelper.Job) {
                 )
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
-            // Salary Row
+            // Salary (Fee)
             Row {
                 Text(
                     "급여: ",
@@ -2408,24 +2395,41 @@ fun JobCard(job: SupabaseDatabaseHelper.Job) {
                 )
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
 
-            // Deadline
-            job.Deadline?.let {
-                Text(
-                    "마감일: $it",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-//                    color = Color(0xFF4A7C25),
-                    modifier = Modifier.align(Alignment.End)
-                )
+            // Apply button aligned to the right
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                Button(
+                    onClick = {
+                        job.Detail?.let { url ->
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                            context.startActivity(intent)
+                        } ?: run {
+                            Toast.makeText(context, "신청 페이지 정보가 없습니다", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Yellow,
+                        contentColor = Color.Black
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        "신청",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
             }
         }
     }
 }
-
 @Composable
 fun KKJobCard(kkJob: SupabaseDatabaseHelper.KKJob) {
+    val context = LocalContext.current
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -2443,21 +2447,6 @@ fun KKJobCard(kkJob: SupabaseDatabaseHelper.KKJob) {
             )
 
             Spacer(modifier = Modifier.height(8.dp))
-
-            // Category
-            Row {
-                Text(
-                    "카테고리: ",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    kkJob.Category ?: "정보 없음",
-                    style = MaterialTheme.typography.titleMedium
-                )
-            }
-
-            Spacer(modifier = Modifier.height(4.dp))
 
             // Location
             Row {
@@ -2487,27 +2476,60 @@ fun KKJobCard(kkJob: SupabaseDatabaseHelper.KKJob) {
                         style = MaterialTheme.typography.titleMedium
                     )
                 }
+                Spacer(modifier = Modifier.height(4.dp))
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            // Salary
+            kkJob.Salary?.let { salary ->
+                Row {
+                    Text(
+                        "급여: ",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        salary,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+            }
 
-            // Deadline
-            kkJob.Deadline?.let {
-                Text(
-                    "마감일: $it",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.align(Alignment.End)
-                )
+            // Apply button aligned to the right
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                Button(
+                    onClick = {
+                        kkJob.Detail?.let { url ->
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                            context.startActivity(intent)
+                        } ?: run {
+                            Toast.makeText(context, "신청 페이지 정보가 없습니다", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Yellow,
+                        contentColor = Color.Black
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        "신청",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
             }
         }
     }
 }
 
-// MainActivity.kt에 추가할 ICHJobCard 컴포저블
-
 @Composable
 fun ICHJobCard(ichJob: SupabaseDatabaseHelper.ICHJob) {
+    val context = LocalContext.current
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -2525,21 +2547,6 @@ fun ICHJobCard(ichJob: SupabaseDatabaseHelper.ICHJob) {
             )
 
             Spacer(modifier = Modifier.height(8.dp))
-
-            // Category
-            Row {
-                Text(
-                    "카테고리: ",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    ichJob.Category ?: "정보 없음",
-                    style = MaterialTheme.typography.titleMedium
-                )
-            }
-
-            Spacer(modifier = Modifier.height(4.dp))
 
             // Location
             Row {
@@ -2569,23 +2576,57 @@ fun ICHJobCard(ichJob: SupabaseDatabaseHelper.ICHJob) {
                         style = MaterialTheme.typography.titleMedium
                     )
                 }
+                Spacer(modifier = Modifier.height(4.dp))
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            // Salary
+            ichJob.Salary?.let { salary ->
+                Row {
+                    Text(
+                        "급여: ",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        salary,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+            }
 
-            // Deadline
-            ichJob.Deadline?.let {
-                Text(
-                    "마감일: $it",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.align(Alignment.End)
-                )
+
+            // Apply button aligned to the right
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                Button(
+                    onClick = {
+                        ichJob.Detail?.let { url ->
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                            context.startActivity(intent)
+                        } ?: run {
+                            Toast.makeText(context, "신청 페이지 정보가 없습니다", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Yellow,
+                        contentColor = Color.Black
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        "신청",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
             }
         }
     }
 }
-// Update the LectureCard composable to display a clean Institution name
+
 @Composable
 fun LectureCard(lecture: SupabaseDatabaseHelper.Lecture) {
     // Extract the clean institution name by removing the region marker completely
