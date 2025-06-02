@@ -27,7 +27,7 @@ class ChatService(private val context: Context) {
     private val sharedPrefs: SharedPreferences = context.getSharedPreferences("ChatPrefs", Context.MODE_PRIVATE)
     private val REQUEST_COUNT_KEY = "request_count"
     private val LAST_REQUEST_DATE_KEY = "last_request_date"
-    private val MAX_REQUESTS_PER_DAY = 2
+    private val MAX_REQUESTS_PER_DAY = 10
 
     // 현재 검색 결과들을 저장하는 변수
     private var currentResults: JSONArray? = null
@@ -120,7 +120,9 @@ class ChatService(private val context: Context) {
         return MAX_REQUESTS_PER_DAY - currentCount
     }
 
-    fun sendChatMessageToWorkflow(userId: String, message: String, sessionId: String) {
+// ChatService.kt의 sendChatMessageToWorkflow 함수 전체 수정
+
+    fun sendChatMessageToWorkflow(userId: String, message: String, sessionId: String, userCity: String = "", userDistrict: String = "") {
         // 채팅 횟수 확인
         if (!canSendMessage()) {
             Log.d(TAG, "Daily chat limit reached")
@@ -133,9 +135,13 @@ class ChatService(private val context: Context) {
         Log.d(TAG, "==== STARTING NEW CHAT REQUEST ====")
         Log.d(TAG, "Request to URL: $url")
         Log.d(TAG, "message: $message")
+        Log.d(TAG, "userCity: $userCity")
+        Log.d(TAG, "userDistrict: $userDistrict")
 
         val json = JSONObject().apply {
             put("query", message)
+            put("userCity", userCity)
+            put("userDistrict", userDistrict)
         }
 
         val mediaType = "application/json; charset=utf-8".toMediaType()
@@ -155,10 +161,11 @@ class ChatService(private val context: Context) {
         // 요청 카운트 증가
         incrementRequestCount()
 
-        // 새로운 검색 시작 시 초기화
+        // 새로운 검색 시작 시 초기화 - 탐색 모드 완전히 해제
         currentResults = null
         currentIndex = 0
         isExploreMode = false
+        isCurrentlyExploring = false  // 중요: 탐색 모드 플래그도 초기화
         exploreResults = emptyList()
 
         // First send a message that we're waiting for the AI
@@ -336,6 +343,7 @@ class ChatService(private val context: Context) {
                     Log.d(TAG, "Showing result $currentIndex: $content")
 
                     Handler(Looper.getMainLooper()).post {
+                        // 일반 검색 모드에서는 항상 responseCallback 사용
                         responseCallback?.invoke(content)
 
                         // 네비게이션 상태 업데이트

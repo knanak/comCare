@@ -82,6 +82,7 @@ import android.content.Context
 import android.net.Uri
 import android.os.Build
 import android.provider.ContactsContract.CommonDataKinds.Website.URL
+import androidx.compose.ui.text.style.TextAlign
 import androidx.core.app.ActivityCompat
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -119,7 +120,9 @@ class MainActivity : ComponentActivity() {
         chatService.sendChatMessageToWorkflow(
             currentUserId,
             message,
-            sessionId
+            sessionId,
+            userCity,      // 추가: userCity 전달
+            userDistrict   // 추가: userDistrict 전달
         )
     }
 
@@ -486,9 +489,11 @@ fun LoginScreen(onLoginSuccess: (UserInfo) -> Unit) {
             Text(
                 text = "시니어를 위한 AI 검색 서비스",
                 style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
                 color = Color.Black.copy(alpha = 0.7f),
                 modifier = Modifier.padding(bottom = 48.dp)
             )
+
 
             // 카카오 로그인 버튼
             Card(
@@ -553,9 +558,11 @@ fun LoginScreen(onLoginSuccess: (UserInfo) -> Unit) {
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
-                text = "간편하게 로그인하고 서비스를 이용해보세요",
+                text = "제공되는 정보는 \n 공개된 정부 웹사이트에서 수집한 것으로 \n 공식 정부 서비스가 아닙니다.",
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color.Black.copy(alpha = 0.6f)
+                color = Color.Black,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
             )
         }
     }
@@ -2982,7 +2989,6 @@ fun LectureCard(lecture: SupabaseDatabaseHelper.Lecture) {
                     "연락처: $tel",
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.titleMedium,
-                    color = Color.Gray
                 )
             }
 
@@ -3111,7 +3117,7 @@ fun KKCultureCard(kkCulture: SupabaseDatabaseHelper.KKCulture) {
                     "연락처: $tel",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = Color.Gray
+//                    color = Color.Gray
                 )
             }
 
@@ -3257,7 +3263,7 @@ fun ICHCultureCard(ichCulture: SupabaseDatabaseHelper.ICHCulture) {
                     "연락처: $tel",
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.titleMedium,
-                    color = Color.Gray
+//                    color = Color.Gray
                 )
             }
 
@@ -3992,12 +3998,11 @@ fun ChatScreen(
                                             messageText,
                                             activity,
                                             sessionId,
-                                            messages
-                                        ) { newMessages ->
-                                            messages = newMessages
-                                            // Reset navigation when sending new message
-                                            showNavigation = false
-                                        }
+                                            messages,
+                                            { newMessages -> messages = newMessages },
+                                            userCity,      // 추가
+                                            userDistrict   // 추가
+                                        )
                                         messageText = ""
                                     }
                                 }
@@ -4030,12 +4035,11 @@ fun ChatScreen(
                                         messageText,
                                         activity,
                                         sessionId,
-                                        messages
-                                    ) { newMessages ->
-                                        messages = newMessages
-                                        // Reset navigation when sending new message
-                                        showNavigation = false
-                                    }
+                                        messages,
+                                        { newMessages -> messages = newMessages },
+                                        userCity,      // 추가
+                                        userDistrict   // 추가
+                                    )
                                     messageText = ""
                                 }
                             },
@@ -4066,7 +4070,9 @@ private fun sendMessage(
     activity: MainActivity,
     sessionId: String,
     currentMessages: List<ChatMessage>,
-    updateMessages: (List<ChatMessage>) -> Unit
+    updateMessages: (List<ChatMessage>) -> Unit,
+    userCity: String = "",      // 추가
+    userDistrict: String = ""   // 추가
 ) {
     // Create user message
     val userMessage = ChatMessage(
