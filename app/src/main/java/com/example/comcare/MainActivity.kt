@@ -3433,7 +3433,7 @@ fun ChatScreen(
         }
     }
 
-    // Set up the callback to receive responses from n8n
+// Set up the callback to receive responses from n8n
     LaunchedEffect(Unit) {
         // 일반 응답 콜백 - 통합 처리
         activity.chatService.responseCallback = { aiResponse ->
@@ -3442,8 +3442,8 @@ fun ChatScreen(
             // 검색 결과인지 확인 (📋로 시작하는 메시지)
             val isSearchResult = aiResponse.startsWith("📋")
 
-            if (!activity.chatService.isInExploreMode() && !isSearchResult) {
-                // 일반 모드: 새로운 메시지 추가
+            if (!isSearchResult) {
+                // 일반 응답: 새로운 메시지 추가 또는 waiting 메시지 교체
                 val updatedMessages = messages.toMutableList()
                 val waitingIndex = updatedMessages.indexOfLast { it.isWaiting }
 
@@ -3460,19 +3460,49 @@ fun ChatScreen(
                 }
                 messages = updatedMessages
             } else {
-                // 탐색 모드 또는 검색 결과 모드: 기존 메시지 업데이트
-                val lastResultIndex = messages.indexOfLast {
-                    it.text.startsWith("📋") && !it.isFromUser
-                }
+                // 검색 결과 처리
+                val updatedMessages = messages.toMutableList()
 
-                if (lastResultIndex >= 0) {
-                    val updatedMessages = messages.toMutableList()
-                    updatedMessages[lastResultIndex] = ChatMessage(
-                        text = aiResponse,
-                        isFromUser = false
-                    )
-                    messages = updatedMessages
+                // 가장 최근의 사용자 메시지 찾기
+                val lastUserMessageIndex = updatedMessages.indexOfLast { it.isFromUser }
+
+                if (lastUserMessageIndex >= 0) {
+                    // 해당 사용자 메시지 다음의 첫 번째 검색 결과 메시지 찾기
+                    var targetIndex = -1
+                    for (i in lastUserMessageIndex + 1 until updatedMessages.size) {
+                        if (!updatedMessages[i].isFromUser &&
+                            (updatedMessages[i].text.startsWith("📋") || updatedMessages[i].isWaiting)) {
+                            targetIndex = i
+                            break
+                        }
+                    }
+
+                    if (targetIndex >= 0) {
+                        // 찾은 위치의 메시지 업데이트
+                        updatedMessages[targetIndex] = ChatMessage(
+                            text = aiResponse,
+                            isFromUser = false
+                        )
+                        messages = updatedMessages
+                    } else {
+                        // 못 찾은 경우 waiting 메시지 찾아서 교체
+                        val waitingIndex = updatedMessages.indexOfLast { it.isWaiting }
+                        if (waitingIndex >= 0) {
+                            updatedMessages[waitingIndex] = ChatMessage(
+                                text = aiResponse,
+                                isFromUser = false
+                            )
+                            messages = updatedMessages
+                        } else {
+                            // 그것도 없으면 새로 추가
+                            messages = messages + ChatMessage(
+                                text = aiResponse,
+                                isFromUser = false
+                            )
+                        }
+                    }
                 } else {
+                    // 사용자 메시지가 없는 경우 (이상한 케이스)
                     messages = messages + ChatMessage(
                         text = aiResponse,
                         isFromUser = false

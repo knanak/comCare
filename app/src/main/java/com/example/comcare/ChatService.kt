@@ -446,6 +446,9 @@ class ChatService(private val context: Context) {
         return formatted
     }
 
+    private var isNavigatingResults = false
+
+    fun isNavigating(): Boolean = isNavigatingResults
     // 이전 결과로 이동
     fun showPreviousResult(): Boolean {
         if (isExploreMode && exploreResults.isNotEmpty()) {
