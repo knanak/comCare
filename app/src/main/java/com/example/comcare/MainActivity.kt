@@ -3435,11 +3435,15 @@ fun ChatScreen(
 
     // Set up the callback to receive responses from n8n
     LaunchedEffect(Unit) {
-        // 일반 응답 콜백
+        // 일반 응답 콜백 - 통합 처리
         activity.chatService.responseCallback = { aiResponse ->
             Log.d("ChatScreen", "Received response: $aiResponse")
 
-            if (!activity.chatService.isInExploreMode()) {
+            // 검색 결과인지 확인 (📋로 시작하는 메시지)
+            val isSearchResult = aiResponse.startsWith("📋")
+
+            if (!activity.chatService.isInExploreMode() && !isSearchResult) {
+                // 일반 모드: 새로운 메시지 추가
                 val updatedMessages = messages.toMutableList()
                 val waitingIndex = updatedMessages.indexOfLast { it.isWaiting }
 
@@ -3455,6 +3459,25 @@ fun ChatScreen(
                     ))
                 }
                 messages = updatedMessages
+            } else {
+                // 탐색 모드 또는 검색 결과 모드: 기존 메시지 업데이트
+                val lastResultIndex = messages.indexOfLast {
+                    it.text.startsWith("📋") && !it.isFromUser
+                }
+
+                if (lastResultIndex >= 0) {
+                    val updatedMessages = messages.toMutableList()
+                    updatedMessages[lastResultIndex] = ChatMessage(
+                        text = aiResponse,
+                        isFromUser = false
+                    )
+                    messages = updatedMessages
+                } else {
+                    messages = messages + ChatMessage(
+                        text = aiResponse,
+                        isFromUser = false
+                    )
+                }
             }
         }
 

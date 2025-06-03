@@ -27,7 +27,7 @@ class ChatService(private val context: Context) {
     private val sharedPrefs: SharedPreferences = context.getSharedPreferences("ChatPrefs", Context.MODE_PRIVATE)
     private val REQUEST_COUNT_KEY = "request_count"
     private val LAST_REQUEST_DATE_KEY = "last_request_date"
-    private val MAX_REQUESTS_PER_DAY = 30
+    private val MAX_REQUESTS_PER_DAY = 10
 
     // 현재 검색 결과들을 저장하는 변수
     private var currentResults: JSONArray? = null
@@ -35,7 +35,17 @@ class ChatService(private val context: Context) {
 
     // 탐색 결과를 위한 별도 저장 변수 - ChatMessage 타입으로 변경
     private var exploreResults: List<ChatMessage> = emptyList()
-    private var isExploreMode: Boolean = false
+    private var isExploreMode = false
+
+    // 탐색 모드 상태 확인 및 설정
+    fun setExploreMode(enabled: Boolean) {
+        isExploreMode = enabled
+    }
+
+    fun isInExploreMode(): Boolean {
+        return isExploreMode
+    }
+
 
     // 탐색 모드인지 추적하는 변수 추가
     private var isCurrentlyExploring: Boolean = false
@@ -520,9 +530,6 @@ class ChatService(private val context: Context) {
         exploreResults = emptyList()
     }
 
-    fun isInExploreMode(): Boolean {
-        return isCurrentlyExploring
-    }
 
     // 현재 결과가 있는지 확인
     fun hasResults(): Boolean {
