@@ -82,11 +82,17 @@ import android.content.Context
 import android.net.Uri
 import android.os.Build
 import android.provider.ContactsContract.CommonDataKinds.Website.URL
+import androidx.activity.compose.ManagedActivityResultLauncher
+import androidx.activity.result.ActivityResultLauncher
 import androidx.compose.ui.text.style.TextAlign
 import androidx.core.app.ActivityCompat
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import android.provider.Settings
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+
 
 // 사용자 정보 데이터 클래스
 data class UserInfo(
@@ -150,7 +156,7 @@ class MainActivity : ComponentActivity() {
             var userCityState by remember { mutableStateOf("위치 확인 중...") }
             var userDistrictState by remember { mutableStateOf("위치 확인 중...") }
             var locationPermissionGranted by remember { mutableStateOf(false) }
-            var showLocationPermissionDialog by remember { mutableStateOf(false) }
+            // showLocationPermissionDialog 제거
 
             // 로그인 상태 관리
             var isLoggedIn by remember { mutableStateOf(false) }
@@ -175,9 +181,15 @@ class MainActivity : ComponentActivity() {
                         Log.d(TAG, "위치 권한 승인 - 위치 정보 획득 완료")
                     }
                 } else {
-                    showLocationPermissionDialog = true
+                    locationPermissionGranted = false
                     userCityState = "위치 권한 없음"
                     userDistrictState = "위치 권한 없음"
+                    // 위치 권한 거부 시 토스트 메시지 표시
+                    Toast.makeText(
+                        this@MainActivity,
+                        "사용자의 지역에 맞는 정보를 제공하기 위해 위치 권한이 필요합니다.",
+                        Toast.LENGTH_LONG
+                    ).show()
                 }
             }
 
@@ -226,23 +238,9 @@ class MainActivity : ComponentActivity() {
                             }
                         )
                     } else {
-                        // 로그인 후 메인 화면 표시
-                        if (showLocationPermissionDialog) {
-                            AlertDialog(
-                                onDismissRequest = { showLocationPermissionDialog = false },
-                                title = { Text("위치 권한 필요") },
-                                text = {
-                                    Text("오비서 앱은 사용자님의 지역에 맞는 정보를 제공하기 위해 위치 권한이 필요합니다. 설정에서 위치 권한을 허용해주세요.")
-                                },
-                                confirmButton = {
-                                    TextButton(onClick = { showLocationPermissionDialog = false }) {
-                                        Text("확인")
-                                    }
-                                }
-                            )
-                        }
-
+                        // 로그인 후 메인 화면 표시 (showLocationPermissionDialog 관련 코드 모두 제거)
                         val navController = rememberNavController()
+                        val viewModelFactory = remember { PlaceViewModelFactory(supabaseHelper) }
                         val viewModel: PlaceViewModel = viewModel(factory = viewModelFactory)
 
                         LaunchedEffect(userCityState, userDistrictState) {
@@ -292,7 +290,7 @@ class MainActivity : ComponentActivity() {
     }
 
     // 위치 정보를 가져오는 함수들은 그대로 유지
-    private fun getLastKnownLocation(callback: (String, String) -> Unit) {
+    fun getLastKnownLocation(callback: (String, String) -> Unit) {
         if (ActivityCompat.checkSelfPermission(
                 this,
                 Manifest.permission.ACCESS_FINE_LOCATION
@@ -2339,6 +2337,7 @@ fun PlaceComparisonApp(
         }
     }
 }
+
 @Composable
 fun SearchResultsScreen(
     viewModel: PlaceViewModel,
@@ -2471,6 +2470,7 @@ fun SearchResultsScreen(
         }
     }
 }
+
 @Composable
 fun PlaceCard(place: Place) {
     Card(
@@ -2576,23 +2576,6 @@ fun PlaceCard(place: Place) {
 
                 Spacer(modifier = Modifier.height(4.dp))
             }
-
-            // 상세정보 버튼
-//            Button(
-//                onClick = { /* Open comparison view */ },
-//                modifier = Modifier.align(Alignment.End),
-//                colors = ButtonDefaults.buttonColors(
-//                    containerColor = Color(0xFFc6f584),
-//                    contentColor = Color.Black
-//                ),
-//                shape = RectangleShape
-//            ) {
-//                Text(
-//                    "상세정보",
-//                    style = MaterialTheme.typography.titleMedium,
-//                    fontWeight = FontWeight.Bold
-//                )
-//            }
         }
     }
 }
@@ -2693,6 +2676,7 @@ fun JobCard(job: SupabaseDatabaseHelper.Job) {
         }
     }
 }
+
 @Composable
 fun KKJobCard(kkJob: SupabaseDatabaseHelper.KKJob) {
     val context = LocalContext.current
@@ -3024,6 +3008,7 @@ fun LectureCard(lecture: SupabaseDatabaseHelper.Lecture) {
         }
     }
 }
+
 @Composable
 fun KKCultureCard(kkCulture: SupabaseDatabaseHelper.KKCulture) {
     val context = LocalContext.current
@@ -3308,7 +3293,7 @@ fun ChatScreen(
     showBackButton: Boolean = true,
     userCity: String = "",
     userDistrict: String = "",
-    userInfo: UserInfo? = null  // 사용자 정보 추가
+    userInfo: UserInfo? = null
 ) {
     // Use rememberSaveable to persist state across recompositions
     var messageText by rememberSaveable { mutableStateOf("") }
@@ -3344,12 +3329,42 @@ fun ChatScreen(
         }
     }
 
+    // 위치 권한 런처 추가
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val fineLocationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
+        val coarseLocationGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
+
+        if (fineLocationGranted || coarseLocationGranted) {
+            // 권한이 승인되면 위치 정보를 다시 가져오도록 메인 액티비티에 요청
+            Toast.makeText(
+                context,
+                "위치 권한이 승인되었습니다. 위치 정보를 가져오는 중...",
+                Toast.LENGTH_SHORT
+            ).show()
+
+            // MainActivity의 위치 정보 업데이트 트리거
+            // 실제로는 MainActivity에서 위치 정보를 다시 가져와야 함
+            activity.getLastKnownLocation { city, district ->
+                // 위치 정보가 업데이트되면 ChatScreen에 반영됨
+            }
+        } else {
+            // 권한이 거부된 경우 토스트 메시지 표시
+            Toast.makeText(
+                context,
+                "사용자의 지역에 맞는 정보를 제공하기 위해 위치 권한이 필요합니다.",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+
     val speechRecognizerIntent = remember {
         Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ko-KR")  // Korean language
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ko-KR")
             putExtra(RecognizerIntent.EXTRA_PROMPT, "말씀해주세요...")
-            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true) // Enable partial results for real-time transcription
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
         }
     }
 
@@ -3375,7 +3390,6 @@ fun ChatScreen(
                 isListening = false
             }
 
-            // Handle partial results for real-time transcription
             override fun onPartialResults(partialResults: Bundle?) {
                 val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                 if (!matches.isNullOrEmpty()) {
@@ -3411,7 +3425,7 @@ fun ChatScreen(
     LaunchedEffect(messages.size) {
         if (messages.size > 1) {
             try {
-                delay(100) // Small delay to ensure rendering
+                delay(100)
                 listState.scrollToItem(index = messages.size - 1)
             } catch (e: Exception) {
                 Log.e("ChatScreen", "Scroll error: ${e.message}")
@@ -3425,9 +3439,7 @@ fun ChatScreen(
         activity.chatService.responseCallback = { aiResponse ->
             Log.d("ChatScreen", "Received response: $aiResponse")
 
-            // 탐색 모드가 아닌 경우에만 처리
             if (!activity.chatService.isInExploreMode()) {
-                // Replace any waiting messages with the actual response
                 val updatedMessages = messages.toMutableList()
                 val waitingIndex = updatedMessages.indexOfLast { it.isWaiting }
 
@@ -3450,13 +3462,11 @@ fun ChatScreen(
         activity.chatService.exploreResponseCallback = { aiResponse ->
             Log.d("ChatScreen", "Received explore response: $aiResponse")
 
-            // 탐색 모드에서의 응답 처리
             val lastExploreIndex = messages.indexOfLast {
                 it.text.startsWith("📋") && !it.isFromUser
             }
 
             if (lastExploreIndex >= 0) {
-                // 기존 탐색 결과를 업데이트
                 val updatedMessages = messages.toMutableList()
                 updatedMessages[lastExploreIndex] = ChatMessage(
                     text = aiResponse,
@@ -3464,7 +3474,6 @@ fun ChatScreen(
                 )
                 messages = updatedMessages
             } else {
-                // 새로운 탐색 결과 추가
                 messages = messages + ChatMessage(
                     text = aiResponse,
                     isFromUser = false
@@ -3482,31 +3491,29 @@ fun ChatScreen(
         }
     }
 
-// Clean up callback when leaving the screen
+    // Clean up callback when leaving the screen
     DisposableEffect(Unit) {
         onDispose {
             activity.chatService.responseCallback = null
             activity.chatService.navigationCallback = null
             activity.chatService.exploreResponseCallback = null
-            // 탐색 모드 초기화
             activity.chatService.clearResults()
         }
     }
+
     // Check for microphone permission
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (isGranted) {
-            // Start listening when permission is granted
             speechRecognizer?.startListening(speechRecognizerIntent)
             isListening = true
         } else {
-            // Show a toast if permission is denied
             Toast.makeText(context, "음성 인식을 위해 마이크 권한이 필요합니다", Toast.LENGTH_SHORT).show()
         }
     }
 
-    // Fixed layout structure with appropriate behavior
+    // UI 구성 부분
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier.fillMaxSize(),
@@ -3519,23 +3526,20 @@ fun ChatScreen(
                     if (showBackButton) {
                         IconButton(
                             onClick = { navController.navigateUp() },
-                            modifier = Modifier.size(56.dp) // 버튼 크기 증가
+                            modifier = Modifier.size(56.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.ArrowBack,
                                 contentDescription = "Back",
-                                modifier = Modifier.size(32.dp) // 아이콘 크기 증가
+                                modifier = Modifier.size(32.dp)
                             )
                         }
                     }
                 },
                 actions = {
-                    // Add a button to navigate to the main home screen
                     if (!showBackButton) {
                         IconButton(onClick = {
-                            // Navigate to home with section=home parameter
                             navController.navigate("home?section=home") {
-                                // Pop up to the start destination to avoid building up a large stack
                                 popUpTo(navController.graph.startDestinationId) {
                                     inclusive = true
                                 }
@@ -3544,7 +3548,7 @@ fun ChatScreen(
                             Icon(
                                 imageVector = Icons.Default.Home,
                                 contentDescription = "Home",
-                                modifier = Modifier.size(50.dp) // 아이콘 크기 증가
+                                modifier = Modifier.size(50.dp)
                             )
                         }
                     }
@@ -3559,7 +3563,7 @@ fun ChatScreen(
 
             Divider()
 
-            // Messages list - this stays fixed in position
+            // Messages list
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -3574,18 +3578,14 @@ fun ChatScreen(
                 ) {
                     itemsIndexed(messages) { index, message ->
                         MessageItem(message = message)
-
-                        // Add spacing between messages
                         Spacer(modifier = Modifier.height(8.dp))
                     }
 
-                    // Add extra space at the end
                     item {
                         Spacer(modifier = Modifier.height(40.dp))
                     }
                 }
             }
-
             // Navigation controls for search results (when multiple results exist)
             if (showNavigation) {
                 Surface(
@@ -3906,13 +3906,12 @@ fun ChatScreen(
                 }
             }
 
-            // Message input area with fixed position
+            // Message input area
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 color = MaterialTheme.colorScheme.surface,
                 shadowElevation = 4.dp
             ) {
-                // Set a minimum height for the input area
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -3924,7 +3923,7 @@ fun ChatScreen(
                             .padding(horizontal = 16.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Microphone button with visual feedback for active state
+                        // Microphone button
                         IconButton(
                             onClick = {
                                 if (speechRecognizer == null) {
@@ -3933,21 +3932,17 @@ fun ChatScreen(
                                 }
 
                                 if (isListening) {
-                                    // Stop listening if already active
                                     speechRecognizer.stopListening()
                                     isListening = false
                                 } else {
-                                    // Start listening if not active
                                     if (ContextCompat.checkSelfPermission(
                                             context,
                                             Manifest.permission.RECORD_AUDIO
                                         ) == PackageManager.PERMISSION_GRANTED
                                     ) {
-                                        // Permission already granted, start listening
                                         speechRecognizer.startListening(speechRecognizerIntent)
                                         isListening = true
                                     } else {
-                                        // Request permission
                                         launcher.launch(Manifest.permission.RECORD_AUDIO)
                                     }
                                 }
@@ -3957,7 +3952,7 @@ fun ChatScreen(
                                     color = if (isListening) Color(0xFFFF5722) else Color(0xFFF0F0F0),
                                     shape = CircleShape
                                 )
-                                .size(48.dp) // Slightly larger for better visibility
+                                .size(48.dp)
                         ) {
                             Icon(
                                 imageVector = if (isListening) Icons.Default.Mic else Icons.Default.KeyboardVoice,
@@ -3969,7 +3964,7 @@ fun ChatScreen(
 
                         Spacer(modifier = Modifier.width(8.dp))
 
-                        // Text field with improved placeholder and real-time transcription
+                        // Text field
                         OutlinedTextField(
                             value = messageText,
                             onValueChange = { messageText = it },
@@ -3991,7 +3986,6 @@ fun ChatScreen(
                             keyboardActions = KeyboardActions(
                                 onSend = {
                                     if (messageText.isNotEmpty()) {
-                                        // Hide keyboard when sending message
                                         focusManager.clearFocus()
 
                                         sendMessage(
@@ -4000,8 +3994,10 @@ fun ChatScreen(
                                             sessionId,
                                             messages,
                                             { newMessages -> messages = newMessages },
-                                            userCity,      // 추가
-                                            userDistrict   // 추가
+                                            userCity,
+                                            userDistrict,
+                                            context,
+                                            locationPermissionLauncher
                                         )
                                         messageText = ""
                                     }
@@ -4009,7 +4005,6 @@ fun ChatScreen(
                             ),
                             maxLines = 3,
                             singleLine = false,
-                            // Change border color when listening
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = if (isListening) Color(0xFFFF5722) else MaterialTheme.colorScheme.primary,
                                 unfocusedBorderColor = if (isListening) Color(0xFFFF5722).copy(alpha = 0.5f) else MaterialTheme.colorScheme.outline
@@ -4018,17 +4013,15 @@ fun ChatScreen(
 
                         Spacer(modifier = Modifier.width(8.dp))
 
-                        // Send button - enabled only when there's text to send
+                        // Send button
                         IconButton(
                             onClick = {
                                 if (messageText.isNotEmpty()) {
-                                    // Stop listening if active before sending
                                     if (isListening) {
                                         speechRecognizer?.stopListening()
                                         isListening = false
                                     }
 
-                                    // Hide keyboard when sending message
                                     focusManager.clearFocus()
 
                                     sendMessage(
@@ -4037,8 +4030,10 @@ fun ChatScreen(
                                         sessionId,
                                         messages,
                                         { newMessages -> messages = newMessages },
-                                        userCity,      // 추가
-                                        userDistrict   // 추가
+                                        userCity,
+                                        userDistrict,
+                                        context,
+                                        locationPermissionLauncher
                                     )
                                     messageText = ""
                                 }
@@ -4048,7 +4043,7 @@ fun ChatScreen(
                                     color = if (messageText.isNotEmpty()) Color(0xFFc6f584) else Color(0xFFE0E0E0),
                                     shape = CircleShape
                                 )
-                                .size(48.dp) // Match size with mic button
+                                .size(48.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Send,
@@ -4062,18 +4057,95 @@ fun ChatScreen(
             }
         }
     }
+
+    // 위치 권한 거부 다이얼로그 제거 (더 이상 필요없음)
 }
 
-// Helper function to send a message
+// sendMessage 함수 수정 - 위치 권한 확인 추가
 private fun sendMessage(
     messageText: String,
     activity: MainActivity,
     sessionId: String,
     currentMessages: List<ChatMessage>,
     updateMessages: (List<ChatMessage>) -> Unit,
-    userCity: String = "",      // 추가
-    userDistrict: String = ""   // 추가
+    userCity: String = "",
+    userDistrict: String = "",
+    context: Context,
+    locationPermissionLauncher: ManagedActivityResultLauncher<Array<String>, Map<String, Boolean>>
 ) {
+    // 위치 권한 확인
+    val fineLocationPermission = ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.ACCESS_FINE_LOCATION
+    ) == PackageManager.PERMISSION_GRANTED
+
+    val coarseLocationPermission = ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.ACCESS_COARSE_LOCATION
+    ) == PackageManager.PERMISSION_GRANTED
+
+    val hasLocationPermission = fineLocationPermission || coarseLocationPermission
+
+    // 위치 권한이 없거나 위치 정보가 없는 경우
+    if (!hasLocationPermission || userCity == "위치 권한 없음" || userDistrict == "위치 권한 없음") {
+        // 권한이 영구적으로 거부되었는지 확인
+        val shouldShowRationale = ActivityCompat.shouldShowRequestPermissionRationale(
+            activity,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) || ActivityCompat.shouldShowRequestPermissionRationale(
+            activity,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        )
+
+        // 권한을 요청한 적이 있고, rationale을 보여줄 필요가 없다면 = "다시 묻지 않음" 상태
+        val isPermissionPermanentlyDenied = !hasLocationPermission && !shouldShowRationale &&
+                activity.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+                    .getBoolean("location_permission_requested", false)
+
+        if (isPermissionPermanentlyDenied) {
+            // "다시 묻지 않음" 상태인 경우 설정으로 안내하는 다이얼로그 표시
+            androidx.appcompat.app.AlertDialog.Builder(context)
+                .setTitle("위치 권한 필요")
+                .setMessage("사용자의 지역에 맞는 정보를 제공하기 위해 위치 권한이 필요합니다.\n\n설정에서 권한 > 위치권한 허용을 해주세요.")
+                .setPositiveButton("설정으로 이동") { _, _ ->
+                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        data = Uri.fromParts("package", context.packageName, null)
+                    }
+                    context.startActivity(intent)
+                }
+                .setNegativeButton("취소", null)
+                .show()
+        } else {
+            // 권한 요청을 한 적이 있다고 표시
+            activity.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean("location_permission_requested", true)
+                .apply()
+
+            // 권한 요청 다이얼로그 표시
+            locationPermissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+            )
+        }
+        // 메시지 전송 차단
+        return
+    }
+
+    // 위치 정보가 아직 로드되지 않은 경우
+    if (userCity.isEmpty() || userDistrict.isEmpty() || userCity == "위치 확인 중...") {
+        Toast.makeText(
+            context,
+            "위치 정보를 확인 중입니다. 잠시 후 다시 시도해주세요.",
+            Toast.LENGTH_SHORT
+        ).show()
+        // 메시지 전송 차단
+        return
+    }
+
+    // 위치 권한이 있고 위치 정보가 있는 경우에만 메시지 전송
     // Create user message
     val userMessage = ChatMessage(
         text = messageText,
@@ -4093,6 +4165,7 @@ private fun sendMessage(
     // Then send the message to the backend
     activity.onMessageSent(messageText, sessionId)
 }
+
 @Composable
 fun MessageItem(message: ChatMessage) {
     Box(
@@ -4142,6 +4215,7 @@ fun MessageItem(message: ChatMessage) {
         }
     }
 }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MessageInputBar(
@@ -4215,6 +4289,7 @@ fun MessageInputBar(
         }
     }
 }
+
 // Update ChatMessage class to include an isWaiting flag
 data class ChatMessage(
     val text: String,

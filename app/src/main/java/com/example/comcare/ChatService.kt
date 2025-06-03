@@ -27,7 +27,7 @@ class ChatService(private val context: Context) {
     private val sharedPrefs: SharedPreferences = context.getSharedPreferences("ChatPrefs", Context.MODE_PRIVATE)
     private val REQUEST_COUNT_KEY = "request_count"
     private val LAST_REQUEST_DATE_KEY = "last_request_date"
-    private val MAX_REQUESTS_PER_DAY = 10
+    private val MAX_REQUESTS_PER_DAY = 30
 
     // 현재 검색 결과들을 저장하는 변수
     private var currentResults: JSONArray? = null
