@@ -187,7 +187,7 @@ class MainActivity : ComponentActivity() {
                     // 위치 권한 거부 시 토스트 메시지 표시
                     Toast.makeText(
                         this@MainActivity,
-                        "사용자의 지역에 맞는 정보를 제공하기 위해 위치 권한이 필요합니다.",
+                        "오비서 앱은 사용자님의 지역에 맞는 정보를 제공하기 위해 위치 권한이 필요합니다.",
                         Toast.LENGTH_LONG
                     ).show()
                 }
@@ -3353,7 +3353,7 @@ fun ChatScreen(
             // 권한이 거부된 경우 토스트 메시지 표시
             Toast.makeText(
                 context,
-                "사용자의 지역에 맞는 정보를 제공하기 위해 위치 권한이 필요합니다.",
+                "오비서 앱은 사용자님의 지역에 맞는 정보를 제공하기 위해 위치 권한이 필요합니다.",
                 Toast.LENGTH_LONG
             ).show()
         }
@@ -4106,7 +4106,7 @@ private fun sendMessage(
             // "다시 묻지 않음" 상태인 경우 설정으로 안내하는 다이얼로그 표시
             androidx.appcompat.app.AlertDialog.Builder(context)
                 .setTitle("위치 권한 필요")
-                .setMessage("사용자의 지역에 맞는 정보를 제공하기 위해 위치 권한이 필요합니다.\n\n설정에서 권한 > 위치권한 허용을 해주세요.")
+                .setMessage("오비서 앱은 사용자님의 지역에 맞는 정보를 제공하기 위해 위치 권한이 필요합니다.\n\n설정에서 위치 권한을 허용해주세요.")
                 .setPositiveButton("설정으로 이동") { _, _ ->
                     val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                         data = Uri.fromParts("package", context.packageName, null)
@@ -4168,6 +4168,8 @@ private fun sendMessage(
 
 @Composable
 fun MessageItem(message: ChatMessage) {
+    val context = LocalContext.current
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -4203,14 +4205,89 @@ fun MessageItem(message: ChatMessage) {
                     )
                 }
             } else {
-                // Show message text
-                Text(
-                    text = message.text,
-                    modifier = Modifier.padding(12.dp),
-                    color = Color.Black,
-                    fontSize = 24.sp, // 직접 폰트 크기 지정
-                    lineHeight = 29.sp // 줄 간격 추가
-                )
+                // Tel: 필드를 포함한 메시지인지 확인
+                val telPattern = """📞 전화:\s*([0-9\-\.]+)""".toRegex()
+                val telMatch = telPattern.find(message.text)
+
+                if (!message.isFromUser && telMatch != null) {
+                    // 전화번호가 포함된 메시지 처리
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        val phoneNumber = telMatch.groupValues[1]
+                        val beforePhone = message.text.substring(0, telMatch.range.first)
+                        val afterPhone = message.text.substring(telMatch.range.last + 1)
+
+                        // 전화번호 이전 텍스트 표시
+                        if (beforePhone.isNotEmpty()) {
+                            Text(
+                                text = beforePhone,
+                                color = Color.Black,
+                                fontSize = 24.sp,
+                                lineHeight = 29.sp
+                            )
+                        }
+
+                        // 전화번호 표시 (클릭 가능)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "📞 전화: ",
+                                color = Color.Black,
+                                fontSize = 24.sp,
+                                lineHeight = 29.sp
+                            )
+                            Text(
+                                text = phoneNumber,
+                                color = Color.Blue,
+                                fontSize = 24.sp,
+                                lineHeight = 29.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.clickable {
+                                    // 전화번호에서 특수문자 제거
+                                    val cleanNumber = phoneNumber.replace("[^0-9]".toRegex(), "")
+
+                                    // 전화 걸기 권한 확인
+                                    if (ContextCompat.checkSelfPermission(
+                                            context,
+                                            Manifest.permission.CALL_PHONE
+                                        ) == PackageManager.PERMISSION_GRANTED
+                                    ) {
+                                        // 직접 전화 걸기
+                                        val intent = Intent(Intent.ACTION_CALL).apply {
+                                            data = Uri.parse("tel:$cleanNumber")
+                                        }
+                                        context.startActivity(intent)
+                                    } else {
+                                        // 권한이 없으면 다이얼러 열기
+                                        val intent = Intent(Intent.ACTION_DIAL).apply {
+                                            data = Uri.parse("tel:$cleanNumber")
+                                        }
+                                        context.startActivity(intent)
+                                    }
+                                }
+                            )
+                        }
+
+                        // 전화번호 이후 텍스트 표시
+                        if (afterPhone.isNotEmpty()) {
+                            Text(
+                                text = afterPhone,
+                                color = Color.Black,
+                                fontSize = 24.sp,
+                                lineHeight = 29.sp
+                            )
+                        }
+                    }
+                } else {
+                    // 일반 메시지 또는 사용자 메시지
+                    Text(
+                        text = message.text,
+                        modifier = Modifier.padding(12.dp),
+                        color = Color.Black,
+                        fontSize = 24.sp,
+                        lineHeight = 29.sp
+                    )
+                }
             }
         }
     }
