@@ -3510,7 +3510,6 @@ fun ChatScreen(
                 }
             }
         }
-
         // 탐색 모드 전용 콜백
         activity.chatService.exploreResponseCallback = { aiResponse ->
             Log.d("ChatScreen", "Received explore response: $aiResponse")
