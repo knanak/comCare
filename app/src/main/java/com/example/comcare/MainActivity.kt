@@ -3439,8 +3439,36 @@ fun ChatScreen(
         activity.chatService.responseCallback = { aiResponse ->
             Log.d("ChatScreen", "Received response: $aiResponse")
 
-            // 검색 결과인지 확인 (📋로 시작하는 메시지)
-            val isSearchResult = aiResponse.startsWith("📋")
+            // 검색 결과인지 확인
+            var isSearchResult = false
+            var processedResponse = aiResponse
+
+            // JSON 응답인지 확인하고 results 배열의 content를 확인
+            try {
+                val jsonResponse = org.json.JSONObject(aiResponse)
+                if (jsonResponse.has("results")) {
+                    val results = jsonResponse.getJSONArray("results")
+                    if (results.length() > 0) {
+                        // 모든 결과의 content를 확인
+                        for (i in 0 until results.length()) {
+                            val result = results.getJSONObject(i)
+                            if (result.has("content")) {
+                                val content = result.getString("content")
+                                // content가 존재하면 검색 결과로 판단
+                                if (content.isNotEmpty()) {
+                                    isSearchResult = true
+                                    // 첫 번째 content를 기준으로 판단
+                                    break
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                // JSON 파싱 실패 - "📋"로 시작하는지 확인
+                isSearchResult = aiResponse.startsWith("📋")
+                Log.d("ChatScreen", "JSON parsing failed, checking for 📋: $isSearchResult")
+            }
 
             if (!isSearchResult) {
                 // 일반 응답: 새로운 메시지 추가 또는 waiting 메시지 교체
@@ -3467,13 +3495,19 @@ fun ChatScreen(
                 val lastUserMessageIndex = updatedMessages.indexOfLast { it.isFromUser }
 
                 if (lastUserMessageIndex >= 0) {
-                    // 해당 사용자 메시지 다음의 첫 번째 검색 결과 메시지 찾기
+                    // 해당 사용자 메시지 다음의 첫 번째 봇 메시지 찾기 (검색 결과 또는 waiting)
                     var targetIndex = -1
                     for (i in lastUserMessageIndex + 1 until updatedMessages.size) {
-                        if (!updatedMessages[i].isFromUser &&
-                            (updatedMessages[i].text.startsWith("📋") || updatedMessages[i].isWaiting)) {
-                            targetIndex = i
-                            break
+                        if (!updatedMessages[i].isFromUser) {
+                            // JSON 응답이거나 📋로 시작하거나 waiting 상태인 메시지 찾기
+                            val msgText = updatedMessages[i].text
+                            if (msgText.startsWith("📋") ||
+                                msgText.contains("\"results\"") ||
+                                msgText.contains("\"content\"") ||
+                                updatedMessages[i].isWaiting) {
+                                targetIndex = i
+                                break
+                            }
                         }
                     }
 
@@ -3510,6 +3544,7 @@ fun ChatScreen(
                 }
             }
         }
+
         // 탐색 모드 전용 콜백
         activity.chatService.exploreResponseCallback = { aiResponse ->
             Log.d("ChatScreen", "Received explore response: $aiResponse")

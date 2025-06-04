@@ -375,6 +375,7 @@ class ChatService(private val context: Context) {
     }
 
     // 응답 텍스트를 사용자가 보기 편하게 포맷팅하는 함수
+
     private fun formatResponse(content: String): String {
         var formatted = content
 
@@ -386,12 +387,36 @@ class ChatService(private val context: Context) {
         val idPattern = Regex("id:\\s*\\d+\\s*[\n\r]*", RegexOption.IGNORE_CASE)
         formatted = formatted.replace(idPattern, "")
 
+        // "Id: XXX" 부분도 제거 (대문자 I)
+        val idPatternCapital = Regex("Id:\\s*\\d+\\s*[\n\r]*", RegexOption.IGNORE_CASE)
+        formatted = formatted.replace(idPatternCapital, "")
+
         // | 를 줄바꿈으로 변경
         formatted = formatted.replace(" | ", "\n")
         formatted = formatted.replace("|", "\n")
 
         // 연속된 줄바꿈을 하나로 통합
         formatted = formatted.replace(Regex("\n+"), "\n")
+
+        // Title 정보 추출 (대소문자 구분 없이)
+        var title: String? = null
+        val titlePattern = Regex("Title:\\s*([^\\n]+)", RegexOption.IGNORE_CASE)
+        val titleMatch = titlePattern.find(formatted)
+        if (titleMatch != null) {
+            title = titleMatch.groupValues[1].trim()
+            // 원본에서 Title 라인 제거
+            formatted = formatted.replace(titleMatch.value, "")
+        }
+
+        // Category 정보 추출 후 제거
+        var category: String? = null
+        val categoryPattern = Regex("Category:\\s*([^\\n]+)", RegexOption.IGNORE_CASE)
+        val categoryMatch = categoryPattern.find(formatted)
+        if (categoryMatch != null) {
+            category = categoryMatch.groupValues[1].trim()
+            // Category 라인 전체 제거
+            formatted = formatted.replace(categoryMatch.value, "")
+        }
 
         // 시작과 끝 공백 제거
         formatted = formatted.trim()
@@ -402,50 +427,67 @@ class ChatService(private val context: Context) {
             .filter { it.isNotEmpty() }
             .joinToString("\n")
 
-        // 특정 패턴들을 더 보기 좋게 포맷팅 (Category는 제거)
+        // 특정 패턴들을 더 보기 좋게 포맷팅
         formatted = formatted
-            .replace(Regex("Category:\\s*[^\\n]*\\n?", RegexOption.IGNORE_CASE), "") // Category 라인 전체 제거
-            .replace("Title:", "📋 제목:")
-            .replace("DateOfRegistration:", "\n📅 등록일:")
-            .replace("Deadline:", "\n⏰ 마감일:")
-            .replace("JobCategory:", "\n 직종:")
-            .replace("ExperienceRequired:", "\n 경력:")
-            .replace("EmploymentType:", "\n 고용형태:")
-            .replace("Salary:", "\n💰 급여:")
-            .replace("SocialEnsurance:", "\n🛡 사회보험:")
-            .replace("RetirementBenefit:", "\n 퇴직혜택:")
-            .replace("Location:", "\n📍 주소:")
-            .replace("WorkingHours:", "\n⏰ 근무시간:")
-            .replace("WorkingType:", "\n 근무형태:")
-            .replace("CompanyName:", "\n 회사명:")
-            .replace("JobDescription:", "\n 상세설명:")
-            .replace("ApplicationMethod:", "\n📝 지원방법:")
-            .replace("ApplicationType:", "\n📋 전형방법:")
-            .replace("document:", "\n📄 제출서류:")
-            .replace("Institution:", "\n📄 기관:")
-            .replace("Address:", "\n📍 주소:")
-            .replace("Recruitment_period:", "\n⏰ 등록기간:")
-            .replace("Education_period:", "\n⏰ 교육기간:")
-            .replace("Fee:", "\n💰 비용:")
-            .replace("Quota:", "\n 정원:")
-            .replace("Service1:", "\n📍")
-            .replace("Service2:", "\n📍")
-            .replace("Rating:", "\n📝 등급:")
-            .replace("Full:", "\n 정원:")
-            .replace("Now:", "\n 가능:")
-            .replace("Wating:", "\n 대기:")
-            .replace("Bus:", "\n\uD83D\uDE8C 방문목욕차량:")
-            .replace("Tel:", "\n\uD83D\uDCDE 전화:")
+            .replace("DateOfRegistration:", "📅 등록일:")
+            .replace("Deadline:", "⏰ 마감일:")
+            .replace("JobCategory:", "💼 직종:")
+            .replace("ExperienceRequired:", "📊 경력:")
+            .replace("EmploymentType:", "📋 고용형태:")
+            .replace("Salary:", "💰 급여:")
+            .replace("SocialEnsurance:", "🛡 사회보험:")
+            .replace("RetirementBenefit:", "💼 퇴직혜택:")
+            .replace("Location:", "📍 주소:")
+            .replace("WorkingHours:", "⏰ 근무시간:")
+            .replace("WorkingType:", "💼 근무형태:")
+            .replace("CompanyName:", "🏢 회사명:")
+            .replace("JobDescription:", "📝 상세설명:")
+            .replace("ApplicationMethod:", "📝 지원방법:")
+            .replace("ApplicationType:", "📋 전형방법:")
+            .replace("document:", "📄 제출서류:")
+            .replace("Institution:", "🏛️ 기관:")
+            .replace("Address:", "📍 주소:")
+            .replace("Recruitment_period:", "📅 모집기간:")
+            .replace("Education_period:", "📚 교육기간:")
+            .replace("Fees:", "💰 수강료:")
+            .replace("Fee:", "💰 수강료:")
+            .replace("Quota:", "👥 정원:")
+            .replace("Service1:", "🏥 서비스1:")
+            .replace("Service2:", "🏥 서비스2:")
+            .replace("Rating:", "⭐ 등급:")
+            .replace("Full:", "📊 정원:")
+            .replace("Now:", "✅ 현원:")
+            .replace("Wating:", "⏳ 대기:")
+            .replace("Bus:", "🚌 방문목욕차량:")
+            .replace("Tel:", "📞 전화:")
+            .replace("Detail:", "🔗 상세정보:")
+
+        // Title을 맨 앞에 추가
+        val result = StringBuilder()
+
+        // Title이 있으면 맨 먼저 추가
+        if (!title.isNullOrEmpty()) {
+            result.append("📋 $title\n")
+//            result.append("─".repeat(20)) // 구분선
+            result.append("\n")
+        }
+
+        // Category가 있으면 추가 (선택사항)
+        if (!category.isNullOrEmpty() && category != "N/A") {
+            result.append("📍 지역: $category\n\n")
+        }
+
+        // 나머지 내용 추가
+        result.append(formatted)
 
         // 중복된 줄바꿈 다시 한 번 정리
-        formatted = formatted.replace(Regex("\n{2,}"), "\n\n")
+        var finalResult = result.toString().replace(Regex("\n{3,}"), "\n\n")
 
         // 최종적으로 시작 부분의 공백이나 줄바꿈 제거
-        formatted = formatted.trim()
+        finalResult = finalResult.trim()
 
-        return formatted
+        return finalResult
     }
-
     private var isNavigatingResults = false
 
     fun isNavigating(): Boolean = isNavigatingResults
