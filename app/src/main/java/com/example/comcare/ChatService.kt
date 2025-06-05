@@ -20,8 +20,8 @@ import java.util.Date
 class ChatService(private val context: Context) {
     private val TAG = "ChatService"
 
-//    private val url = "http://192.168.219.102:5000/query"
-    private val url = "https://coral-app-fjt8m.ondigitalocean.app/query"
+    private val url = "http://192.168.219.102:5000/query"
+//    private val url = "https://coral-app-fjt8m.ondigitalocean.app/query"
 
     // SharedPreferences for storing count and date
     private val sharedPrefs: SharedPreferences = context.getSharedPreferences("ChatPrefs", Context.MODE_PRIVATE)
@@ -36,6 +36,11 @@ class ChatService(private val context: Context) {
     // 탐색 결과를 위한 별도 저장 변수 - ChatMessage 타입으로 변경
     private var exploreResults: List<ChatMessage> = emptyList()
     private var isExploreMode = false
+
+    // SearchHistory 저장을 위한 임시 변수 추가
+    var lastSearchCategory: String? = null
+    var lastSearchAnswer: String? = null
+    var lastQueryContent: String? = null  // 마지막 질문 저장용 추가
 
     // 탐색 모드 상태 확인 및 설정
     fun setExploreMode(enabled: Boolean) {
@@ -142,6 +147,9 @@ class ChatService(private val context: Context) {
             return
         }
 
+        // 현재 질문을 저장
+        lastQueryContent = message
+
         Log.d(TAG, "==== STARTING NEW CHAT REQUEST ====")
         Log.d(TAG, "Request to URL: $url")
         Log.d(TAG, "message: $message")
@@ -196,6 +204,7 @@ class ChatService(private val context: Context) {
                 }
             }
 
+
             override fun onResponse(call: Call, response: Response) {
                 try {
                     Log.d(TAG, "==== RECEIVED RESPONSE ====")
@@ -234,14 +243,32 @@ class ChatService(private val context: Context) {
                         return
                     }
 
+                    // 응답 파싱 및 SearchHistory용 데이터 추출
+                    var categoryForHistory: String? = null
+                    var answerForHistory: String? = null
+
                     // Pinecone 응답 처리 로직
                     try {
                         val jsonResponse = JSONObject(responseBody)
+
+                        // namespace 추출 (category용)
+                        categoryForHistory = jsonResponse.optString("namespace", null)
 
                         if (jsonResponse.has("results")) {
                             val results = jsonResponse.getJSONArray("results")
 
                             if (results.length() > 0) {
+                                // 첫 번째 결과의 content에서 answer 추출
+                                val firstResult = results.getJSONObject(0)
+                                val content = firstResult.optString("content", "")
+
+                                // content의 앞 100자만 추출
+                                answerForHistory = if (content.length > 100) {
+                                    content.substring(0, 100)
+                                } else {
+                                    content
+                                }
+
                                 // 검색 결과 저장
                                 currentResults = results
                                 currentIndex = 0
@@ -273,6 +300,11 @@ class ChatService(private val context: Context) {
                             }
                         }
 
+                        // SearchHistory에 저장할 데이터를 ChatService에 저장
+                        // MainActivity에서 접근할 수 있도록 함
+                        lastSearchCategory = categoryForHistory
+                        lastSearchAnswer = answerForHistory
+
                     } catch (e: JSONException) {
                         Log.e(TAG, "Error parsing JSON", e)
                         Handler(Looper.getMainLooper()).post {
@@ -291,6 +323,7 @@ class ChatService(private val context: Context) {
                     response.close()
                 }
             }
+
         })
     }
 

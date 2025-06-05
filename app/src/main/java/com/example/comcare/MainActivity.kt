@@ -3778,7 +3778,9 @@ fun ChatScreen(
         }
     }
 
-    // Add a system welcome message on first composition
+    val listState = rememberLazyListState()
+
+    // Set up the callback to receive responses from n8n
     LaunchedEffect(Unit) {
         if (messages.isEmpty()) {
             messages = listOf(
@@ -3819,35 +3821,78 @@ fun ChatScreen(
             }
             override fun onEvent(eventType: Int, params: Bundle?) {}
         })
-    }
 
-    // Clean up the speech recognizer when leaving the screen
-    DisposableEffect(Unit) {
-        onDispose {
-            speechRecognizer?.destroy()
-        }
-    }
-
-    // Use a key for LazyListState to force recreation when needed
-    val listState = rememberLazyListState()
-
-    // Scroll to bottom when messages change
-    LaunchedEffect(messages.size) {
-        if (messages.size > 1) {
-            try {
-                delay(100)
-                listState.scrollToItem(index = messages.size - 1)
-            } catch (e: Exception) {
-                Log.e("ChatScreen", "Scroll error: ${e.message}")
-            }
-        }
-    }
-
-// Set up the callback to receive responses from n8n
-    LaunchedEffect(Unit) {
         // 일반 응답 콜백 - 통합 처리
         activity.chatService.responseCallback = { aiResponse ->
             Log.d("ChatScreen", "Received response: $aiResponse")
+
+            // "AI가 검색중..." 메시지가 아닌 경우에만 SearchHistory 저장
+            if (aiResponse != "AI가 검색중...") {
+                // SearchHistory 저장을 위한 코루틴
+                val supabaseHelper = SupabaseDatabaseHelper(context)
+                val queryContent = activity.chatService.lastQueryContent ?: ""
+
+                kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                    try {
+                        // 현재 사용자의 kakaoId 가져오기
+                        val kakaoId = activity.currentUserId
+
+                        // Supabase에서 사용자 정보 조회
+                        val user = supabaseHelper.getUserByKakaoId(kakaoId)
+
+                        if (user != null && queryContent.isNotEmpty()) {
+                            // ChatService에서 저장한 category와 answer 가져오기
+                            val category = activity.chatService.lastSearchCategory ?: "일반"
+                            var answer = activity.chatService.lastSearchAnswer
+
+                            // answer가 null이거나 비어있으면 aiResponse에서 추출
+                            if (answer.isNullOrEmpty()) {
+                                // aiResponse에서 실제 내용 추출 (포맷팅 제거)
+                                val cleanedResponse = aiResponse
+                                    .replace(Regex("[\uD83C-\uDBFF\uDC00-\uDFFF]+"), "") // 모든 이모지 제거
+                                    .trim()
+
+                                answer = if (cleanedResponse.length > 100) {
+                                    cleanedResponse.substring(0, 100)
+                                } else {
+                                    cleanedResponse
+                                }
+                            }
+
+                            // 검색 기록 저장
+                            val searchHistory = supabaseHelper.saveSearchHistory(
+                                userId = user.id!!,
+                                queryCategory = "Chat",
+                                queryContent = queryContent,
+                                category = category,
+                                answer = answer
+                            )
+
+                            if (searchHistory != null) {
+                                Log.d("ChatScreen", "검색 기록 저장 성공: ${searchHistory.id}")
+                                Log.d("ChatScreen", "Query: $queryContent")
+                                Log.d("ChatScreen", "Category: $category, Answer: $answer")
+                            } else {
+                                Log.e("ChatScreen", "검색 기록 저장 실패")
+                            }
+
+                            // 저장 후 임시 데이터 초기화
+                            activity.chatService.lastSearchCategory = null
+                            activity.chatService.lastSearchAnswer = null
+                            activity.chatService.lastQueryContent = null
+                        } else {
+                            if (user == null) {
+                                Log.e("ChatScreen", "사용자 정보를 찾을 수 없음: kakaoId = $kakaoId")
+                            }
+                            if (queryContent.isEmpty()) {
+                                Log.e("ChatScreen", "질문 내용이 비어있음")
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e("ChatScreen", "검색 기록 저장 중 오류: ${e.message}", e)
+                    }
+                }
+            }
 
             // 검색 결과인지 확인
             var isSearchResult = false
@@ -4207,8 +4252,8 @@ fun ChatScreen(
                                             // 요청 전에 카운트 증가
                                             RequestCounterHelper.incrementRequestCount()
 
-//                                            val url = URL("http://192.168.219.102:5000/explore")
-                                            val url = URL("https://coral-app-fjt8m.ondigitalocean.app/explore")
+                                            val url = URL("http://192.168.219.102:5000/explore")
+//                                            val url = URL("https://coral-app-fjt8m.ondigitalocean.app/explore")
                                             val connection = url.openConnection() as HttpURLConnection
                                             connection.requestMethod = "POST"
                                             connection.setRequestProperty("Content-Type", "application/json")
@@ -4554,13 +4599,7 @@ fun ChatScreen(
             }
         }
     }
-
-    // 위치 권한 거부 다이얼로그 제거 (더 이상 필요없음)
 }
-
-// ChatScreen의 sendMessage 함수 수정
-
-// ChatScreen의 sendMessage 함수 수정
 
 private fun sendMessage(
     messageText: String,
@@ -4645,7 +4684,6 @@ private fun sendMessage(
         return
     }
 
-    // 위치 권한이 있고 위치 정보가 있는 경우에만 메시지 전송
     // Create user message
     val userMessage = ChatMessage(
         text = messageText,
@@ -4665,38 +4703,12 @@ private fun sendMessage(
     // Supabase에 검색 기록 저장
     val supabaseHelper = SupabaseDatabaseHelper(context)
 
-    // 별도의 코루틴에서 검색 기록 저장
-    kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-        try {
-            // 현재 사용자의 kakaoId 가져오기
-            val kakaoId = activity.currentUserId
-
-            // Supabase에서 사용자 정보 조회
-            val user = supabaseHelper.getUserByKakaoId(kakaoId)
-
-            if (user != null) {
-                // 검색 기록 저장
-                val searchHistory = supabaseHelper.saveSearchHistory(
-                    userId = user.id!!,
-                    queryCategory = "Chat",  // ChatScreen에서는 항상 "Chat"
-                    queryContent = messageText
-                )
-
-                if (searchHistory != null) {
-                    Log.d("ChatScreen", "검색 기록 저장 성공: ${searchHistory.id}")
-                } else {
-                    Log.e("ChatScreen", "검색 기록 저장 실패")
-                }
-            } else {
-                Log.e("ChatScreen", "사용자 정보를 찾을 수 없음: kakaoId = $kakaoId")
-            }
-        } catch (e: Exception) {
-            Log.e("ChatScreen", "검색 기록 저장 중 오류: ${e.message}", e)
-        }
-    }
+    // 메시지 텍스트를 임시 저장
+    val queryText = messageText
 
     // Then send the message to the backend
     activity.onMessageSent(messageText, sessionId)
+
 }
 
 @Composable

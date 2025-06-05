@@ -69,6 +69,8 @@ class SupabaseDatabaseHelper(private val context: Context) {
         val user_id: String,
         val query_category: String,
         val query_content: String,
+        val category: String,
+        val answer: String,
         val created_at: String? = null
     )
 
@@ -216,16 +218,21 @@ class SupabaseDatabaseHelper(private val context: Context) {
     suspend fun saveSearchHistory(
         userId: String,
         queryCategory: String,
-        queryContent: String
+        queryContent: String,
+        category: String = "일반",      // 기본값 추가
+        answer: String = ""              // 기본값 추가
     ): SearchHistory? {
         return try {
             withContext(Dispatchers.IO) {
                 Log.d(TAG, "Saving search history for user: $userId")
+                Log.d(TAG, "Category: $category, Answer preview: $answer")
 
                 val searchData = buildJsonObject {
                     put("user_id", JsonPrimitive(userId))
                     put("query_category", JsonPrimitive(queryCategory))
                     put("query_content", JsonPrimitive(queryContent))
+                    put("category", JsonPrimitive(category))
+                    put("answer", JsonPrimitive(answer))
                 }
 
                 val response = supabase.postgrest["search_history"]
