@@ -410,6 +410,7 @@ class ChatService(private val context: Context) {
     // 응답 텍스트를 사용자가 보기 편하게 포맷팅하는 함수
 
     // ChatService.kt의 formatResponse 함수 수정
+    // ChatService.kt의 formatResponse 함수 전체
     private fun formatResponse(content: String): String {
         var formatted = content
 
@@ -452,14 +453,22 @@ class ChatService(private val context: Context) {
             formatted = formatted.replace(categoryMatch.value, "")
         }
 
-        // Detail URL 추출 및 제거
+        // Detail URL 추출 - 대소문자 구분 없이 모든 Detail 패턴 찾기
         var detailUrl: String? = null
-        val detailPattern = Regex("Detail:\\s*([^\\n]+)", RegexOption.IGNORE_CASE)
-        val detailMatch = detailPattern.find(formatted)
-        if (detailMatch != null) {
-            detailUrl = detailMatch.groupValues[1].trim()
-            // Detail 라인 전체 제거
-            formatted = formatted.replace(detailMatch.value, "")
+        val detailPatterns = listOf(
+            Regex("Detail:\\s*([^\\n]+)", RegexOption.IGNORE_CASE),
+            Regex("detail:\\s*([^\\n]+)", RegexOption.IGNORE_CASE),
+            Regex("🔗 상세정보:\\s*([^\\n]+)", RegexOption.IGNORE_CASE)
+        )
+
+        for (pattern in detailPatterns) {
+            val match = pattern.find(formatted)
+            if (match != null) {
+                detailUrl = match.groupValues[1].trim()
+                // Detail 라인 제거
+                formatted = formatted.replace(match.value, "")
+                break
+            }
         }
 
         // 시작과 끝 공백 제거
@@ -508,7 +517,6 @@ class ChatService(private val context: Context) {
             .replace("Date:", "📅 교육일시:")
             .replace("State:", "📋 상태:")
             .replace("Registration:", "📝 등록방법:")
-            .replace("Date:", "⏰ 날짜:")
 
         // Title을 맨 앞에 추가
         val result = StringBuilder()
@@ -537,6 +545,8 @@ class ChatService(private val context: Context) {
         if (!detailUrl.isNullOrEmpty()) {
             finalResult += "\n\n[DETAIL_URL]$detailUrl[/DETAIL_URL]"
         }
+
+        Log.d("ChatService", "formatResponse - Detail URL found: $detailUrl")
 
         return finalResult
     }
