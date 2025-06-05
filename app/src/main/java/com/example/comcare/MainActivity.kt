@@ -8,10 +8,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -103,10 +99,15 @@ import androidx.navigation.navArgument
 
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.foundation.lazy.*
 import androidx.compose.ui.viewinterop.AndroidView
+
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.CoroutineScope
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.focus.onFocusChanged
+import kotlinx.coroutines.flow.collect
 
 
 
@@ -3801,6 +3802,7 @@ fun ChatScreen(
     }
 
     val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
 
     // BackHandler 추가 - 뒤로 가기 버튼 동작 제어
     BackHandler(enabled = true) {
@@ -4074,6 +4076,54 @@ fun ChatScreen(
             currentPage = current
             totalPages = total
             showNavigation = total > 1
+        }
+    }
+
+// 메시지가 변경될 때 스크롤
+    LaunchedEffect(messages.size) {
+        if (messages.isNotEmpty()) {
+            delay(100)
+            try {
+                listState.animateScrollToItem(
+                    index = messages.size - 1,
+                    scrollOffset = 0
+                )
+            } catch (e: Exception) {
+                Log.e("ChatScreen", "Scroll error: ${e.message}")
+            }
+        }
+    }
+
+// AI 응답이 도착했을 때 스크롤
+    LaunchedEffect(messages) {
+        if (messages.isNotEmpty()) {
+            val lastMessage = messages.last()
+            // AI 응답이고 waiting 상태가 아닐 때
+            if (!lastMessage.isFromUser && !lastMessage.isWaiting) {
+                delay(150)
+                try {
+                    listState.animateScrollToItem(
+                        index = messages.size - 1,
+                        scrollOffset = 0
+                    )
+                } catch (e: Exception) {
+                    Log.e("ChatScreen", "Auto scroll error: ${e.message}")
+                }
+            }
+        }
+    }
+
+// TextField가 포커스를 받을 때 스크롤 (키보드 대신)
+    var isTextFieldFocused by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isTextFieldFocused) {
+        if (isTextFieldFocused && messages.isNotEmpty()) {
+            delay(300) // 키보드 애니메이션을 위한 지연
+            try {
+                listState.animateScrollToItem(messages.size - 1)
+            } catch (e: Exception) {
+                Log.e("ChatScreen", "Focus scroll error: ${e.message}")
+            }
         }
     }
 
@@ -4649,20 +4699,22 @@ fun ChatScreen(
                         Spacer(modifier = Modifier.width(8.dp))
 
                         // Text field
+// OutlinedTextField 수정
                         OutlinedTextField(
                             value = messageText,
                             onValueChange = { messageText = it },
                             modifier = Modifier
                                 .weight(1f)
-                                .heightIn(min = 48.dp),
+                                .heightIn(min = 48.dp)
+                                .onFocusChanged { focusState ->
+                                    isTextFieldFocused = focusState.isFocused
+                                },
                             placeholder = {
                                 Text(
                                     if (isListening) "듣고 있습니다..." else "메시지를 입력하세요...",
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
-                                    color = if (isListening) Color(0xFFFF5722) else MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                                        alpha = 0.7f
-                                    )
+                                    color = if (isListening) Color(0xFFFF5722) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                                 )
                             },
                             keyboardOptions = KeyboardOptions(
@@ -4683,7 +4735,9 @@ fun ChatScreen(
                                             userCity,
                                             userDistrict,
                                             context,
-                                            locationPermissionLauncher
+                                            locationPermissionLauncher,
+                                            listState,
+                                            coroutineScope
                                         )
                                         messageText = ""
                                     }
@@ -4719,7 +4773,9 @@ fun ChatScreen(
                                         userCity,
                                         userDistrict,
                                         context,
-                                        locationPermissionLauncher
+                                        locationPermissionLauncher,
+                                        listState,  // 추가
+                                        coroutineScope  // 추가
                                     )
                                     messageText = ""
                                 }
@@ -4818,7 +4874,9 @@ private fun sendMessage(
     userCity: String = "",
     userDistrict: String = "",
     context: Context,
-    locationPermissionLauncher: ManagedActivityResultLauncher<Array<String>, Map<String, Boolean>>
+    locationPermissionLauncher: ManagedActivityResultLauncher<Array<String>, Map<String, Boolean>>,
+    listState: LazyListState,  // 파라미터 추가
+    coroutineScope: CoroutineScope  // 파라미터 추가
 ) {
     // 위치 권한 확인
     val fineLocationPermission = ContextCompat.checkSelfPermission(
@@ -4908,15 +4966,21 @@ private fun sendMessage(
     // Update the messages list first
     updateMessages(currentMessages + userMessage + waitingMessage)
 
-    // Supabase에 검색 기록 저장
-    val supabaseHelper = SupabaseDatabaseHelper(context)
-
-    // 메시지 텍스트를 임시 저장
-    val queryText = messageText
+    // 메시지 추가 후 스크롤
+    coroutineScope.launch {
+        delay(100)
+        try {
+            listState.animateScrollToItem(
+                index = currentMessages.size + 1, // +2 messages (user + waiting)
+                scrollOffset = 0
+            )
+        } catch (e: Exception) {
+            Log.e("ChatScreen", "Send message scroll error: ${e.message}")
+        }
+    }
 
     // Then send the message to the backend
     activity.onMessageSent(messageText, sessionId)
-
 }
 
 @Composable
