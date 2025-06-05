@@ -90,15 +90,23 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import android.provider.Settings
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.TextButton
-import kotlinx.coroutines.Dispatchers
+import androidx.activity.compose.BackHandler
 import kotlinx.coroutines.launch
 
 import androidx.lifecycle.lifecycleScope
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
-import kotlinx.coroutines.GlobalScope
+
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
+
+
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.viewinterop.AndroidView
 
 
 
@@ -532,6 +540,17 @@ class MainActivity : ComponentActivity() {
                                     userCity = userCityState,
                                     userDistrict = userDistrictState,
                                     userInfo = currentUserInfo
+                                )
+                            }
+                            composable(
+                                "webview/{url}",
+                                arguments = listOf(navArgument("url") { type = NavType.StringType })
+                            ) { backStackEntry ->
+                                val encodedUrl = backStackEntry.arguments?.getString("url") ?: ""
+                                val decodedUrl = Uri.decode(encodedUrl)
+                                WebViewScreen(
+                                    url = decodedUrl,
+                                    navController = navController
                                 )
                             }
                         }
@@ -3771,7 +3790,10 @@ fun ChatScreen(
 
     val speechRecognizerIntent = remember {
         Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(
+                RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+            )
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ko-KR")
             putExtra(RecognizerIntent.EXTRA_PROMPT, "말씀해주세요...")
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
@@ -3779,6 +3801,20 @@ fun ChatScreen(
     }
 
     val listState = rememberLazyListState()
+
+    // BackHandler 추가 - 뒤로 가기 버튼 동작 제어
+    BackHandler(enabled = true) {
+        if (showBackButton) {
+            // 뒤로 가기 버튼이 표시되는 경우 이전 화면으로
+            navController.navigateUp()
+        } else {
+            // 뒤로 가기 버튼이 없는 경우 (메인 채팅 화면)
+            // 홈 화면으로 이동
+            navController.navigate("home") {
+                popUpTo("chat") { inclusive = true }
+            }
+        }
+    }
 
     // Set up the callback to receive responses from n8n
     LaunchedEffect(Unit) {
@@ -3803,7 +3839,8 @@ fun ChatScreen(
             }
 
             override fun onPartialResults(partialResults: Bundle?) {
-                val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                val matches =
+                    partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                 if (!matches.isNullOrEmpty()) {
                     val partialText = matches[0]
                     messageText = partialText
@@ -3819,6 +3856,7 @@ fun ChatScreen(
                 Log.e("SpeechRecognition", "Error code: $error")
                 isListening = false
             }
+
             override fun onEvent(eventType: Int, params: Bundle?) {}
         })
 
@@ -3849,7 +3887,10 @@ fun ChatScreen(
                             if (answer.isNullOrEmpty()) {
                                 // aiResponse에서 실제 내용 추출 (포맷팅 제거)
                                 val cleanedResponse = aiResponse
-                                    .replace(Regex("[\uD83C-\uDBFF\uDC00-\uDFFF]+"), "") // 모든 이모지 제거
+                                    .replace(
+                                        Regex("[\uD83C-\uDBFF\uDC00-\uDFFF]+"),
+                                        ""
+                                    ) // 모든 이모지 제거
                                     .trim()
 
                                 answer = if (cleanedResponse.length > 100) {
@@ -3936,10 +3977,12 @@ fun ChatScreen(
                         isFromUser = false
                     )
                 } else {
-                    updatedMessages.add(ChatMessage(
-                        text = aiResponse,
-                        isFromUser = false
-                    ))
+                    updatedMessages.add(
+                        ChatMessage(
+                            text = aiResponse,
+                            isFromUser = false
+                        )
+                    )
                 }
                 messages = updatedMessages
             } else {
@@ -3959,7 +4002,8 @@ fun ChatScreen(
                             if (msgText.startsWith("📋") ||
                                 msgText.contains("\"results\"") ||
                                 msgText.contains("\"content\"") ||
-                                updatedMessages[i].isWaiting) {
+                                updatedMessages[i].isWaiting
+                            ) {
                                 targetIndex = i
                                 break
                             }
@@ -4116,10 +4160,16 @@ fun ChatScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(horizontal = 16.dp),
-                    contentPadding = PaddingValues(top = 16.dp, bottom = if (showNavigation) 80.dp else 16.dp)
+                    contentPadding = PaddingValues(
+                        top = 16.dp,
+                        bottom = if (showNavigation) 80.dp else 16.dp
+                    )
                 ) {
                     itemsIndexed(messages) { index, message ->
-                        MessageItem(message = message)
+                        MessageItem(
+                            message = message,
+                            navController = navController  // navController 전달
+                        )
                         Spacer(modifier = Modifier.height(8.dp))
                     }
 
@@ -4227,7 +4277,8 @@ fun ChatScreen(
                                 onClick = {
                                     // 채팅 횟수 확인
                                     if (!RequestCounterHelper.canSendMessage()) {
-                                        Toast.makeText(activity, "오늘 채팅 갯수 도달", Toast.LENGTH_LONG).show()
+                                        Toast.makeText(activity, "오늘 채팅 갯수 도달", Toast.LENGTH_LONG)
+                                            .show()
 
                                         // 채팅 한도 도달 메시지를 채팅창에 추가
                                         val limitMessage = ChatMessage(
@@ -4254,9 +4305,13 @@ fun ChatScreen(
 
                                             val url = URL("http://192.168.219.102:5000/explore")
 //                                            val url = URL("https://coral-app-fjt8m.ondigitalocean.app/explore")
-                                            val connection = url.openConnection() as HttpURLConnection
+                                            val connection =
+                                                url.openConnection() as HttpURLConnection
                                             connection.requestMethod = "POST"
-                                            connection.setRequestProperty("Content-Type", "application/json")
+                                            connection.setRequestProperty(
+                                                "Content-Type",
+                                                "application/json"
+                                            )
                                             connection.doOutput = true
 
                                             // JSON 데이터 생성
@@ -4265,25 +4320,35 @@ fun ChatScreen(
                                                 put("userDistrict", userDistrict)
                                             }
 
-                                            Log.d("ExploreDebug", "전송할 JSON: ${jsonObject.toString()}")
+                                            Log.d(
+                                                "ExploreDebug",
+                                                "전송할 JSON: ${jsonObject.toString()}"
+                                            )
 
                                             // 데이터 전송
                                             connection.outputStream.use { os ->
-                                                val input = jsonObject.toString().toByteArray(Charsets.UTF_8)
+                                                val input = jsonObject.toString()
+                                                    .toByteArray(Charsets.UTF_8)
                                                 os.write(input, 0, input.size)
                                             }
 
                                             // 응답 받기
                                             val responseCode = connection.responseCode
                                             if (responseCode == HttpURLConnection.HTTP_OK) {
-                                                val response = connection.inputStream.bufferedReader().use { it.readText() }
+                                                val response =
+                                                    connection.inputStream.bufferedReader()
+                                                        .use { it.readText() }
                                                 Log.d("ExploreResponse", "서버 응답: $response")
 
                                                 // JSON 응답 파싱
                                                 try {
                                                     val responseJson = JSONObject(response)
-                                                    val generatedQuery = responseJson.optString("generated_query", null)
-                                                    val queryResponse = responseJson.optJSONObject("query_response")
+                                                    val generatedQuery = responseJson.optString(
+                                                        "generated_query",
+                                                        null
+                                                    )
+                                                    val queryResponse =
+                                                        responseJson.optJSONObject("query_response")
 
                                                     // UI 스레드에서 처리
                                                     activity.runOnUiThread {
@@ -4296,34 +4361,63 @@ fun ChatScreen(
                                                             messages = messages + exploreMessage
 
                                                             // 응답 처리
-                                                            val responseType = queryResponse.optString("type")
+                                                            val responseType =
+                                                                queryResponse.optString("type")
                                                             when (responseType) {
                                                                 "llm" -> {
-                                                                    val content = queryResponse.optString("content", "응답 없음")
-                                                                    val responseMessage = ChatMessage(
-                                                                        text = content,
-                                                                        isFromUser = false
-                                                                    )
-                                                                    messages = messages + responseMessage
+                                                                    val content =
+                                                                        queryResponse.optString(
+                                                                            "content",
+                                                                            "응답 없음"
+                                                                        )
+                                                                    val responseMessage =
+                                                                        ChatMessage(
+                                                                            text = content,
+                                                                            isFromUser = false
+                                                                        )
+                                                                    messages =
+                                                                        messages + responseMessage
 
                                                                     // LLM 응답은 단일 결과이므로 네비게이션 필요 없음
                                                                     showNavigation = false
                                                                 }
                                                                 "pinecone" -> {
-                                                                    val results = queryResponse.optJSONArray("results")
-                                                                    val category = queryResponse.optString("category", "")
+                                                                    val results =
+                                                                        queryResponse.optJSONArray("results")
+                                                                    val category =
+                                                                        queryResponse.optString(
+                                                                            "category",
+                                                                            ""
+                                                                        )
 
                                                                     if (results != null && results.length() > 0) {
                                                                         // 검색 결과를 개별 메시지로 저장
-                                                                        val searchResults = mutableListOf<ChatMessage>()
+                                                                        val searchResults =
+                                                                            mutableListOf<ChatMessage>()
 
                                                                         for (i in 0 until results.length()) {
-                                                                            val result = results.getJSONObject(i)
-                                                                            val title = result.optString("title", "제목 없음")
-                                                                            val content = result.optString("content", "내용 없음")
-                                                                            val resultCategory = result.optString("category", "")
+                                                                            val result =
+                                                                                results.getJSONObject(
+                                                                                    i
+                                                                                )
+                                                                            val title =
+                                                                                result.optString(
+                                                                                    "title",
+                                                                                    "제목 없음"
+                                                                                )
+                                                                            val content =
+                                                                                result.optString(
+                                                                                    "content",
+                                                                                    "내용 없음"
+                                                                                )
+                                                                            val resultCategory =
+                                                                                result.optString(
+                                                                                    "category",
+                                                                                    ""
+                                                                                )
 
-                                                                            val resultText = StringBuilder()
+                                                                            val resultText =
+                                                                                StringBuilder()
                                                                             resultText.append("📋 ${category} 검색 결과 ${i + 1}/${results.length()}\n\n")
                                                                             resultText.append("🏢 $title\n")
                                                                             if (resultCategory.isNotEmpty()) {
@@ -4331,82 +4425,125 @@ fun ChatScreen(
                                                                             }
                                                                             resultText.append("\n$content")
 
-                                                                            searchResults.add(ChatMessage(
-                                                                                text = resultText.toString(),
-                                                                                isFromUser = false
-                                                                            ))
+                                                                            searchResults.add(
+                                                                                ChatMessage(
+                                                                                    text = resultText.toString(),
+                                                                                    isFromUser = false
+                                                                                )
+                                                                            )
                                                                         }
 
                                                                         // ChatService를 통해 검색 결과 설정
-                                                                        activity.chatService.setSearchResults(searchResults)
+                                                                        activity.chatService.setSearchResults(
+                                                                            searchResults
+                                                                        )
 
                                                                         // ChatService의 콜백을 통해 결과를 표시하도록 설정
                                                                         // 탐색 모드용 콜백 설정
-                                                                        activity.chatService.exploreResponseCallback = { aiResponse ->
-                                                                            Log.d("ExploreResponse", "Received explore response: $aiResponse")
-                                                                            // 기존 메시지 리스트를 업데이트
-                                                                            val lastIndex = messages.indexOfLast {
-                                                                                it.text.startsWith("📋") && !it.isFromUser
-                                                                            }
+                                                                        activity.chatService.exploreResponseCallback =
+                                                                            { aiResponse ->
+                                                                                Log.d(
+                                                                                    "ExploreResponse",
+                                                                                    "Received explore response: $aiResponse"
+                                                                                )
+                                                                                // 기존 메시지 리스트를 업데이트
+                                                                                val lastIndex =
+                                                                                    messages.indexOfLast {
+                                                                                        it.text.startsWith(
+                                                                                            "📋"
+                                                                                        ) && !it.isFromUser
+                                                                                    }
 
-                                                                            if (lastIndex >= 0) {
-                                                                                // 기존 검색 결과를 업데이트
-                                                                                val updatedMessages = messages.toMutableList()
-                                                                                updatedMessages[lastIndex] = ChatMessage(
-                                                                                    text = aiResponse,
-                                                                                    isFromUser = false
-                                                                                )
-                                                                                messages = updatedMessages
-                                                                            } else {
-                                                                                // 새로운 검색 결과 추가
-                                                                                messages = messages + ChatMessage(
-                                                                                    text = aiResponse,
-                                                                                    isFromUser = false
-                                                                                )
+                                                                                if (lastIndex >= 0) {
+                                                                                    // 기존 검색 결과를 업데이트
+                                                                                    val updatedMessages =
+                                                                                        messages.toMutableList()
+                                                                                    updatedMessages[lastIndex] =
+                                                                                        ChatMessage(
+                                                                                            text = aiResponse,
+                                                                                            isFromUser = false
+                                                                                        )
+                                                                                    messages =
+                                                                                        updatedMessages
+                                                                                } else {
+                                                                                    // 새로운 검색 결과 추가
+                                                                                    messages =
+                                                                                        messages + ChatMessage(
+                                                                                            text = aiResponse,
+                                                                                            isFromUser = false
+                                                                                        )
+                                                                                }
                                                                             }
-                                                                        }
 
                                                                         // 첫 번째 결과를 수동으로 표시
                                                                         if (searchResults.isNotEmpty()) {
-                                                                            messages = messages + searchResults[0]
+                                                                            messages =
+                                                                                messages + searchResults[0]
 
                                                                             // 검색 결과가 여러 개인 경우 네비게이션 표시
                                                                             if (searchResults.size > 1) {
-                                                                                showNavigation = true
+                                                                                showNavigation =
+                                                                                    true
                                                                                 hasPrevious = false
                                                                                 hasNext = true
                                                                                 currentPage = 1
-                                                                                totalPages = searchResults.size
+                                                                                totalPages =
+                                                                                    searchResults.size
                                                                             } else {
-                                                                                showNavigation = false
+                                                                                showNavigation =
+                                                                                    false
                                                                             }
                                                                         }
                                                                     } else {
-                                                                        val responseMessage = ChatMessage(
-                                                                            text = "검색 결과가 없습니다.",
-                                                                            isFromUser = false
-                                                                        )
-                                                                        messages = messages + responseMessage
+                                                                        val responseMessage =
+                                                                            ChatMessage(
+                                                                                text = "검색 결과가 없습니다.",
+                                                                                isFromUser = false
+                                                                            )
+                                                                        messages =
+                                                                            messages + responseMessage
                                                                         showNavigation = false
                                                                     }
                                                                 }
                                                             }
 
-                                                            Toast.makeText(activity, "탐색이 완료되었습니다.", Toast.LENGTH_SHORT).show()
+                                                            Toast.makeText(
+                                                                activity,
+                                                                "탐색이 완료되었습니다.",
+                                                                Toast.LENGTH_SHORT
+                                                            ).show()
                                                         } else {
-                                                            Toast.makeText(activity, "탐색 결과가 없습니다.", Toast.LENGTH_SHORT).show()
+                                                            Toast.makeText(
+                                                                activity,
+                                                                "탐색 결과가 없습니다.",
+                                                                Toast.LENGTH_SHORT
+                                                            ).show()
                                                         }
                                                     }
                                                 } catch (e: Exception) {
-                                                    Log.e("ExploreError", "JSON 파싱 오류: ${e.message}")
+                                                    Log.e(
+                                                        "ExploreError",
+                                                        "JSON 파싱 오류: ${e.message}"
+                                                    )
                                                     activity.runOnUiThread {
-                                                        Toast.makeText(activity, "응답 처리 중 오류가 발생했습니다.", Toast.LENGTH_SHORT).show()
+                                                        Toast.makeText(
+                                                            activity,
+                                                            "응답 처리 중 오류가 발생했습니다.",
+                                                            Toast.LENGTH_SHORT
+                                                        ).show()
                                                     }
                                                 }
                                             } else {
-                                                Log.e("ExploreError", "HTTP error code: $responseCode")
+                                                Log.e(
+                                                    "ExploreError",
+                                                    "HTTP error code: $responseCode"
+                                                )
                                                 activity.runOnUiThread {
-                                                    Toast.makeText(activity, "탐색 중 오류가 발생했습니다.", Toast.LENGTH_SHORT).show()
+                                                    Toast.makeText(
+                                                        activity,
+                                                        "탐색 중 오류가 발생했습니다.",
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
                                                 }
                                             }
 
@@ -4414,7 +4551,11 @@ fun ChatScreen(
                                         } catch (e: Exception) {
                                             Log.e("ExploreError", "Error: ${e.message}", e)
                                             activity.runOnUiThread {
-                                                Toast.makeText(activity, "서버 연결에 실패했습니다.", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(
+                                                    activity,
+                                                    "서버 연결에 실패했습니다.",
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
                                             }
                                         }
                                     }.start()
@@ -4469,7 +4610,8 @@ fun ChatScreen(
                         IconButton(
                             onClick = {
                                 if (speechRecognizer == null) {
-                                    Toast.makeText(context, "음성 인식을 사용할 수 없습니다", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "음성 인식을 사용할 수 없습니다", Toast.LENGTH_SHORT)
+                                        .show()
                                     return@IconButton
                                 }
 
@@ -4518,7 +4660,9 @@ fun ChatScreen(
                                     if (isListening) "듣고 있습니다..." else "메시지를 입력하세요...",
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
-                                    color = if (isListening) Color(0xFFFF5722) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                    color = if (isListening) Color(0xFFFF5722) else MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                                        alpha = 0.7f
+                                    )
                                 )
                             },
                             keyboardOptions = KeyboardOptions(
@@ -4582,7 +4726,9 @@ fun ChatScreen(
                             },
                             modifier = Modifier
                                 .background(
-                                    color = if (messageText.isNotEmpty()) Color(0xFFc6f584) else Color(0xFFE0E0E0),
+                                    color = if (messageText.isNotEmpty()) Color(0xFFc6f584) else Color(
+                                        0xFFE0E0E0
+                                    ),
                                     shape = CircleShape
                                 )
                                 .size(48.dp)
@@ -4598,6 +4744,68 @@ fun ChatScreen(
                 }
             }
         }
+    }
+}
+
+
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun WebViewScreen(
+    url: String,
+    navController: NavController
+) {
+    var webView: WebView? by remember { mutableStateOf(null) }
+    var canGoBack by remember { mutableStateOf(false) }
+
+    // 뒤로 가기 처리
+    BackHandler(enabled = canGoBack) {
+        webView?.goBack()
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Top Bar
+        TopAppBar(
+            title = { Text("신청 페이지") },
+            navigationIcon = {
+                IconButton(onClick = { navController.navigateUp() }) {
+                    Icon(
+                        imageVector = Icons.Default.ArrowBack,
+                        contentDescription = "뒤로 가기"
+                    )
+                }
+            },
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = Color(0xFFc6f584),
+                titleContentColor = Color.Black,
+                navigationIconContentColor = Color.Black
+            )
+        )
+
+        // WebView
+        AndroidView(
+            factory = { context ->
+                WebView(context).apply {
+                    settings.javaScriptEnabled = true
+                    settings.domStorageEnabled = true
+                    settings.loadWithOverviewMode = true
+                    settings.useWideViewPort = true
+                    settings.builtInZoomControls = true
+                    settings.displayZoomControls = false
+
+                    webViewClient = object : WebViewClient() {
+                        override fun onPageFinished(view: WebView?, url: String?) {
+                            super.onPageFinished(view, url)
+                            canGoBack = view?.canGoBack() ?: false
+                        }
+                    }
+
+                    webView = this
+                    loadUrl(url)
+                }
+            },
+            modifier = Modifier.fillMaxSize()
+        )
     }
 }
 
@@ -4712,7 +4920,10 @@ private fun sendMessage(
 }
 
 @Composable
-fun MessageItem(message: ChatMessage) {
+fun MessageItem(
+    message: ChatMessage,
+    navController: NavController  // 파라미터 추가
+) {
     val context = LocalContext.current
 
     Box(
@@ -4922,16 +5133,9 @@ fun MessageItem(message: ChatMessage) {
 
                         Button(
                             onClick = {
-                                try {
-                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(detailUrl))
-                                    context.startActivity(intent)
-                                } catch (e: Exception) {
-                                    Toast.makeText(
-                                        context,
-                                        "웹사이트를 열 수 없습니다.",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                }
+                                // URL을 인코딩하여 네비게이션 파라미터로 전달
+                                val encodedUrl = Uri.encode(detailUrl)
+                                navController.navigate("webview/$encodedUrl")
                             },
                             modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(
@@ -4952,7 +5156,6 @@ fun MessageItem(message: ChatMessage) {
         }
     }
 }
-
 
 // Update ChatMessage class to include an isWaiting flag
 data class ChatMessage(
