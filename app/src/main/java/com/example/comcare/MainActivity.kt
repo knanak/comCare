@@ -4750,167 +4750,209 @@ fun MessageItem(message: ChatMessage) {
                     )
                 }
             } else {
-                // Tel: 필드를 포함한 메시지인지 확인
-                val telPattern = """📞 전화:\s*([0-9\-\.]+)""".toRegex()
-                val telMatch = telPattern.find(message.text)
+                // Check if message contains detail URL
+                val detailUrlPattern = """\[DETAIL_URL\](.+?)\[/DETAIL_URL\]""".toRegex()
+                val detailUrlMatch = detailUrlPattern.find(message.text)
 
-                if (!message.isFromUser && telMatch != null) {
-                    // 전화번호가 포함된 메시지 처리
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        val phoneNumber = telMatch.groupValues[1]
-                        val beforePhone = message.text.substring(0, telMatch.range.first)
-                        val afterPhone = message.text.substring(telMatch.range.last + 1)
+                Column(modifier = Modifier.padding(12.dp)) {
+                    // Detail URL이 있는 경우 제거한 텍스트 표시
+                    val displayText = if (detailUrlMatch != null) {
+                        message.text.replace(detailUrlPattern, "").trim()
+                    } else {
+                        message.text
+                    }
 
-                        // 전화번호 이전 텍스트 표시
-                        if (beforePhone.isNotEmpty()) {
+                    // 전화번호 패턴 찾기 (Tel: 뒤의 모든 전화번호 형식)
+                    val telPattern = """📞 전화:\s*(.+?)(?=\n|$)""".toRegex()
+                    val telMatches = telPattern.findAll(displayText)
+
+                    if (!message.isFromUser && telMatches.count() > 0) {
+                        // 전화번호가 포함된 메시지 처리
+                        var currentIndex = 0
+
+                        telMatches.forEach { telMatch ->
+                            val telContent = telMatch.groupValues[1].trim()
+                            val beforePhone = displayText.substring(currentIndex, telMatch.range.first)
+
+                            // 전화번호 이전 텍스트 표시
+                            if (beforePhone.isNotEmpty()) {
+                                Text(
+                                    text = beforePhone,
+                                    color = Color.Black,
+                                    fontSize = 24.sp,
+                                    lineHeight = 29.sp
+                                )
+                            }
+
+                            // Tel 내용 처리 (여러 전화번호가 있을 수 있음)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = "📞 전화: ",
+                                    color = Color.Black,
+                                    fontSize = 24.sp,
+                                    lineHeight = 29.sp
+                                )
+
+                                // 전화번호 패턴 찾기 (숫자와 하이픈, 괄호로 구성된 패턴)
+                                val phonePattern = """(\d{2,4}[).\s-]?\d{3,4}[-.\s]?\d{4})""".toRegex()
+                                val phoneMatches = phonePattern.findAll(telContent)
+
+                                if (phoneMatches.count() > 0) {
+                                    var phoneIndex = 0
+                                    phoneMatches.forEach { phoneMatch ->
+                                        val phoneNumber = phoneMatch.value
+                                        val beforePhoneText = telContent.substring(phoneIndex, phoneMatch.range.first)
+
+                                        // 전화번호 앞 텍스트
+                                        if (beforePhoneText.isNotEmpty()) {
+                                            Text(
+                                                text = beforePhoneText,
+                                                color = Color.Black,
+                                                fontSize = 24.sp,
+                                                lineHeight = 29.sp
+                                            )
+                                        }
+
+                                        // 클릭 가능한 전화번호
+                                        Text(
+                                            text = phoneNumber,
+                                            color = Color.Blue,
+                                            fontSize = 24.sp,
+                                            lineHeight = 29.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.clickable {
+                                                // 전화번호에서 특수문자 제거
+                                                val cleanNumber = phoneNumber.replace("[^0-9]".toRegex(), "")
+
+                                                // 다이얼러 열기
+                                                val intent = Intent(Intent.ACTION_DIAL).apply {
+                                                    data = Uri.parse("tel:$cleanNumber")
+                                                }
+                                                try {
+                                                    context.startActivity(intent)
+                                                } catch (e: Exception) {
+                                                    Toast.makeText(
+                                                        context,
+                                                        "전화 앱을 열 수 없습니다.",
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
+                                                }
+                                            }
+                                        )
+
+                                        phoneIndex = phoneMatch.range.last + 1
+                                    }
+
+                                    // 마지막 전화번호 뒤 텍스트
+                                    if (phoneIndex < telContent.length) {
+                                        Text(
+                                            text = telContent.substring(phoneIndex),
+                                            color = Color.Black,
+                                            fontSize = 24.sp,
+                                            lineHeight = 29.sp
+                                        )
+                                    }
+                                } else {
+                                    // 전화번호 패턴이 없으면 전체를 클릭 가능하게 만듦
+                                    Text(
+                                        text = telContent,
+                                        color = Color.Blue,
+                                        fontSize = 24.sp,
+                                        lineHeight = 29.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.clickable {
+                                            // 숫자만 추출
+                                            val cleanNumber = telContent.replace("[^0-9]".toRegex(), "")
+
+                                            if (cleanNumber.isNotEmpty()) {
+                                                val intent = Intent(Intent.ACTION_DIAL).apply {
+                                                    data = Uri.parse("tel:$cleanNumber")
+                                                }
+                                                try {
+                                                    context.startActivity(intent)
+                                                } catch (e: Exception) {
+                                                    Toast.makeText(
+                                                        context,
+                                                        "전화 앱을 열 수 없습니다.",
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
+                                                }
+                                            } else {
+                                                Toast.makeText(
+                                                    context,
+                                                    "유효한 전화번호가 없습니다.",
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+                                            }
+                                        }
+                                    )
+                                }
+                            }
+
+                            currentIndex = telMatch.range.last + 1
+                        }
+
+                        // 마지막 전화번호 이후 텍스트 표시
+                        if (currentIndex < displayText.length) {
                             Text(
-                                text = beforePhone,
+                                text = displayText.substring(currentIndex),
                                 color = Color.Black,
                                 fontSize = 24.sp,
                                 lineHeight = 29.sp
                             )
                         }
+                    } else {
+                        // 일반 메시지 또는 사용자 메시지
+                        Text(
+                            text = displayText,
+                            color = Color.Black,
+                            fontSize = 24.sp,
+                            lineHeight = 29.sp
+                        )
+                    }
 
-                        // 전화번호 표시 (클릭 가능)
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
+                    // Detail URL이 있는 경우 신청 버튼 추가
+                    if (detailUrlMatch != null && !message.isFromUser) {
+                        val detailUrl = detailUrlMatch.groupValues[1]
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Button(
+                            onClick = {
+                                try {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(detailUrl))
+                                    context.startActivity(intent)
+                                } catch (e: Exception) {
+                                    Toast.makeText(
+                                        context,
+                                        "웹사이트를 열 수 없습니다.",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFc6f584),
+                                contentColor = Color.Black
+                            ),
+                            shape = RoundedCornerShape(8.dp)
                         ) {
                             Text(
-                                text = "📞 전화: ",
-                                color = Color.Black,
-                                fontSize = 24.sp,
-                                lineHeight = 29.sp
-                            )
-                            Text(
-                                text = phoneNumber,
-                                color = Color.Blue,
-                                fontSize = 24.sp,
-                                lineHeight = 29.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.clickable {
-                                    // 전화번호에서 특수문자 제거
-                                    val cleanNumber = phoneNumber.replace("[^0-9]".toRegex(), "")
-
-                                    // 전화 걸기 권한 확인
-                                    if (ContextCompat.checkSelfPermission(
-                                            context,
-                                            Manifest.permission.CALL_PHONE
-                                        ) == PackageManager.PERMISSION_GRANTED
-                                    ) {
-                                        // 직접 전화 걸기
-                                        val intent = Intent(Intent.ACTION_CALL).apply {
-                                            data = Uri.parse("tel:$cleanNumber")
-                                        }
-                                        context.startActivity(intent)
-                                    } else {
-                                        // 권한이 없으면 다이얼러 열기
-                                        val intent = Intent(Intent.ACTION_DIAL).apply {
-                                            data = Uri.parse("tel:$cleanNumber")
-                                        }
-                                        context.startActivity(intent)
-                                    }
-                                }
-                            )
-                        }
-
-                        // 전화번호 이후 텍스트 표시
-                        if (afterPhone.isNotEmpty()) {
-                            Text(
-                                text = afterPhone,
-                                color = Color.Black,
-                                fontSize = 24.sp,
-                                lineHeight = 29.sp
+                                text = "신청하기",
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     }
-                } else {
-                    // 일반 메시지 또는 사용자 메시지
-                    Text(
-                        text = message.text,
-                        modifier = Modifier.padding(12.dp),
-                        color = Color.Black,
-                        fontSize = 24.sp,
-                        lineHeight = 29.sp
-                    )
                 }
             }
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun MessageInputBar(
-    messageText: String,
-    onMessageTextChange: (String) -> Unit,
-    isListening: Boolean,
-    onMicClicked: () -> Unit,
-    onSendClicked: () -> Unit
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface,
-        shadowElevation = 4.dp
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Microphone button for speech-to-text
-            IconButton(
-                onClick = onMicClicked,
-                modifier = Modifier
-                    .background(
-                        color = if (isListening) Color(0xFFFF5722) else Color(0xFFF0F0F0),
-                        shape = CircleShape
-                    )
-                    .size(40.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Mic,
-                    contentDescription = "Voice Input",
-                    tint = if (isListening) Color.White else Color.Black
-                )
-            }
-
-            Spacer(modifier = Modifier.width(8.dp))
-
-            OutlinedTextField(
-                value = messageText,
-                onValueChange = onMessageTextChange,
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = 48.dp),
-                placeholder = { Text("메시지를 입력하세요...") },
-                keyboardOptions = KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Send),
-                keyboardActions = KeyboardActions(
-                    onSend = { onSendClicked() }
-                ),
-                maxLines = 3
-            )
-
-            Spacer(modifier = Modifier.width(8.dp))
-
-            IconButton(
-                onClick = onSendClicked,
-                modifier = Modifier
-                    .background(
-                        color = Color(0xFFc6f584),
-                        shape = CircleShape
-                    )
-                    .size(40.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Send,
-                    contentDescription = "Send",
-                    tint = Color.Black
-                )
-            }
-        }
-    }
-}
 
 // Update ChatMessage class to include an isWaiting flag
 data class ChatMessage(

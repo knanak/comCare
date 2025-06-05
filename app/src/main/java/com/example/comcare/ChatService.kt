@@ -409,6 +409,7 @@ class ChatService(private val context: Context) {
 
     // 응답 텍스트를 사용자가 보기 편하게 포맷팅하는 함수
 
+    // ChatService.kt의 formatResponse 함수 수정
     private fun formatResponse(content: String): String {
         var formatted = content
 
@@ -451,6 +452,16 @@ class ChatService(private val context: Context) {
             formatted = formatted.replace(categoryMatch.value, "")
         }
 
+        // Detail URL 추출 및 제거
+        var detailUrl: String? = null
+        val detailPattern = Regex("Detail:\\s*([^\\n]+)", RegexOption.IGNORE_CASE)
+        val detailMatch = detailPattern.find(formatted)
+        if (detailMatch != null) {
+            detailUrl = detailMatch.groupValues[1].trim()
+            // Detail 라인 전체 제거
+            formatted = formatted.replace(detailMatch.value, "")
+        }
+
         // 시작과 끝 공백 제거
         formatted = formatted.trim()
 
@@ -458,7 +469,7 @@ class ChatService(private val context: Context) {
         formatted = formatted.split("\n")
             .map { it.trim() }
             .filter { it.isNotEmpty() }
-            .joinToString("\n")
+            .joinToString("\n\n")  // 각 항목 사이에 빈 줄 추가
 
         // 특정 패턴들을 더 보기 좋게 포맷팅
         formatted = formatted
@@ -478,6 +489,7 @@ class ChatService(private val context: Context) {
             .replace("ApplicationMethod:", "📝 지원방법:")
             .replace("ApplicationType:", "📋 전형방법:")
             .replace("document:", "📄 제출서류:")
+            .replace("Document:", "📄 제출서류:")
             .replace("Institution:", "🏛️ 기관:")
             .replace("Address:", "📍 주소:")
             .replace("Recruitment_period:", "📅 모집기간:")
@@ -493,7 +505,10 @@ class ChatService(private val context: Context) {
             .replace("Wating:", "⏳ 대기:")
             .replace("Bus:", "🚌 방문목욕차량:")
             .replace("Tel:", "📞 전화:")
-            .replace("Detail:", "🔗 상세정보:")
+            .replace("Date:", "📅 교육일시:")
+            .replace("State:", "📋 상태:")
+            .replace("Registration:", "📝 등록방법:")
+            .replace("Date:", "⏰ 날짜:")
 
         // Title을 맨 앞에 추가
         val result = StringBuilder()
@@ -501,7 +516,6 @@ class ChatService(private val context: Context) {
         // Title이 있으면 맨 먼저 추가
         if (!title.isNullOrEmpty()) {
             result.append("📋 $title\n")
-//            result.append("─".repeat(20)) // 구분선
             result.append("\n")
         }
 
@@ -519,8 +533,14 @@ class ChatService(private val context: Context) {
         // 최종적으로 시작 부분의 공백이나 줄바꿈 제거
         finalResult = finalResult.trim()
 
+        // Detail URL 정보를 특별한 마커로 저장 (나중에 버튼으로 변환하기 위해)
+        if (!detailUrl.isNullOrEmpty()) {
+            finalResult += "\n\n[DETAIL_URL]$detailUrl[/DETAIL_URL]"
+        }
+
         return finalResult
     }
+
     private var isNavigatingResults = false
 
     fun isNavigating(): Boolean = isNavigatingResults
