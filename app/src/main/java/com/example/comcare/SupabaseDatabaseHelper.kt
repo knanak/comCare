@@ -19,6 +19,9 @@ import java.util.TimeZone
 
 import io.github.jan.supabase.gotrue.GoTrue
 import io.github.jan.supabase.gotrue.gotrue
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import io.github.jan.supabase.postgrest.query.Order
 
 
 class SupabaseDatabaseHelper(private val context: Context) {
@@ -46,6 +49,266 @@ class SupabaseDatabaseHelper(private val context: Context) {
         return sdf.format(Date())
     }
 
+// SupabaseDatabaseHelper.kt에 추가할 내용
+
+    // Users 테이블 데이터 클래스
+    @Serializable
+    data class User(
+        val id: String? = null,
+        val kakao_id: String,
+        val address: String? = null,
+        val tel: String? = null,
+        val created_at: String? = null,
+        val updated_at: String? = null
+    )
+
+    // SearchHistory 테이블 데이터 클래스
+    @Serializable
+    data class SearchHistory(
+        val id: String? = null,
+        val user_id: String,
+        val query_category: String,
+        val query_content: String,
+        val created_at: String? = null
+    )
+
+    // ApplicationHistory 테이블 데이터 클래스
+    @Serializable
+    data class ApplicationHistory(
+        val id: String? = null,
+        val user_id: String,
+        val application_category: String,
+        val application_content: String,
+        val created_at: String? = null
+    )
+
+    // 사용자 정보 저장/업데이트 함수
+// SupabaseDatabaseHelper.kt의 upsertUser 함수를 다음과 같이 수정
+
+    suspend fun upsertUser(
+        kakaoId: String,
+        address: String? = null,
+        tel: String? = null
+    ): User? {
+        return try {
+            withContext(Dispatchers.IO) {
+                Log.d(TAG, "=== upsertUser 시작 ===")
+                Log.d(TAG, "kakaoId: $kakaoId")
+                Log.d(TAG, "address: $address")
+                Log.d(TAG, "tel: $tel")
+
+                // 기존 사용자 확인
+                val existingUser = supabase.postgrest["users"]
+                    .select(filter = {
+                        eq("kakao_id", kakaoId)
+                    })
+                    .decodeSingleOrNull<User>()
+
+                Log.d(TAG, "기존 사용자 존재 여부: ${existingUser != null}")
+                if (existingUser != null) {
+                    Log.d(TAG, "기존 사용자 정보: id=${existingUser.id}, kakao_id=${existingUser.kakao_id}, address=${existingUser.address}")
+                }
+
+                if (existingUser != null) {
+                    // 기존 사용자 업데이트
+                    Log.d(TAG, "기존 사용자 업데이트 시작")
+
+                    val updateData = buildJsonObject {
+                        address?.let {
+                            put("address", JsonPrimitive(it))
+                            Log.d(TAG, "업데이트할 address: $it")
+                        }
+                        tel?.let {
+                            put("tel", JsonPrimitive(it))
+                            Log.d(TAG, "업데이트할 tel: $it")
+                        }
+                        put("updated_at", JsonPrimitive(getCurrentTimestampIso8601()))
+                    }
+
+                    Log.d(TAG, "업데이트 데이터: $updateData")
+
+                    // UPDATE 쿼리 실행
+                    val updateResponse = supabase.postgrest["users"]
+                        .update(updateData) {
+                            eq("kakao_id", kakaoId)
+                        }
+
+                    Log.d(TAG, "UPDATE 쿼리 실행 완료")
+
+                    // 업데이트된 데이터 다시 조회
+                    val updatedUser = supabase.postgrest["users"]
+                        .select(filter = {
+                            eq("kakao_id", kakaoId)
+                        })
+                        .decodeSingleOrNull<User>()
+
+                    Log.d(TAG, "업데이트 후 조회 결과: ${updatedUser?.toString()}")
+                    if (updatedUser != null) {
+                        Log.d(TAG, "업데이트된 address: ${updatedUser.address}")
+                        Log.d(TAG, "업데이트된 tel: ${updatedUser.tel}")
+                        Log.d(TAG, "업데이트된 updated_at: ${updatedUser.updated_at}")
+                    }
+
+                    updatedUser
+                } else {
+                    // 새 사용자 생성
+                    Log.d(TAG, "새 사용자 생성 시작")
+
+                    val newUser = buildJsonObject {
+                        put("kakao_id", JsonPrimitive(kakaoId))
+                        address?.let {
+                            put("address", JsonPrimitive(it))
+                            Log.d(TAG, "새 사용자 address: $it")
+                        }
+                        tel?.let {
+                            put("tel", JsonPrimitive(it))
+                            Log.d(TAG, "새 사용자 tel: $it")
+                        }
+                    }
+
+                    Log.d(TAG, "새 사용자 데이터: $newUser")
+
+                    val response = supabase.postgrest["users"]
+                        .insert(newUser)
+                        .decodeSingle<User>()
+
+                    Log.d(TAG, "새 사용자 생성 완료: ${response.toString()}")
+                    Log.d(TAG, "생성된 사용자 id: ${response.id}")
+                    Log.d(TAG, "생성된 사용자 address: ${response.address}")
+
+                    response
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "=== upsertUser 오류 발생 ===")
+            Log.e(TAG, "오류 메시지: ${e.message}")
+            Log.e(TAG, "오류 타입: ${e.javaClass.simpleName}")
+            e.printStackTrace()
+            null
+        }
+    }
+
+    // 사용자 ID로 사용자 정보 가져오기
+    suspend fun getUserByKakaoId(kakaoId: String): User? {
+        return try {
+            withContext(Dispatchers.IO) {
+                val response = supabase.postgrest["users"]
+                    .select(filter = {
+                        eq("kakao_id", kakaoId)
+                    })
+                    .decodeSingleOrNull<User>()
+
+                if (response != null) {
+                    Log.d(TAG, "Retrieved user with kakaoId: $kakaoId")
+                } else {
+                    Log.d(TAG, "No user found with kakaoId: $kakaoId")
+                }
+
+                response
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching user by kakaoId: ${e.message}")
+            null
+        }
+    }
+
+    // 검색 기록 저장 함수
+    suspend fun saveSearchHistory(
+        userId: String,
+        queryCategory: String,
+        queryContent: String
+    ): SearchHistory? {
+        return try {
+            withContext(Dispatchers.IO) {
+                Log.d(TAG, "Saving search history for user: $userId")
+
+                val searchData = buildJsonObject {
+                    put("user_id", JsonPrimitive(userId))
+                    put("query_category", JsonPrimitive(queryCategory))
+                    put("query_content", JsonPrimitive(queryContent))
+                }
+
+                val response = supabase.postgrest["search_history"]
+                    .insert(searchData)
+                    .decodeSingle<SearchHistory>()
+
+                Log.d(TAG, "Search history saved successfully with id: ${response.id}")
+                response
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error saving search history: ${e.message}", e)
+            null
+        }
+    }
+
+    // 신청 기록 저장 함수
+    suspend fun saveApplicationHistory(
+        userId: String,
+        applicationCategory: String,
+        applicationContent: String
+    ): ApplicationHistory? {
+        return try {
+            withContext(Dispatchers.IO) {
+                Log.d(TAG, "Saving application history for user: $userId")
+
+                val applicationData = buildJsonObject {
+                    put("user_id", JsonPrimitive(userId))
+                    put("application_category", JsonPrimitive(applicationCategory))
+                    put("application_content", JsonPrimitive(applicationContent))
+                }
+
+                val response = supabase.postgrest["application_history"]
+                    .insert(applicationData)
+                    .decodeSingle<ApplicationHistory>()
+
+                Log.d(TAG, "Application history saved successfully with id: ${response.id}")
+                response
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error saving application history: ${e.message}", e)
+            null
+        }
+    }
+
+    // 사용자의 검색 기록 가져오기
+    suspend fun getUserSearchHistory(userId: String): List<SearchHistory> {
+        return try {
+            withContext(Dispatchers.IO) {
+                val response = supabase.postgrest["search_history"]
+                    .select(filter = {
+                        eq("user_id", userId)
+                        order("created_at", Order.DESCENDING) // 최신순 정렬
+                    })
+                    .decodeList<SearchHistory>()
+
+                Log.d(TAG, "Retrieved ${response.size} search history items for user: $userId")
+                response
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching search history: ${e.message}", e)
+            emptyList()
+        }
+    }
+
+    // 사용자의 신청 기록 가져오기
+    suspend fun getUserApplicationHistory(userId: String): List<ApplicationHistory> {
+        return try {
+            withContext(Dispatchers.IO) {
+                val response = supabase.postgrest["application_history"]
+                    .select(filter = {
+                        eq("user_id", userId)
+                        order("created_at", Order.DESCENDING) // 최신순 정렬
+                    })
+                    .decodeList<ApplicationHistory>()
+
+                Log.d(TAG, "Retrieved ${response.size} application history items for user: $userId")
+                response
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching application history: ${e.message}", e)
+            emptyList()
+        }
+    }
 
     // 1. facilities data
     @Serializable

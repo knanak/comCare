@@ -92,6 +92,14 @@ import java.net.URL
 import android.provider.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+
+import androidx.lifecycle.lifecycleScope
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.remember
+import kotlinx.coroutines.GlobalScope
+
 
 
 // 사용자 정보 데이터 클래스
@@ -104,18 +112,21 @@ data class UserInfo(
 class MainActivity : ComponentActivity() {
 
     lateinit var chatService: ChatService
-    private var currentUserId: String = "guest"
+    var currentUserId: String = "guest"  // private -> public
 
     // 사용자 정보 저장
     private var userInfo: UserInfo? = null
 
-    // 위치 관련 변수
+    // 위치 관련 변수 - public으로 변경
     private lateinit var fusedLocationClient: FusedLocationProviderClient
-    private var userCity: String = ""
-    private var userDistrict: String = ""
+    var userCity: String = ""  // private -> public
+    var userDistrict: String = ""  // private -> public
     private var userLatitude: Double = 0.0
     private var userLongitude: Double = 0.0
     private var user_add: String = ""
+
+    // 추가: 현재 사용자의 kakaoId 저장
+    var currentUserKakaoId: String? = null
 
     companion object {
         private const val LOCATION_PERMISSION_REQUEST_CODE = 1001
@@ -156,7 +167,6 @@ class MainActivity : ComponentActivity() {
             var userCityState by remember { mutableStateOf("위치 확인 중...") }
             var userDistrictState by remember { mutableStateOf("위치 확인 중...") }
             var locationPermissionGranted by remember { mutableStateOf(false) }
-            // showLocationPermissionDialog 제거
 
             // 로그인 상태 관리
             var isLoggedIn by remember { mutableStateOf(false) }
@@ -164,26 +174,79 @@ class MainActivity : ComponentActivity() {
 
             val viewModelFactory = remember { PlaceViewModelFactory(supabaseHelper) }
 
+
             // 위치 권한 런처
             val locationPermissionLauncher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.RequestMultiplePermissions()
             ) { permissions ->
+                Log.d(TAG, "위치 권한 런처 콜백 실행")
                 val fineLocationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
                 val coarseLocationGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
+                Log.d(TAG, "Fine location: $fineLocationGranted, Coarse location: $coarseLocationGranted")
 
                 if (fineLocationGranted || coarseLocationGranted) {
                     locationPermissionGranted = true
+                    Log.d(TAG, "위치 권한 승인됨")
+
                     getLastKnownLocation { city, district ->
+                        Log.d(TAG, "getLastKnownLocation 콜백 받음 - city: $city, district: $district")
+
+                        // 변수 업데이트 전 현재 값 로그
+                        Log.d(TAG, "업데이트 전 - userCity: $userCity, userDistrict: $userDistrict")
+                        Log.d(TAG, "업데이트 전 - userCityState: $userCityState, userDistrictState: $userDistrictState")
+
+                        // 변수 업데이트
                         userCity = city
                         userDistrict = district
                         userCityState = city
                         userDistrictState = district
-                        Log.d(TAG, "위치 권한 승인 - 위치 정보 획득 완료")
+
+                        // 변수 업데이트 후 값 로그
+                        Log.d(TAG, "업데이트 후 - userCity: $userCity, userDistrict: $userDistrict")
+                        Log.d(TAG, "업데이트 후 - userCityState: $userCityState, userDistrictState: $userDistrictState")
+
+                        Log.d(TAG, "위치 정보 획득 완료 - city: $city, district: $district")
+                        Log.d(TAG, "currentUserKakaoId 체크: $currentUserKakaoId")
+
+                        // Supabase에 주소 정보 업데이트
+                        if (!currentUserKakaoId.isNullOrEmpty() && city.isNotEmpty() && district.isNotEmpty()) {
+                            Log.d(TAG, "Supabase 업데이트 조건 충족")
+                            val supabaseHelper = SupabaseDatabaseHelper(this@MainActivity)
+
+                            lifecycleScope.launch {
+                                try {
+                                    // 주소 형식: "인천광역시 연수구"
+                                    val address = "$city $district"
+                                    Log.d(TAG, "업데이트할 주소: $address")
+
+                                    val updatedUser = supabaseHelper.upsertUser(
+                                        kakaoId = currentUserKakaoId!!,
+                                        address = address
+                                    )
+
+                                    if (updatedUser != null) {
+                                        Log.d(TAG, "위치 권한 승인 후 사용자 주소 업데이트 성공: $address")
+                                        Log.d(TAG, "업데이트된 사용자 정보: id=${updatedUser.id}, address=${updatedUser.address}")
+                                    } else {
+                                        Log.e(TAG, "위치 권한 승인 후 사용자 주소 업데이트 실패 - updatedUser가 null")
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "위치 권한 승인 후 사용자 주소 업데이트 중 오류: ${e.message}", e)
+                                    e.printStackTrace()
+                                }
+                            }
+                        } else {
+                            Log.w(TAG, "업데이트 조건 미충족:")
+                            Log.w(TAG, "- currentUserKakaoId: $currentUserKakaoId")
+                            Log.w(TAG, "- city: $city")
+                            Log.w(TAG, "- district: $district")
+                        }
                     }
                 } else {
                     locationPermissionGranted = false
                     userCityState = "위치 권한 없음"
                     userDistrictState = "위치 권한 없음"
+                    Log.d(TAG, "위치 권한 거부됨")
                     // 위치 권한 거부 시 토스트 메시지 표시
                     Toast.makeText(
                         this@MainActivity,
@@ -193,24 +256,71 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            // 로그인 후에만 위치 권한 확인
+            // 로그인 후에만 위치 권한 확인 - 디버깅 로그 추가
+            // MainActivity의 setContent 내부
+// PlaceComparisonTheme 블록 바로 위에 추가
+
+// 1. 로그인 후에만 위치 권한 확인
             LaunchedEffect(isLoggedIn) {
+                Log.d(TAG, "LaunchedEffect - isLoggedIn: $isLoggedIn")
+
                 if (isLoggedIn) {
+                    Log.d(TAG, "로그인 상태 확인됨")
+                    Log.d(TAG, "currentUserKakaoId: $currentUserKakaoId")
+
                     when {
                         ContextCompat.checkSelfPermission(
                             this@MainActivity,
                             Manifest.permission.ACCESS_FINE_LOCATION
                         ) == PackageManager.PERMISSION_GRANTED -> {
+                            Log.d(TAG, "위치 권한이 이미 승인됨")
                             locationPermissionGranted = true
+
                             getLastKnownLocation { city, district ->
                                 userCity = city
                                 userDistrict = district
                                 userCityState = city
                                 userDistrictState = district
-                                Log.d(TAG, "기존 위치 권한 있음 - 위치 정보 획득 완료")
+                                Log.d(TAG, "위치 정보 획득 - city: $city, district: $district")
+                                Log.d(TAG, "currentUserKakaoId 체크: $currentUserKakaoId")
+
+                                // 이미 위치 권한이 있는 경우에도 Supabase 업데이트
+                                if (!currentUserKakaoId.isNullOrEmpty() && city.isNotEmpty() && district.isNotEmpty()) {
+                                    Log.d(TAG, "Supabase 업데이트 시작")
+                                    val supabaseHelper = SupabaseDatabaseHelper(this@MainActivity)
+
+                                    lifecycleScope.launch {
+                                        try {
+                                            // 주소 형식: "인천광역시 연수구"
+                                            val address = "$city $district"
+                                            Log.d(TAG, "업데이트할 주소: $address")
+
+                                            val updatedUser = supabaseHelper.upsertUser(
+                                                kakaoId = currentUserKakaoId!!,
+                                                address = address
+                                            )
+
+                                            if (updatedUser != null) {
+                                                Log.d(TAG, "로그인 후 사용자 주소 업데이트 성공: $address")
+                                                Log.d(TAG, "업데이트된 사용자 정보: id=${updatedUser.id}, address=${updatedUser.address}")
+                                            } else {
+                                                Log.e(TAG, "로그인 후 사용자 주소 업데이트 실패 - updatedUser가 null")
+                                            }
+                                        } catch (e: Exception) {
+                                            Log.e(TAG, "로그인 후 사용자 주소 업데이트 중 오류: ${e.message}", e)
+                                            e.printStackTrace()
+                                        }
+                                    }
+                                } else {
+                                    Log.w(TAG, "업데이트 조건 미충족:")
+                                    Log.w(TAG, "- currentUserKakaoId: $currentUserKakaoId")
+                                    Log.w(TAG, "- city: $city")
+                                    Log.w(TAG, "- district: $district")
+                                }
                             }
                         }
                         else -> {
+                            Log.d(TAG, "위치 권한이 없음 - 권한 요청")
                             locationPermissionLauncher.launch(
                                 arrayOf(
                                     Manifest.permission.ACCESS_FINE_LOCATION,
@@ -219,7 +329,148 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                     }
+                } else {
+                    Log.d(TAG, "아직 로그인하지 않음")
                 }
+            }
+
+// 2. currentUserKakaoId가 변경될 때 위치 정보 업데이트
+            LaunchedEffect(currentUserKakaoId) {
+                Log.d(TAG, "=== LaunchedEffect(currentUserKakaoId) 시작 ===")
+                Log.d(TAG, "currentUserKakaoId: '$currentUserKakaoId'")
+                Log.d(TAG, "userCity: '$userCity'")
+                Log.d(TAG, "userDistrict: '$userDistrict'")
+
+                if (!currentUserKakaoId.isNullOrEmpty()) {
+                    Log.d(TAG, "currentUserKakaoId가 설정됨")
+
+                    // 위치 정보가 없으면 위치 정보를 먼저 가져오기
+                    if (userCity.isEmpty() || userDistrict.isEmpty() ||
+                        userCity == "위치 확인 중..." || userCity == "위치 권한 없음") {
+
+                        Log.d(TAG, "위치 정보가 없음 - 위치 정보 가져오기 시도")
+
+                        // 위치 권한이 있는지 확인
+                        if (ContextCompat.checkSelfPermission(
+                                this@MainActivity,
+                                Manifest.permission.ACCESS_FINE_LOCATION
+                            ) == PackageManager.PERMISSION_GRANTED) {
+
+                            Log.d(TAG, "위치 권한 있음 - getLastKnownLocation 호출")
+                            getLastKnownLocation { city, district ->
+                                Log.d(TAG, "getLastKnownLocation 콜백 - city: '$city', district: '$district'")
+                                userCity = city
+                                userDistrict = district
+                                userCityState = city
+                                userDistrictState = district
+
+                                // 위치 정보를 가져온 후 Supabase 업데이트
+                                if (city.isNotEmpty() && district.isNotEmpty()) {
+                                    Log.d(TAG, "위치 정보 획득 성공 - Supabase 업데이트 시작")
+                                    val supabaseHelper = SupabaseDatabaseHelper(this@MainActivity)
+                                    lifecycleScope.launch {
+                                        try {
+                                            val address = "$city $district"
+                                            Log.d(TAG, "Supabase에 업데이트할 주소: '$address'")
+
+                                            val updatedUser = supabaseHelper.upsertUser(
+                                                kakaoId = currentUserKakaoId!!,
+                                                address = address
+                                            )
+
+                                            if (updatedUser != null) {
+                                                Log.d(TAG, "위치 정보 업데이트 성공: ${updatedUser.address}")
+                                            } else {
+                                                Log.e(TAG, "위치 정보 업데이트 실패 - updatedUser가 null")
+                                            }
+                                        } catch (e: Exception) {
+                                            Log.e(TAG, "위치 정보 업데이트 중 오류: ${e.message}", e)
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            Log.d(TAG, "위치 권한 없음")
+                        }
+                    } else {
+                        // 이미 위치 정보가 있는 경우
+                        Log.d(TAG, "위치 정보 이미 있음 - 바로 Supabase 업데이트")
+                        val supabaseHelper = SupabaseDatabaseHelper(this@MainActivity)
+                        lifecycleScope.launch {
+                            try {
+                                val address = "$userCity $userDistrict"
+                                Log.d(TAG, "Supabase에 업데이트할 주소: '$address'")
+
+                                val updatedUser = supabaseHelper.upsertUser(
+                                    kakaoId = currentUserKakaoId!!,
+                                    address = address
+                                )
+
+                                if (updatedUser != null) {
+                                    Log.d(TAG, "위치 정보 업데이트 성공: ${updatedUser.address}")
+                                } else {
+                                    Log.e(TAG, "위치 정보 업데이트 실패 - updatedUser가 null")
+                                }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "위치 정보 업데이트 중 오류: ${e.message}", e)
+                            }
+                        }
+                    }
+                } else {
+                    Log.d(TAG, "currentUserKakaoId가 null 또는 empty")
+                }
+
+                Log.d(TAG, "=== LaunchedEffect(currentUserKakaoId) 종료 ===")
+            }
+
+// 3. 위치 정보가 변경될 때 Supabase 업데이트 (새로 추가)
+            LaunchedEffect(userCity, userDistrict, currentUserKakaoId) {
+                Log.d(TAG, "=== LaunchedEffect(위치 정보 변경) 시작 ===")
+                Log.d(TAG, "userCity: '$userCity'")
+                Log.d(TAG, "userDistrict: '$userDistrict'")
+                Log.d(TAG, "currentUserKakaoId: '$currentUserKakaoId'")
+
+                // 모든 조건이 충족되었을 때만 업데이트
+                if (!currentUserKakaoId.isNullOrEmpty() &&
+                    userCity.isNotEmpty() &&
+                    userDistrict.isNotEmpty() &&
+                    userCity != "위치 확인 중..." &&
+                    userCity != "위치 권한 없음") {
+
+                    Log.d(TAG, "모든 조건 충족 - Supabase 업데이트 시작")
+
+                    val supabaseHelper = SupabaseDatabaseHelper(this@MainActivity)
+                    lifecycleScope.launch {
+                        try {
+                            val address = "$userCity $userDistrict"
+                            Log.d(TAG, "Supabase에 업데이트할 주소: '$address'")
+
+                            val updatedUser = supabaseHelper.upsertUser(
+                                kakaoId = currentUserKakaoId!!,
+                                address = address
+                            )
+
+                            if (updatedUser != null) {
+                                Log.d(TAG, "위치 정보 업데이트 성공: ${updatedUser.address}")
+                                Log.d(TAG, "업데이트된 사용자 전체 정보: $updatedUser")
+                            } else {
+                                Log.e(TAG, "위치 정보 업데이트 실패 - updatedUser가 null")
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "위치 정보 업데이트 중 오류: ${e.message}", e)
+                            e.printStackTrace()
+                        }
+                    }
+                } else {
+                    Log.d(TAG, "업데이트 조건 미충족:")
+                    Log.d(TAG, "- currentUserKakaoId 비어있음: ${currentUserKakaoId.isNullOrEmpty()}")
+                    Log.d(TAG, "- userCity 비어있음: ${userCity.isEmpty()}")
+                    Log.d(TAG, "- userDistrict 비어있음: ${userDistrict.isEmpty()}")
+                    Log.d(TAG, "- userCity가 '위치 확인 중...': ${userCity == "위치 확인 중..."}")
+                    Log.d(TAG, "- userCity가 '위치 권한 없음': ${userCity == "위치 권한 없음"}")
+                }
+
+                Log.d(TAG, "=== LaunchedEffect(위치 정보 변경) 종료 ===")
             }
 
             PlaceComparisonTheme {
@@ -233,12 +484,13 @@ class MainActivity : ComponentActivity() {
                             onLoginSuccess = { userInfo ->
                                 currentUserInfo = userInfo
                                 currentUserId = userInfo.id.toString()
+                                currentUserKakaoId = userInfo.id.toString()  // kakaoId 저장
                                 this@MainActivity.userInfo = userInfo
                                 isLoggedIn = true
                             }
                         )
                     } else {
-                        // 로그인 후 메인 화면 표시 (showLocationPermissionDialog 관련 코드 모두 제거)
+                        // 로그인 후 메인 화면 표시
                         val navController = rememberNavController()
                         val viewModelFactory = remember { PlaceViewModelFactory(supabaseHelper) }
                         val viewModel: PlaceViewModel = viewModel(factory = viewModelFactory)
@@ -314,6 +566,24 @@ class MainActivity : ComponentActivity() {
 
                 getAddressFromLocation(location.latitude, location.longitude) { city, district ->
                     callback(city, district)
+
+                    // 위치 정보가 업데이트되고 로그인된 상태라면 Supabase에 업데이트
+                    if (currentUserKakaoId != null && city.isNotEmpty() && district.isNotEmpty()) {
+                        val supabaseHelper = SupabaseDatabaseHelper(this)
+                        lifecycleScope.launch {
+                            try {
+                                val updatedUser = supabaseHelper.upsertUser(
+                                    kakaoId = currentUserKakaoId!!,
+                                    address = "$city $district"
+                                )
+                                if (updatedUser != null) {
+                                    Log.d(TAG, "사용자 위치 정보 업데이트 성공")
+                                }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "사용자 위치 정보 업데이트 실패: ${e.message}")
+                            }
+                        }
+                    }
                 }
             } else {
                 Log.d(TAG, "마지막 위치 정보가 없음 - 새로운 위치 요청")
@@ -356,6 +626,24 @@ class MainActivity : ComponentActivity() {
 
                     getAddressFromLocation(location.latitude, location.longitude) { city, district ->
                         callback(city, district)
+
+                        // 위치 정보가 업데이트되고 로그인된 상태라면 Supabase에 업데이트
+                        if (currentUserKakaoId != null && city.isNotEmpty() && district.isNotEmpty()) {
+                            val supabaseHelper = SupabaseDatabaseHelper(this@MainActivity)
+                            lifecycleScope.launch {
+                                try {
+                                    val updatedUser = supabaseHelper.upsertUser(
+                                        kakaoId = currentUserKakaoId!!,
+                                        address = "$city $district"
+                                    )
+                                    if (updatedUser != null) {
+                                        Log.d(TAG, "사용자 위치 정보 업데이트 성공")
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "사용자 위치 정보 업데이트 실패: ${e.message}")
+                                }
+                            }
+                        }
                     }
                 } else {
                     Log.w(TAG, "새로운 위치 정보를 가져올 수 없습니다.")
@@ -389,13 +677,50 @@ class MainActivity : ComponentActivity() {
                         Log.d(TAG, "전체 주소 (user_add): $user_add")
                         Log.d(TAG, "시/도: $city")
                         Log.d(TAG, "구/군: $district")
+                        Log.d(TAG, "currentUserKakaoId: $currentUserKakaoId")
                         Log.d(TAG, "==============================")
 
-                        callback(city, district)
+                        // 메인 스레드에서 콜백 실행 - 이것이 중요!
+                        runOnUiThread {
+                            Log.d(TAG, "메인 스레드에서 콜백 실행 - city: $city, district: $district")
+                            callback(city, district)
+                        }
+
+                        // 위치 정보 획득 직후 Supabase 업데이트도 메인 스레드에서
+                        if (!currentUserKakaoId.isNullOrEmpty() && city.isNotEmpty() && district.isNotEmpty()) {
+                            Log.d(TAG, "getAddressFromLocation에서 Supabase 업데이트 시작")
+
+                            runOnUiThread {
+                                val supabaseHelper = SupabaseDatabaseHelper(this@MainActivity)
+
+                                lifecycleScope.launch {
+                                    try {
+                                        val addressForDB = "$city $district"
+                                        Log.d(TAG, "DB에 저장할 주소: $addressForDB")
+
+                                        val updatedUser = supabaseHelper.upsertUser(
+                                            kakaoId = currentUserKakaoId!!,
+                                            address = addressForDB
+                                        )
+
+                                        if (updatedUser != null) {
+                                            Log.d(TAG, "getAddressFromLocation에서 주소 업데이트 성공")
+                                            Log.d(TAG, "저장된 주소: ${updatedUser.address}")
+                                        } else {
+                                            Log.e(TAG, "getAddressFromLocation에서 주소 업데이트 실패")
+                                        }
+                                    } catch (e: Exception) {
+                                        Log.e(TAG, "getAddressFromLocation 주소 업데이트 오류: ${e.message}", e)
+                                    }
+                                }
+                            }
+                        }
                     } else {
                         Log.w(TAG, "주소를 찾을 수 없습니다.")
                         user_add = ""
-                        callback("", "")
+                        runOnUiThread {
+                            callback("", "")
+                        }
                     }
                 }
             } else {
@@ -411,9 +736,39 @@ class MainActivity : ComponentActivity() {
                     Log.d(TAG, "========== 위치 정보 ==========")
                     Log.d(TAG, "시/도: $city")
                     Log.d(TAG, "구/군: $district")
+                    Log.d(TAG, "currentUserKakaoId: $currentUserKakaoId")
                     Log.d(TAG, "==============================")
 
+                    // 메인 스레드에서 콜백 실행
+                    Log.d(TAG, "메인 스레드에서 콜백 실행 - city: $city, district: $district")
                     callback(city, district)
+
+                    // 위치 정보 획득 직후 Supabase 업데이트
+                    if (!currentUserKakaoId.isNullOrEmpty() && city.isNotEmpty() && district.isNotEmpty()) {
+                        Log.d(TAG, "getAddressFromLocation에서 Supabase 업데이트 시작")
+                        val supabaseHelper = SupabaseDatabaseHelper(this@MainActivity)
+
+                        lifecycleScope.launch {
+                            try {
+                                val addressForDB = "$city $district"
+                                Log.d(TAG, "DB에 저장할 주소: $addressForDB")
+
+                                val updatedUser = supabaseHelper.upsertUser(
+                                    kakaoId = currentUserKakaoId!!,
+                                    address = addressForDB
+                                )
+
+                                if (updatedUser != null) {
+                                    Log.d(TAG, "getAddressFromLocation에서 주소 업데이트 성공")
+                                    Log.d(TAG, "저장된 주소: ${updatedUser.address}")
+                                } else {
+                                    Log.e(TAG, "getAddressFromLocation에서 주소 업데이트 실패")
+                                }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "getAddressFromLocation 주소 업데이트 오류: ${e.message}", e)
+                            }
+                        }
+                    }
                 } else {
                     Log.w(TAG, "주소를 찾을 수 없습니다.")
                     user_add = ""
@@ -432,6 +787,10 @@ class MainActivity : ComponentActivity() {
 fun LoginScreen(onLoginSuccess: (UserInfo) -> Unit) {
     val context = LocalContext.current
     val TAG = "KakaoLogin"
+
+    // Supabase 헬퍼 인스턴스 생성
+    val supabaseHelper = remember { SupabaseDatabaseHelper(context) }
+    val coroutineScope = rememberCoroutineScope()
 
     // 카카오 로그인 콜백
     val callback: (OAuthToken?, Throwable?) -> Unit = { token, error ->
@@ -458,7 +817,58 @@ fun LoginScreen(onLoginSuccess: (UserInfo) -> Unit) {
                         profileImageUrl = user.kakaoAccount?.profile?.thumbnailImageUrl
                     )
 
-                    onLoginSuccess(userInfo)
+                    // LoginScreen의 카카오 로그인 콜백 내부 수정
+// Supabase에 사용자 정보 저장/업데이트 부분
+
+                    coroutineScope.launch {
+                        try {
+                            Log.d(TAG, "=== LoginScreen Supabase 저장 시작 ===")
+
+                            // MainActivity의 currentUserKakaoId를 먼저 설정
+                            val mainActivity = context as? MainActivity
+                            if (mainActivity != null) {
+                                mainActivity.currentUserKakaoId = userInfo.id.toString()
+                                Log.d(TAG, "MainActivity.currentUserKakaoId 설정 완료: ${userInfo.id}")
+
+                                // 현재 위치 정보 확인
+                                Log.d(TAG, "현재 위치 정보 - city: '${mainActivity.userCity}', district: '${mainActivity.userDistrict}'")
+
+                                var userAddress: String? = null
+
+                                // 위치 정보가 있으면 주소 생성
+                                if (mainActivity.userCity.isNotEmpty() &&
+                                    mainActivity.userDistrict.isNotEmpty() &&
+                                    mainActivity.userCity != "위치 확인 중..." &&
+                                    mainActivity.userCity != "위치 권한 없음") {
+                                    userAddress = "${mainActivity.userCity} ${mainActivity.userDistrict}"
+                                    Log.d(TAG, "저장할 주소: '$userAddress'")
+                                } else {
+                                    Log.d(TAG, "위치 정보가 아직 없음")
+                                }
+
+                                // Supabase에 사용자 정보 저장/업데이트 (주소는 null일 수 있음)
+                                val savedUser = supabaseHelper.upsertUser(
+                                    kakaoId = userInfo.id.toString(),
+                                    address = userAddress  // null일 수 있음
+                                )
+
+                                if (savedUser != null) {
+                                    Log.d(TAG, "Supabase에 사용자 정보 저장 성공: ${savedUser.id}")
+                                    Log.d(TAG, "저장된 주소: ${savedUser.address}")
+                                } else {
+                                    Log.e(TAG, "Supabase에 사용자 정보 저장 실패")
+                                }
+                            }
+
+                            // 로그인 성공 처리
+                            onLoginSuccess(userInfo)
+
+                        } catch (e: Exception) {
+                            Log.e(TAG, "사용자 정보 저장 중 오류: ${e.message}", e)
+                            // 오류가 발생해도 로그인은 진행
+                            onLoginSuccess(userInfo)
+                        }
+                    }
                 }
             }
         }
@@ -3797,8 +4207,8 @@ fun ChatScreen(
                                             // 요청 전에 카운트 증가
                                             RequestCounterHelper.incrementRequestCount()
 
-                                            val url = URL("http://192.168.219.102:5000/explore")
-//                                            val url = URL("https://coral-app-fjt8m.ondigitalocean.app/explore")
+//                                            val url = URL("http://192.168.219.102:5000/explore")
+                                            val url = URL("https://coral-app-fjt8m.ondigitalocean.app/explore")
                                             val connection = url.openConnection() as HttpURLConnection
                                             connection.requestMethod = "POST"
                                             connection.setRequestProperty("Content-Type", "application/json")
@@ -4148,7 +4558,10 @@ fun ChatScreen(
     // 위치 권한 거부 다이얼로그 제거 (더 이상 필요없음)
 }
 
-// sendMessage 함수 수정 - 위치 권한 확인 추가
+// ChatScreen의 sendMessage 함수 수정
+
+// ChatScreen의 sendMessage 함수 수정
+
 private fun sendMessage(
     messageText: String,
     activity: MainActivity,
@@ -4248,6 +4661,39 @@ private fun sendMessage(
 
     // Update the messages list first
     updateMessages(currentMessages + userMessage + waitingMessage)
+
+    // Supabase에 검색 기록 저장
+    val supabaseHelper = SupabaseDatabaseHelper(context)
+
+    // 별도의 코루틴에서 검색 기록 저장
+    kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+        try {
+            // 현재 사용자의 kakaoId 가져오기
+            val kakaoId = activity.currentUserId
+
+            // Supabase에서 사용자 정보 조회
+            val user = supabaseHelper.getUserByKakaoId(kakaoId)
+
+            if (user != null) {
+                // 검색 기록 저장
+                val searchHistory = supabaseHelper.saveSearchHistory(
+                    userId = user.id!!,
+                    queryCategory = "Chat",  // ChatScreen에서는 항상 "Chat"
+                    queryContent = messageText
+                )
+
+                if (searchHistory != null) {
+                    Log.d("ChatScreen", "검색 기록 저장 성공: ${searchHistory.id}")
+                } else {
+                    Log.e("ChatScreen", "검색 기록 저장 실패")
+                }
+            } else {
+                Log.e("ChatScreen", "사용자 정보를 찾을 수 없음: kakaoId = $kakaoId")
+            }
+        } catch (e: Exception) {
+            Log.e("ChatScreen", "검색 기록 저장 중 오류: ${e.message}", e)
+        }
+    }
 
     // Then send the message to the backend
     activity.onMessageSent(messageText, sessionId)
