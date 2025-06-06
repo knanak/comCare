@@ -3737,11 +3737,11 @@ fun ChatScreen(
     val focusManager = LocalFocusManager.current
 
     // Navigation state for search results
-    val showNavigationState = remember { mutableStateOf(false) }
-    val hasPreviousState = remember { mutableStateOf(false) }
-    val hasNextState = remember { mutableStateOf(false) }
-    val currentPageState = remember { mutableStateOf(0) }
-    val totalPagesState = remember { mutableStateOf(0) }
+    val showNavigationState = rememberSaveable { mutableStateOf(false) }
+    val hasPreviousState = rememberSaveable { mutableStateOf(false) }
+    val hasNextState = rememberSaveable { mutableStateOf(false) }
+    val currentPageState = rememberSaveable { mutableStateOf(0) }
+    val totalPagesState = rememberSaveable { mutableStateOf(0) }
 
     var showNavigation by showNavigationState
     var hasPrevious by hasPreviousState
@@ -3820,6 +3820,9 @@ fun ChatScreen(
 
     // Set up the callback to receive responses from n8n
     LaunchedEffect(Unit) {
+        // 네비게이션 상태 복원
+        activity.chatService.restoreNavigationState()
+
         if (messages.isEmpty()) {
             messages = listOf(
                 ChatMessage(
@@ -3828,6 +3831,7 @@ fun ChatScreen(
                 )
             )
         }
+
 
         // Set up the speech recognizer listener with real-time transcription
         speechRecognizer?.setRecognitionListener(object : RecognitionListener {
@@ -4076,6 +4080,9 @@ fun ChatScreen(
             currentPage = current
             totalPages = total
             showNavigation = total > 1
+
+            // 상태가 업데이트될 때마다 저장
+            activity.chatService.saveNavigationState()
         }
     }
 
@@ -4130,10 +4137,14 @@ fun ChatScreen(
     // Clean up callback when leaving the screen
     DisposableEffect(Unit) {
         onDispose {
+            // 화면을 떠날 때 현재 상태 저장
+            activity.chatService.saveNavigationState()
+
+            // 콜백만 정리하고 결과는 유지
             activity.chatService.responseCallback = null
             activity.chatService.navigationCallback = null
             activity.chatService.exploreResponseCallback = null
-            activity.chatService.clearResults()
+            // clearResults()는 제거하여 상태 유지
         }
     }
 
@@ -4218,7 +4229,8 @@ fun ChatScreen(
                     itemsIndexed(messages) { index, message ->
                         MessageItem(
                             message = message,
-                            navController = navController  // navController 전달
+                            navController = navController,
+                            activity = activity
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                     }
@@ -4353,7 +4365,7 @@ fun ChatScreen(
                                             // 요청 전에 카운트 증가
                                             RequestCounterHelper.incrementRequestCount()
 
-                                            val url = URL("http://192.168.219.102:5000/explore")
+                                            val url = URL("http://192.168.219.100:5000/explore")
 //                                            val url = URL("https://coral-app-fjt8m.ondigitalocean.app/explore")
                                             val connection =
                                                 url.openConnection() as HttpURLConnection
@@ -4986,7 +4998,8 @@ private fun sendMessage(
 @Composable
 fun MessageItem(
     message: ChatMessage,
-    navController: NavController  // 파라미터 추가
+    navController: NavController,
+    activity: MainActivity  // 파라미터 추가
 ) {
     val context = LocalContext.current
 
@@ -5197,6 +5210,9 @@ fun MessageItem(
 
                         Button(
                             onClick = {
+                                // 네비게이션 전에 현재 상태 저장
+                                activity.chatService.saveNavigationState()
+
                                 // URL을 인코딩하여 네비게이션 파라미터로 전달
                                 val encodedUrl = Uri.encode(detailUrl)
                                 navController.navigate("webview/$encodedUrl")

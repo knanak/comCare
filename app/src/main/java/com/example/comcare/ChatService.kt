@@ -20,7 +20,7 @@ import java.util.Date
 class ChatService(private val context: Context) {
     private val TAG = "ChatService"
 
-    private val url = "http://192.168.219.102:5000/query"
+    private val url = "http://192.168.219.100:5000/query"
 //    private val url = "https://coral-app-fjt8m.ondigitalocean.app/query"
 
     // SharedPreferences for storing count and date
@@ -73,6 +73,59 @@ class ChatService(private val context: Context) {
     var navigationCallback: ((hasPrevious: Boolean, hasNext: Boolean, currentPage: Int, totalPages: Int) -> Unit)? = null
 
     var exploreResponseCallback: ((String) -> Unit)? = null
+
+    // 네비게이션 상태를 영구적으로 저장하기 위한 변수 추가
+    private var savedNavigationState: NavigationState? = null
+
+    // NavigationState 데이터 클래스 추가
+    data class NavigationState(
+        val hasPrevious: Boolean,
+        val hasNext: Boolean,
+        val currentPage: Int,
+        val totalPages: Int
+    )
+
+    // 네비게이션 상태 저장 메서드 추가
+    fun saveNavigationState() {
+        val state = getCurrentNavigationState()
+        savedNavigationState = state
+        Log.d(TAG, "Navigation state saved: $state")
+    }
+
+    // 현재 네비게이션 상태 가져오기
+    fun getCurrentNavigationState(): NavigationState? {
+        return if (isExploreMode && exploreResults.isNotEmpty()) {
+            NavigationState(
+                hasPrevious = currentIndex > 0,
+                hasNext = currentIndex < exploreResults.size - 1,
+                currentPage = currentIndex + 1,
+                totalPages = exploreResults.size
+            )
+        } else if (currentResults != null && currentResults!!.length() > 0) {
+            NavigationState(
+                hasPrevious = currentIndex > 0,
+                hasNext = currentIndex < currentResults!!.length() - 1,
+                currentPage = currentIndex + 1,
+                totalPages = currentResults!!.length()
+            )
+        } else {
+            null
+        }
+    }
+
+    // 네비게이션 상태 복원 메서드 추가
+    fun restoreNavigationState() {
+        savedNavigationState?.let { state ->
+            Log.d(TAG, "Restoring navigation state: $state")
+            navigationCallback?.invoke(
+                state.hasPrevious,
+                state.hasNext,
+                state.currentPage,
+                state.totalPages
+            )
+        }
+    }
+
 
     // 오늘 날짜 확인 및 카운트 초기화
     private fun checkAndResetDailyCount() {
@@ -347,6 +400,7 @@ class ChatService(private val context: Context) {
     }
 
     // 현재 인덱스의 결과를 표시하는 함수
+    // 현재 인덱스의 결과를 표시하는 함수 수정
     private fun showCurrentResult() {
         // 탐색 모드인 경우
         if (isExploreMode && exploreResults.isNotEmpty()) {
@@ -368,6 +422,9 @@ class ChatService(private val context: Context) {
                     val totalPages = exploreResults.size
 
                     navigationCallback?.invoke(hasPrevious, hasNext, currentPage, totalPages)
+
+                    // 상태 저장
+                    savedNavigationState = NavigationState(hasPrevious, hasNext, currentPage, totalPages)
                 }
             }
             return
@@ -396,6 +453,9 @@ class ChatService(private val context: Context) {
                         val totalPages = results.length()
 
                         navigationCallback?.invoke(hasPrevious, hasNext, currentPage, totalPages)
+
+                        // 상태 저장
+                        savedNavigationState = NavigationState(hasPrevious, hasNext, currentPage, totalPages)
                     }
                 } catch (e: JSONException) {
                     Log.e(TAG, "Error parsing current result", e)
@@ -406,11 +466,7 @@ class ChatService(private val context: Context) {
             }
         }
     }
-
     // 응답 텍스트를 사용자가 보기 편하게 포맷팅하는 함수
-
-    // ChatService.kt의 formatResponse 함수 수정
-    // ChatService.kt의 formatResponse 함수 전체
     private fun formatResponse(content: String): String {
         var formatted = content
 
@@ -629,13 +685,14 @@ class ChatService(private val context: Context) {
         return null
     }
 
-    // 검색 결과 초기화
+    // 검색 결과 초기화 메서드 수정
     fun clearResults() {
         currentResults = null
         currentIndex = 0
         isExploreMode = false
-        isCurrentlyExploring = false  // 탐색 모드 플래그 초기화
+        isCurrentlyExploring = false
         exploreResults = emptyList()
+        savedNavigationState = null  // 상태도 초기화
     }
 
 
