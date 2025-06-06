@@ -109,6 +109,10 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.focus.onFocusChanged
 import kotlinx.coroutines.flow.collect
 
+import android.webkit.WebChromeClient
+import android.webkit.JsResult
+import androidx.appcompat.app.AlertDialog
+
 
 
 // 사용자 정보 데이터 클래스
@@ -4816,7 +4820,6 @@ fun ChatScreen(
 }
 
 
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WebViewScreen(
@@ -4825,6 +4828,7 @@ fun WebViewScreen(
 ) {
     var webView: WebView? by remember { mutableStateOf(null) }
     var canGoBack by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
     // 뒤로 가기 처리
     BackHandler(enabled = canGoBack) {
@@ -4861,10 +4865,88 @@ fun WebViewScreen(
                     settings.builtInZoomControls = true
                     settings.displayZoomControls = false
 
+                    // JavaScript 팝업 지원 추가
+                    settings.javaScriptCanOpenWindowsAutomatically = true
+
                     webViewClient = object : WebViewClient() {
                         override fun onPageFinished(view: WebView?, url: String?) {
                             super.onPageFinished(view, url)
                             canGoBack = view?.canGoBack() ?: false
+                        }
+
+                        // 페이지 로딩 에러 처리
+                        override fun onReceivedError(
+                            view: WebView?,
+                            errorCode: Int,
+                            description: String?,
+                            failingUrl: String?
+                        ) {
+                            super.onReceivedError(view, errorCode, description, failingUrl)
+                            // 에러 시 빈 페이지 대신 에러 메시지 표시
+                            view?.loadData(
+                                "<html><body><center><h2>페이지를 불러올 수 없습니다</h2></center></body></html>",
+                                "text/html; charset=UTF-8",
+                                null
+                            )
+                        }
+                    }
+
+                    // WebChromeClient 설정으로 JavaScript 팝업 처리
+                    webChromeClient = object : WebChromeClient() {
+                        // JavaScript alert() 처리
+                        override fun onJsAlert(
+                            view: WebView?,
+                            url: String?,
+                            message: String?,
+                            result: JsResult?
+                        ): Boolean {
+                            AlertDialog.Builder(context)
+                                .setTitle("알림")
+                                .setMessage(message ?: "")
+                                .setPositiveButton("확인") { dialog, _ ->
+                                    result?.confirm()
+                                    dialog.dismiss()
+
+                                    // "마감된 채용정보입니다" 메시지인 경우 뒤로 가기
+                                    if (message?.contains("마감") == true ||
+                                        message?.contains("종료") == true) {
+                                        navController.navigateUp()
+                                    }
+                                }
+                                .setCancelable(false)
+                                .show()
+
+                            return true // true를 반환하여 WebView의 기본 처리를 막음
+                        }
+
+                        // JavaScript confirm() 처리
+                        override fun onJsConfirm(
+                            view: WebView?,
+                            url: String?,
+                            message: String?,
+                            result: JsResult?
+                        ): Boolean {
+                            AlertDialog.Builder(context)
+                                .setTitle("확인")
+                                .setMessage(message ?: "")
+                                .setPositiveButton("확인") { dialog, _ ->
+                                    result?.confirm()
+                                    dialog.dismiss()
+                                }
+                                .setNegativeButton("취소") { dialog, _ ->
+                                    result?.cancel()
+                                    dialog.dismiss()
+                                }
+                                .setCancelable(false)
+                                .show()
+
+                            return true
+                        }
+
+                        // 페이지 제목 변경 감지
+                        override fun onReceivedTitle(view: WebView?, title: String?) {
+                            super.onReceivedTitle(view, title)
+                            // 제목이 "마감"이나 특정 키워드를 포함하는 경우 처리 가능
                         }
                     }
 
@@ -4876,7 +4958,6 @@ fun WebViewScreen(
         )
     }
 }
-
 private fun sendMessage(
     messageText: String,
     activity: MainActivity,
