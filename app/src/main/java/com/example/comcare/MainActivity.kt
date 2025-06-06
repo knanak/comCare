@@ -4369,8 +4369,8 @@ fun ChatScreen(
                                             // 요청 전에 카운트 증가
                                             RequestCounterHelper.incrementRequestCount()
 
-                                            val url = URL("http://192.168.219.100:5000/explore")
-//                                            val url = URL("https://coral-app-fjt8m.ondigitalocean.app/explore")
+//                                            val url = URL("http://192.168.219.100:5000/explore")
+                                            val url = URL("https://coral-app-fjt8m.ondigitalocean.app/explore")
                                             val connection =
                                                 url.openConnection() as HttpURLConnection
                                             connection.requestMethod = "POST"

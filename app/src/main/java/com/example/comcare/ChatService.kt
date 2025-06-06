@@ -20,14 +20,14 @@ import java.util.Date
 class ChatService(private val context: Context) {
     private val TAG = "ChatService"
 
-    private val url = "http://192.168.219.100:5000/query"
-//    private val url = "https://coral-app-fjt8m.ondigitalocean.app/query"
+//    private val url = "http://192.168.219.100:5000/query"
+    private val url = "https://coral-app-fjt8m.ondigitalocean.app/query"
 
     // SharedPreferences for storing count and date
     private val sharedPrefs: SharedPreferences = context.getSharedPreferences("ChatPrefs", Context.MODE_PRIVATE)
     private val REQUEST_COUNT_KEY = "request_count"
     private val LAST_REQUEST_DATE_KEY = "last_request_date"
-    private val MAX_REQUESTS_PER_DAY = 10
+    private val MAX_REQUESTS_PER_DAY = 50
 
     // 현재 검색 결과들을 저장하는 변수
     private var currentResults: JSONArray? = null
@@ -466,7 +466,8 @@ class ChatService(private val context: Context) {
             }
         }
     }
-    // 응답 텍스트를 사용자가 보기 편하게 포맷팅하는 함수
+// ChatService.kt의 formatResponse 함수 전체
+
     private fun formatResponse(content: String): String {
         var formatted = content
 
@@ -499,9 +500,9 @@ class ChatService(private val context: Context) {
             formatted = formatted.replace(titleMatch.value, "")
         }
 
-        // Category 정보 추출 후 제거
+        // Category 정보 추출 후 제거 - 채팅화면에서만 제거
         var category: String? = null
-        val categoryPattern = Regex("Category:\\s*([^\\n]+)", RegexOption.IGNORE_CASE)
+        val categoryPattern = Regex("^Category:\\s*([^\\n]+)", RegexOption.MULTILINE)
         val categoryMatch = categoryPattern.find(formatted)
         if (categoryMatch != null) {
             category = categoryMatch.groupValues[1].trim()
@@ -509,7 +510,11 @@ class ChatService(private val context: Context) {
             formatted = formatted.replace(categoryMatch.value, "")
         }
 
-        // Detail URL 추출 - 대소문자 구분 없이 모든 Detail 패턴 찾기
+        // "Job" 텍스트 단독으로 있는 경우 제거
+        val jobPattern = Regex("\\n*Job\\s*\\n+", RegexOption.IGNORE_CASE)
+        formatted = formatted.replace(jobPattern, "\n")
+
+        // Detail URL 추출
         var detailUrl: String? = null
         val detailPatterns = listOf(
             Regex("Detail:\\s*([^\\n]+)", RegexOption.IGNORE_CASE),
@@ -521,7 +526,6 @@ class ChatService(private val context: Context) {
             val match = pattern.find(formatted)
             if (match != null) {
                 detailUrl = match.groupValues[1].trim()
-                // Detail 라인 제거
                 formatted = formatted.replace(match.value, "")
                 break
             }
@@ -534,7 +538,7 @@ class ChatService(private val context: Context) {
         formatted = formatted.split("\n")
             .map { it.trim() }
             .filter { it.isNotEmpty() }
-            .joinToString("\n\n")  // 각 항목 사이에 빈 줄 추가
+            .joinToString("\n\n")
 
         // 특정 패턴들을 더 보기 좋게 포맷팅
         formatted = formatted
@@ -574,21 +578,48 @@ class ChatService(private val context: Context) {
             .replace("State:", "📋 상태:")
             .replace("Registration:", "📝 등록방법:")
 
+        // WorkingHours 특별 처리 - 이모지 변환 후에 처리
+        // "주 소정근로시간"이 여러 줄에 걸쳐 있는 경우를 처리
+        if (formatted.contains("주 소정근로시간")) {
+            // 전체 텍스트를 섹션별로 분리하여 처리
+            val sections = formatted.split(Regex("(?=⏰|📍|💼|🏢|📝|📋|📄|⭐|🚌|📞|📅|📊|✅|⏳|🛡|🏥)"))
+            val processedSections = sections.map { section ->
+                if (section.startsWith("⏰ 근무시간:") && section.contains("주 소정근로시간")) {
+                    // "주 소정근로시간" 이전까지만 유지
+                    val sojeongIndex = section.indexOf("주 소정근로시간")
+                    var workingHours = section.substring(0, sojeongIndex).trim()
+
+                    // "(근무시간)" 텍스트 제거
+                    workingHours = workingHours.replace("(근무시간)", "")
+
+                    // "※ 상세 근무시간" 텍스트 제거
+                    workingHours = workingHours.replace("※ 상세 근무시간", "")
+
+                    // 여러 공백 정리 (줄바꿈은 유지)
+                    workingHours = workingHours.replace(Regex(" {2,}"), " ")
+                    workingHours = workingHours.trim()
+
+                    workingHours
+                } else {
+                    section
+                }
+            }
+
+            formatted = processedSections.filter { it.isNotEmpty() }.joinToString("\n\n")
+        }
+
+        // 추가로 단독으로 있는 불필요한 텍스트 제거
+        formatted = formatted.replace("(근무시간)", "")
+        formatted = formatted.replace("※ 상세 근무시간", "")
+
         // Title을 맨 앞에 추가
         val result = StringBuilder()
 
-        // Title이 있으면 맨 먼저 추가
         if (!title.isNullOrEmpty()) {
             result.append("📋 $title\n")
             result.append("\n")
         }
 
-        // Category가 있으면 추가 (선택사항)
-        if (!category.isNullOrEmpty() && category != "N/A") {
-            result.append("📍 지역: $category\n\n")
-        }
-
-        // 나머지 내용 추가
         result.append(formatted)
 
         // 중복된 줄바꿈 다시 한 번 정리
@@ -597,7 +628,7 @@ class ChatService(private val context: Context) {
         // 최종적으로 시작 부분의 공백이나 줄바꿈 제거
         finalResult = finalResult.trim()
 
-        // Detail URL 정보를 특별한 마커로 저장 (나중에 버튼으로 변환하기 위해)
+        // Detail URL 정보를 특별한 마커로 저장
         if (!detailUrl.isNullOrEmpty()) {
             finalResult += "\n\n[DETAIL_URL]$detailUrl[/DETAIL_URL]"
         }
