@@ -22,6 +22,7 @@ import io.github.jan.supabase.gotrue.gotrue
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import io.github.jan.supabase.postgrest.query.Order
+import kotlinx.serialization.json.Json
 
 
 class SupabaseDatabaseHelper(private val context: Context) {
@@ -39,6 +40,12 @@ class SupabaseDatabaseHelper(private val context: Context) {
         install(Postgrest)
         install(GoTrue)
 
+    }
+
+    private val json = Json {
+        ignoreUnknownKeys = true
+        coerceInputValues = true  // null 값을 기본값으로 변환
+        isLenient = true
     }
 
 
@@ -81,6 +88,7 @@ class SupabaseDatabaseHelper(private val context: Context) {
         val user_id: String,
         val application_category: String,
         val application_content: String,
+        val search_history_id: String? = null,  // nullable로 변경
         val created_at: String? = null
     )
 
@@ -252,16 +260,22 @@ class SupabaseDatabaseHelper(private val context: Context) {
     suspend fun saveApplicationHistory(
         userId: String,
         applicationCategory: String,
-        applicationContent: String
+        applicationContent: String,
+        searchHistoryId: String? = null
     ): ApplicationHistory? {
         return try {
             withContext(Dispatchers.IO) {
                 Log.d(TAG, "Saving application history for user: $userId")
+                Log.d(TAG, "Category: $applicationCategory, Content: $applicationContent")
+                Log.d(TAG, "SearchHistory ID: $searchHistoryId")
 
                 val applicationData = buildJsonObject {
                     put("user_id", JsonPrimitive(userId))
                     put("application_category", JsonPrimitive(applicationCategory))
                     put("application_content", JsonPrimitive(applicationContent))
+                    searchHistoryId?.let {
+                        put("search_history_id", JsonPrimitive(it))
+                    }
                 }
 
                 val response = supabase.postgrest["application_history"]
@@ -276,6 +290,7 @@ class SupabaseDatabaseHelper(private val context: Context) {
             null
         }
     }
+
 
     // 사용자의 검색 기록 가져오기
     suspend fun getUserSearchHistory(userId: String): List<SearchHistory> {

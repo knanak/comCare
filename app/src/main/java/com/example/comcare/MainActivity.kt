@@ -3923,11 +3923,15 @@ fun ChatScreen(
                                 Log.d("ChatScreen", "검색 기록 저장 성공: ${searchHistory.id}")
                                 Log.d("ChatScreen", "Query: $queryContent")
                                 Log.d("ChatScreen", "Category: $category, Answer: $answer")
+
+                                // ✅ SearchHistory ID를 ChatService에 저장
+                                activity.chatService.lastSearchHistoryId = searchHistory.id
+                                Log.d("ChatScreen", "Saved SearchHistory ID to ChatService: ${searchHistory.id}")
                             } else {
                                 Log.e("ChatScreen", "검색 기록 저장 실패")
                             }
 
-                            // 저장 후 임시 데이터 초기화
+                            // 저장 후 임시 데이터 초기화 (lastSearchHistoryId는 유지)
                             activity.chatService.lastSearchCategory = null
                             activity.chatService.lastSearchAnswer = null
                             activity.chatService.lastQueryContent = null
@@ -5076,13 +5080,57 @@ private fun sendMessage(
     activity.onMessageSent(messageText, sessionId)
 }
 
+// MainActivity.kt의 MessageItem 수정 부분
+
 @Composable
 fun MessageItem(
     message: ChatMessage,
     navController: NavController,
-    activity: MainActivity  // 파라미터 추가
+    activity: MainActivity
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val supabaseHelper = remember { SupabaseDatabaseHelper(context) }
+
+    // 현재 메시지에서 Title 추출을 위한 변수
+    var messageTitle by remember { mutableStateOf<String?>(null) }
+
+    // 메시지에서 Title 추출 - 다양한 패턴 시도
+    LaunchedEffect(message.text) {
+        // 패턴 1: 📋로 시작하는 Title
+        var titlePattern = """📋\s*(.+?)(?:\n|$)""".toRegex()
+        var titleMatch = titlePattern.find(message.text)
+
+        if (titleMatch != null) {
+            messageTitle = titleMatch.groupValues[1].trim()
+            Log.d("MessageItem", "Title found with 📋: $messageTitle")
+        } else {
+            // 패턴 2: Title: 으로 시작하는 경우
+            titlePattern = """Title:\s*(.+?)(?:\n|$)""".toRegex(RegexOption.IGNORE_CASE)
+            titleMatch = titlePattern.find(message.text)
+
+            if (titleMatch != null) {
+                messageTitle = titleMatch.groupValues[1].trim()
+                Log.d("MessageItem", "Title found with Title:: $messageTitle")
+            } else {
+                // 패턴 3: 🏢로 시작하는 회사명
+                titlePattern = """🏢\s*(.+?)(?:\n|$)""".toRegex()
+                titleMatch = titlePattern.find(message.text)
+
+                if (titleMatch != null) {
+                    messageTitle = titleMatch.groupValues[1].trim()
+                    Log.d("MessageItem", "Title found with 🏢: $messageTitle")
+                } else {
+                    // 패턴 4: 첫 번째 줄을 Title로 사용
+                    val firstLine = message.text.split("\n").firstOrNull()?.trim()
+                    if (!firstLine.isNullOrEmpty() && firstLine.length < 100) {
+                        messageTitle = firstLine
+                        Log.d("MessageItem", "Using first line as title: $messageTitle")
+                    }
+                }
+            }
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -5193,6 +5241,48 @@ fun MessageItem(
                                             lineHeight = 29.sp,
                                             fontWeight = FontWeight.Bold,
                                             modifier = Modifier.clickable {
+                                                Log.d("ApplicationHistory", "Phone clicked: $phoneNumber")
+                                                Log.d("ApplicationHistory", "Title for phone: $messageTitle")
+                                                Log.d("ApplicationHistory", "Current user ID: ${activity.currentUserId}")
+
+                                                // ✅ ChatService에서 lastSearchHistoryId 가져오기
+                                                val searchHistoryId = activity.chatService.lastSearchHistoryId
+                                                Log.d("ApplicationHistory", "Using SearchHistory ID from ChatService: $searchHistoryId")
+
+                                                // ApplicationHistory 저장
+                                                coroutineScope.launch {
+                                                    try {
+                                                        val kakaoId = activity.currentUserId
+                                                        Log.d("ApplicationHistory", "Getting user with kakaoId: $kakaoId")
+
+                                                        val user = supabaseHelper.getUserByKakaoId(kakaoId)
+                                                        Log.d("ApplicationHistory", "User found: ${user?.id}")
+
+                                                        if (user != null && user.id != null) {
+                                                            Log.d("ApplicationHistory", "Saving phone application with SearchHistory ID: $searchHistoryId")
+
+                                                            val applicationHistory = supabaseHelper.saveApplicationHistory(
+                                                                userId = user.id,
+                                                                applicationCategory = "전화",
+                                                                applicationContent = messageTitle ?: phoneNumber,
+                                                                searchHistoryId = searchHistoryId  // ✅ ChatService에서 가져온 ID 사용
+                                                            )
+
+                                                            if (applicationHistory != null) {
+                                                                Log.d("ApplicationHistory", "전화 기록 저장 성공: ${applicationHistory.id}")
+//                                                                Toast.makeText(context, "전화 기록이 저장되었습니다.", Toast.LENGTH_SHORT).show()
+                                                            } else {
+                                                                Log.e("ApplicationHistory", "전화 기록 저장 실패 - null returned")
+                                                            }
+                                                        } else {
+                                                            Log.e("ApplicationHistory", "User not found or user.id is null")
+                                                        }
+                                                    } catch (e: Exception) {
+                                                        Log.e("ApplicationHistory", "전화 기록 저장 실패: ${e.message}", e)
+                                                        e.printStackTrace()
+                                                    }
+                                                }
+
                                                 // 전화번호에서 특수문자 제거
                                                 val cleanNumber = phoneNumber.replace("[^0-9]".toRegex(), "")
 
@@ -5233,6 +5323,36 @@ fun MessageItem(
                                         lineHeight = 29.sp,
                                         fontWeight = FontWeight.Bold,
                                         modifier = Modifier.clickable {
+                                            Log.d("ApplicationHistory", "Phone text clicked: $telContent")
+
+                                            // ApplicationHistory 저장
+                                            coroutineScope.launch {
+                                                try {
+                                                    val kakaoId = activity.currentUserId
+                                                    val user = supabaseHelper.getUserByKakaoId(kakaoId)
+
+                                                    if (user != null && user.id != null) {
+                                                        // 가장 최근의 SearchHistory 찾기
+                                                        val searchHistories = supabaseHelper.getUserSearchHistory(user.id)
+                                                        val recentSearchHistory = searchHistories.firstOrNull()
+
+                                                        val applicationHistory = supabaseHelper.saveApplicationHistory(
+                                                            userId = user.id,
+                                                            applicationCategory = "전화",
+                                                            applicationContent = messageTitle ?: telContent,
+                                                            searchHistoryId = recentSearchHistory?.id
+                                                        )
+
+                                                        if (applicationHistory != null) {
+                                                            Log.d("ApplicationHistory", "전화 기록 저장 성공: ${applicationHistory.id}")
+//                                                            Toast.makeText(context, "전화 기록이 저장되었습니다.", Toast.LENGTH_SHORT).show()
+                                                        }
+                                                    }
+                                                } catch (e: Exception) {
+                                                    Log.e("ApplicationHistory", "전화 기록 저장 실패: ${e.message}", e)
+                                                }
+                                            }
+
                                             // 숫자만 추출
                                             val cleanNumber = telContent.replace("[^0-9]".toRegex(), "")
 
@@ -5291,6 +5411,48 @@ fun MessageItem(
 
                         Button(
                             onClick = {
+                                Log.d("ApplicationHistory", "Apply button clicked")
+                                Log.d("ApplicationHistory", "Title for apply: $messageTitle")
+                                Log.d("ApplicationHistory", "Detail URL: $detailUrl")
+
+                                // ✅ ChatService에서 lastSearchHistoryId 가져오기
+                                val searchHistoryId = activity.chatService.lastSearchHistoryId
+                                Log.d("ApplicationHistory", "Using SearchHistory ID from ChatService: $searchHistoryId")
+
+                                // ApplicationHistory 저장
+                                coroutineScope.launch {
+                                    try {
+                                        val kakaoId = activity.currentUserId
+                                        Log.d("ApplicationHistory", "Getting user with kakaoId: $kakaoId")
+
+                                        val user = supabaseHelper.getUserByKakaoId(kakaoId)
+                                        Log.d("ApplicationHistory", "User found: ${user?.id}")
+
+                                        if (user != null && user.id != null) {
+                                            Log.d("ApplicationHistory", "Saving application with SearchHistory ID: $searchHistoryId")
+
+                                            val applicationHistory = supabaseHelper.saveApplicationHistory(
+                                                userId = user.id,
+                                                applicationCategory = "신청",
+                                                applicationContent = messageTitle ?: "신청 페이지",
+                                                searchHistoryId = searchHistoryId  // ✅ ChatService에서 가져온 ID 사용
+                                            )
+
+                                            if (applicationHistory != null) {
+                                                Log.d("ApplicationHistory", "신청 기록 저장 성공: ${applicationHistory.id}")
+//                                                Toast.makeText(context, "신청 기록이 저장되었습니다.", Toast.LENGTH_SHORT).show()
+                                            } else {
+                                                Log.e("ApplicationHistory", "신청 기록 저장 실패 - null returned")
+                                            }
+                                        } else {
+                                            Log.e("ApplicationHistory", "User not found or user.id is null")
+                                        }
+                                    } catch (e: Exception) {
+                                        Log.e("ApplicationHistory", "신청 기록 저장 실패: ${e.message}", e)
+                                        e.printStackTrace()
+                                    }
+                                }
+
                                 // 네비게이션 전에 현재 상태 저장
                                 activity.chatService.saveNavigationState()
 

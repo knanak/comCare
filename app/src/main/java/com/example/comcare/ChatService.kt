@@ -29,6 +29,9 @@ class ChatService(private val context: Context) {
     private val LAST_REQUEST_DATE_KEY = "last_request_date"
     private val MAX_REQUESTS_PER_DAY = 50
 
+    // 최근 저장된 SearchHistory ID를 저장
+    var lastSearchHistoryId: String? = null
+
     // 현재 검색 결과들을 저장하는 변수
     private var currentResults: JSONArray? = null
     private var currentIndex: Int = 0
