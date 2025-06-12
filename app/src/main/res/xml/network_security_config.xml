@@ -5,6 +5,7 @@
         <domain-config cleartextTrafficPermitted="true">
             <domain includeSubdomains="true">openapi.seoul.go.kr</domain>
             <domain includeSubdomains="true">192.168.219.100</domain>
+            <domain includeSubdomains="true">192.168.219.101</domain>
             <domain includeSubdomains="true">192.168.219.102</domain>
         </domain-config>
     </network-security-config>

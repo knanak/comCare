@@ -21,7 +21,7 @@ import com.example.comcare.OPEN_API_KEY
 
 class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewModel() {
     // 미리 정의된 도시와 구/군 데이터
-    private val predefinedCities = listOf("전체", "서울특별시", "경기도", "인천광역시")
+    private val predefinedCities = listOf("전체", "서울특별시", "경기도", "인천광역시", "부산광역시", "경상북도")
 
     private val predefinedDistricts = mapOf(
         "전체" to listOf("전체"),
@@ -43,6 +43,18 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
         "인천광역시" to listOf(
             "전체", "강화군", "계양구", "남동구", "동구", "미추홀구",
             "부평구", "서구", "연수구", "옹진군", "중구"
+        ),
+        "부산광역시" to listOf(
+            "전체", "강서구", "금정구", "기장군", "남구", "동구",
+            "동래구", "부산진구", "북구", "사상구", "사하구",
+            "서구", "수영구", "연제구", "영도구", "중구", "해운대구"
+        ),
+        "경상북도" to listOf(
+            "전체", "경산시", "경주시", "고령군", "구미시", "군위군",
+            "김천시", "문경시", "봉화군", "상주시", "성주군",
+            "안동시", "영덕군", "영양군", "영주시", "영천시",
+            "예천군", "울릉군", "울진군", "의성군", "청도군",
+            "청송군", "칠곡군", "포항시"
         )
     )
 
@@ -181,6 +193,28 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
     private val _isLoadingICHFacility2s = mutableStateOf<Boolean>(false)
     val isLoadingICHFacility2s: Boolean
         get() = _isLoadingICHFacility2s.value
+
+
+    private val _bsJobs = mutableStateOf<List<SupabaseDatabaseHelper.BSJob>>(emptyList())
+    val bsJobs: State<List<SupabaseDatabaseHelper.BSJob>> = _bsJobs
+
+    private val _filteredBSJobs = mutableStateOf<List<SupabaseDatabaseHelper.BSJob>>(emptyList())
+    val filteredBSJobs: State<List<SupabaseDatabaseHelper.BSJob>> = _filteredBSJobs
+
+    private val _isLoadingBSJobs = mutableStateOf<Boolean>(false)
+    val isLoadingBSJobs: Boolean
+        get() = _isLoadingBSJobs.value
+
+    // 3. KB_Job 관련 상태 추가
+    private val _kbJobs = mutableStateOf<List<SupabaseDatabaseHelper.KBJob>>(emptyList())
+    val kbJobs: State<List<SupabaseDatabaseHelper.KBJob>> = _kbJobs
+
+    private val _filteredKBJobs = mutableStateOf<List<SupabaseDatabaseHelper.KBJob>>(emptyList())
+    val filteredKBJobs: State<List<SupabaseDatabaseHelper.KBJob>> = _filteredKBJobs
+
+    private val _isLoadingKBJobs = mutableStateOf<Boolean>(false)
+    val isLoadingKBJobs: Boolean
+        get() = _isLoadingKBJobs.value
     init {
         // Fetch data when ViewModel is initialized
         fetchPlacesData()
@@ -194,6 +228,8 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
         fetchICHFacility2sData()
         fetchICHJobsData()
         fetchICHCulturesData()
+        fetchBSJobsData()
+        fetchKBJobsData()
     }
 
     // 사용자 위치 설정 함수 추가
@@ -1618,6 +1654,169 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
         Log.d("PlaceViewModel", "Filtered ich_jobs: ${_filteredICHJobs.value.size} of ${_ichJobs.value.size}")
     }
 
+    fun fetchBSJobsData() {
+        viewModelScope.launch {
+            try {
+                Log.d("PlaceViewModel", "Starting bs_jobs data fetch")
+                _isLoadingBSJobs.value = true
+
+                val bsJobsData = withContext(Dispatchers.IO) {
+                    try {
+                        val bsJobs = supabaseHelper.getBSJobs()
+                        Log.d("PlaceViewModel", "Supabase getBSJobs returned ${bsJobs.size} items")
+
+                        if (bsJobs.isEmpty()) {
+                            Log.d("PlaceViewModel", "Supabase bs_jobs returned empty list")
+                        } else {
+                            // Log first bs_job for debugging
+                            val firstBSJob = bsJobs.firstOrNull()
+                            if (firstBSJob != null) {
+                                Log.d(
+                                    "PlaceViewModel", "Sample bs_job data: Id=${firstBSJob.Id}, " +
+                                            "title=${firstBSJob.Title}, " +
+                                            "category=${firstBSJob.Category}, " +
+                                            "location=${firstBSJob.Address}"
+                                )
+                            }
+                        }
+                        bsJobs
+                    } catch (e: Exception) {
+                        Log.e(
+                            "PlaceViewModel",
+                            "Error in getBSJobs Dispatchers.IO block: ${e.message}",
+                            e
+                        )
+                        emptyList()
+                    }
+                }
+
+                // Update the bs_jobs value with the fetched data
+                _bsJobs.value = bsJobsData
+                _filteredBSJobs.value = bsJobsData
+
+                Log.d("PlaceViewModel", "BS_Jobs data fetch complete: ${bsJobsData.size} items")
+            } catch (e: Exception) {
+                Log.e("PlaceViewModel", "Error fetching bs_jobs data: ${e.message}", e)
+                _bsJobs.value = emptyList()
+                _filteredBSJobs.value = emptyList()
+            } finally {
+                _isLoadingBSJobs.value = false
+            }
+        }
+    }
+
+    // 6. KB_Jobs 데이터 가져오기 함수
+    fun fetchKBJobsData() {
+        viewModelScope.launch {
+            try {
+                Log.d("PlaceViewModel", "Starting kb_jobs data fetch")
+                _isLoadingKBJobs.value = true
+
+                val kbJobsData = withContext(Dispatchers.IO) {
+                    try {
+                        val kbJobs = supabaseHelper.getKBJobs()
+                        Log.d("PlaceViewModel", "Supabase getKBJobs returned ${kbJobs.size} items")
+
+                        if (kbJobs.isEmpty()) {
+                            Log.d("PlaceViewModel", "Supabase kb_jobs returned empty list")
+                        } else {
+                            // Log first kb_job for debugging
+                            val firstKBJob = kbJobs.firstOrNull()
+                            if (firstKBJob != null) {
+                                Log.d(
+                                    "PlaceViewModel", "Sample kb_job data: Id=${firstKBJob.Id}, " +
+                                            "title=${firstKBJob.Title}, " +
+                                            "category=${firstKBJob.Category}, " +
+                                            "location=${firstKBJob.Address}"
+                                )
+                            }
+                        }
+                        kbJobs
+                    } catch (e: Exception) {
+                        Log.e(
+                            "PlaceViewModel",
+                            "Error in getKBJobs Dispatchers.IO block: ${e.message}",
+                            e
+                        )
+                        emptyList()
+                    }
+                }
+
+                // Update the kb_jobs value with the fetched data
+                _kbJobs.value = kbJobsData
+                _filteredKBJobs.value = kbJobsData
+
+                Log.d("PlaceViewModel", "KB_Jobs data fetch complete: ${kbJobsData.size} items")
+            } catch (e: Exception) {
+                Log.e("PlaceViewModel", "Error fetching kb_jobs data: ${e.message}", e)
+                _kbJobs.value = emptyList()
+                _filteredKBJobs.value = emptyList()
+            } finally {
+                _isLoadingKBJobs.value = false
+            }
+        }
+    }
+
+    // 7. BS_Jobs 필터링 함수
+    fun filterBSJobs(selectedCity: String, selectedDistrict: String) {
+        if (_bsJobs.value.isEmpty()) {
+            _filteredBSJobs.value = emptyList()
+            return
+        }
+
+        Log.d("PlaceViewModel", "Filtering bs_jobs with city='$selectedCity', district='$selectedDistrict'")
+
+        _filteredBSJobs.value = _bsJobs.value.filter { bsJob ->
+            val location = bsJob.Address ?: ""
+            val addressParts = location.trim().split(" ")
+
+            // Extract city and district from the location
+            val jobCity = if (addressParts.isNotEmpty()) addressParts[0] else ""
+            val jobDistrict = if (addressParts.size > 1) addressParts[1] else ""
+
+            // City filtering
+            val cityMatch = selectedCity == "전체" || jobCity == selectedCity
+
+            // District filtering
+            val districtMatch = selectedDistrict == "전체" || jobDistrict == selectedDistrict
+
+            // Both conditions must match
+            cityMatch && districtMatch
+        }
+
+        Log.d("PlaceViewModel", "Filtered bs_jobs: ${_filteredBSJobs.value.size} of ${_bsJobs.value.size}")
+    }
+
+    // 8. KB_Jobs 필터링 함수
+    fun filterKBJobs(selectedCity: String, selectedDistrict: String) {
+        if (_kbJobs.value.isEmpty()) {
+            _filteredKBJobs.value = emptyList()
+            return
+        }
+
+        Log.d("PlaceViewModel", "Filtering kb_jobs with city='$selectedCity', district='$selectedDistrict'")
+
+        _filteredKBJobs.value = _kbJobs.value.filter { kbJob ->
+            val location = kbJob.Address ?: ""
+            val addressParts = location.trim().split(" ")
+
+            // Extract city and district from the location
+            val jobCity = if (addressParts.isNotEmpty()) addressParts[0] else ""
+            val jobDistrict = if (addressParts.size > 1) addressParts[1] else ""
+
+            // City filtering
+            val cityMatch = selectedCity == "전체" || jobCity == selectedCity
+
+            // District filtering
+            val districtMatch = selectedDistrict == "전체" || jobDistrict == selectedDistrict
+
+            // Both conditions must match
+            cityMatch && districtMatch
+        }
+
+        Log.d("PlaceViewModel", "Filtered kb_jobs: ${_filteredKBJobs.value.size} of ${_kbJobs.value.size}")
+    }
+
     // 통합 필터링 함수
     fun filterAllJobs(selectedCity: String, selectedDistrict: String) {
         // Regular jobs 필터링
@@ -1629,12 +1828,21 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
         // ICH_Jobs 필터링
         filterICHJobs(selectedCity, selectedDistrict)
 
-        Log.d("PlaceViewModel", "Filtered all jobs - Regular: ${_filteredJobs.value.size}, KK: ${_filteredKKJobs.value.size}, ICH: ${_filteredICHJobs.value.size}")
+        // BS_Jobs 필터링
+        filterBSJobs(selectedCity, selectedDistrict)
+
+        // KB_Jobs 필터링
+        filterKBJobs(selectedCity, selectedDistrict)
+
+        Log.d("PlaceViewModel", "Filtered all jobs - Regular: ${_filteredJobs.value.size}, " +
+                "KK: ${_filteredKKJobs.value.size}, ICH: ${_filteredICHJobs.value.size}, " +
+                "BS: ${_filteredBSJobs.value.size}, KB: ${_filteredKBJobs.value.size}")
     }
 
-    // 통합된 필터링된 일자리 개수를 반환하는 함수 수정
+    // 10. getTotalFilteredJobsCount 함수 수정 - BS_Jobs와 KB_Jobs 포함
     fun getTotalFilteredJobsCount(): Int {
-        return _filteredJobs.value.size + _filteredKKJobs.value.size + _filteredICHJobs.value.size
+        return _filteredJobs.value.size + _filteredKKJobs.value.size + _filteredICHJobs.value.size +
+                _filteredBSJobs.value.size + _filteredKBJobs.value.size
     }
 
     fun fetchKKCulturesData() {
@@ -1930,11 +2138,23 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
                 val location = ichJob.Address ?: ""
                 location.contains(userCity) && location.contains(userDistrict)
             }.forEach { filteredJobs.add(it) }
+
+            // BS jobs 필터링
+            _bsJobs.value.filter { bsJob ->
+                val location = bsJob.Address ?: ""
+                location.contains(userCity) && location.contains(userDistrict)
+            }.forEach { filteredJobs.add(it) }
+
+            // KB jobs 필터링
+            _kbJobs.value.filter { kbJob ->
+                val location = kbJob.Address ?: ""
+                location.contains(userCity) && location.contains(userDistrict)
+            }.forEach { filteredJobs.add(it) }
         }
 
         return if (filteredJobs.isEmpty()) {
             // 해당 지역에 데이터가 없으면 전체 데이터 반환
-            (_jobs.value + _kkJobs.value + _ichJobs.value)
+            (_jobs.value + _kkJobs.value + _ichJobs.value + _bsJobs.value + _kbJobs.value)
         } else {
             filteredJobs
         }

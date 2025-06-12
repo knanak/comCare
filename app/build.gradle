@@ -12,13 +12,14 @@ android {
         applicationId "chatGPT_for_senior.myapplication"
         minSdk 24
         targetSdk 34
-        versionCode 10
-        versionName "10.0"
+        versionCode 14
+        versionName "14"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary true
         }
+
 
     }
 
@@ -104,6 +105,7 @@ dependencies {
     implementation "androidx.compose.material:material-icons-extended:1.5.4"
 
     implementation 'com.google.android.gms:play-services-location:21.0.1'
+//    implementation 'com.google.android.gms:play-services-ads:22.5.0'
 
     implementation "com.kakao.sdk:v2-user:2.21.3"
 

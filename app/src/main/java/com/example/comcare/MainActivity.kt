@@ -2206,9 +2206,6 @@ fun PlaceComparisonApp(
                 }
             }
 
-
-// MainActivity.kt의 jobs 섹션 수정 부분
-
             "jobs" -> {
                 // Jobs content with pagination
                 Column(modifier = Modifier.fillMaxSize()) {
@@ -2362,10 +2359,12 @@ fun PlaceComparisonApp(
                     // Jobs list with pagination
                     val regularJobs = viewModel.filteredJobs.value
                     val kkJobs = viewModel.filteredKKJobs.value
-                    val ichJobs = viewModel.filteredICHJobs.value  // ICH jobs 추가
+                    val ichJobs = viewModel.filteredICHJobs.value
+                    val bsJobs = viewModel.filteredBSJobs.value  // BS jobs 추가
+                    val kbJobs = viewModel.filteredKBJobs.value  // KB jobs 추가
 
-                    // 통합된 일자리 리스트 생성 (ICH jobs 포함)
-                    val allJobs = regularJobs + kkJobs + ichJobs
+                    // 통합된 일자리 리스트 생성 (BS, KB jobs 포함)
+                    val allJobs = regularJobs + kkJobs + ichJobs + bsJobs + kbJobs
 
                     if (allJobs.isNotEmpty()) {
                         // Pagination state
@@ -2397,7 +2396,9 @@ fun PlaceComparisonApp(
                                         when (job) {
                                             is SupabaseDatabaseHelper.Job -> JobCard(job = job)
                                             is SupabaseDatabaseHelper.KKJob -> KKJobCard(kkJob = job)
-                                            is SupabaseDatabaseHelper.ICHJob -> ICHJobCard(ichJob = job)  // ICH job card 추가
+                                            is SupabaseDatabaseHelper.ICHJob -> ICHJobCard(ichJob = job)
+                                            is SupabaseDatabaseHelper.BSJob -> BSJobCard(bsJob = job)  // BS job card 추가
+                                            is SupabaseDatabaseHelper.KBJob -> KBJobCard(kbJob = job)  // KB job card 추가
                                         }
                                         Spacer(modifier = Modifier.height(8.dp))
                                     }
@@ -2461,7 +2462,8 @@ fun PlaceComparisonApp(
                                 }
                             }
                         }
-                    } else if (viewModel.isLoading || viewModel.isLoadingKKJobs || viewModel.isLoadingICHJobs) {  // ICH jobs 로딩 상태 추가
+                    } else if (viewModel.isLoading || viewModel.isLoadingKKJobs || viewModel.isLoadingICHJobs ||
+                        viewModel.isLoadingBSJobs || viewModel.isLoadingKBJobs) {  // BS, KB jobs 로딩 상태 추가
                         // Show loading indicator
                         Box(
                             modifier = Modifier.fillMaxSize(),
@@ -3289,6 +3291,208 @@ fun ICHJobCard(ichJob: SupabaseDatabaseHelper.ICHJob) {
                 Button(
                     onClick = {
                         ichJob.Detail?.let { url ->
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                            context.startActivity(intent)
+                        } ?: run {
+                            Toast.makeText(context, "신청 페이지 정보가 없습니다", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Yellow,
+                        contentColor = Color.Black
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        "신청",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+            }
+        }
+    }
+}
+
+// MainActivity.kt에 추가할 JobCard 컴포저블
+
+@Composable
+fun BSJobCard(bsJob: SupabaseDatabaseHelper.BSJob) {
+    val context = LocalContext.current
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Job Title
+            Text(
+                text = bsJob.Title ?: "제목 없음",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = Color.Yellow,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Location
+            Row {
+                Text(
+                    "위치: ",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    bsJob.Address ?: "정보 없음",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Working Hours
+            if (!bsJob.WorkingHours.isNullOrEmpty()) {
+                Row {
+                    Text(
+                        "근무시간: ",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        bsJob.WorkingHours,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+            }
+
+            // Salary
+            bsJob.Salary?.let { salary ->
+                Row {
+                    Text(
+                        "급여: ",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        salary,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+            }
+
+            // Apply button aligned to the right
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                Button(
+                    onClick = {
+                        bsJob.Detail?.let { url ->
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                            context.startActivity(intent)
+                        } ?: run {
+                            Toast.makeText(context, "신청 페이지 정보가 없습니다", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Yellow,
+                        contentColor = Color.Black
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        "신청",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun KBJobCard(kbJob: SupabaseDatabaseHelper.KBJob) {
+    val context = LocalContext.current
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Job Title
+            Text(
+                text = kbJob.Title ?: "제목 없음",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = Color.Yellow,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Location
+            Row {
+                Text(
+                    "위치: ",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    kbJob.Address ?: "정보 없음",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Working Hours
+            if (!kbJob.WorkingHours.isNullOrEmpty()) {
+                Row {
+                    Text(
+                        "근무시간: ",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        kbJob.WorkingHours,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+            }
+
+            // Salary
+            kbJob.Salary?.let { salary ->
+                Row {
+                    Text(
+                        "급여: ",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        salary,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+            }
+
+            // Apply button aligned to the right
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                Button(
+                    onClick = {
+                        kbJob.Detail?.let { url ->
                             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
                             context.startActivity(intent)
                         } ?: run {
@@ -4373,8 +4577,8 @@ fun ChatScreen(
                                             // 요청 전에 카운트 증가
                                             RequestCounterHelper.incrementRequestCount()
 
-//                                            val url = URL("http://192.168.219.100:5000/explore")
-                                            val url = URL("https://coral-app-fjt8m.ondigitalocean.app/explore")
+                                            val url = URL("http://192.168.219.101:5000/explore")
+//                                            val url = URL("https://coral-app-fjt8m.ondigitalocean.app/explore")
                                             val connection =
                                                 url.openConnection() as HttpURLConnection
                                             connection.requestMethod = "POST"
