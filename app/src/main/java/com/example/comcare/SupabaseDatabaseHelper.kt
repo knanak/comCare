@@ -2399,4 +2399,350 @@ class SupabaseDatabaseHelper(private val context: Context) {
             null
         }
     }
+
+    // SupabaseDatabaseHelper.kt에 추가할 내용
+
+    // 12. BS_Culture data (부산광역시 문화강좌 데이터)
+    @Serializable
+    data class BSCulture(
+        val Id: Int,
+        val Title: String? = null,
+        val Recruitment_period: String? = null,
+        val Education_period: String? = null,
+        val Date: String? = null,
+        val Quota: String? = null,
+        val Institution: String? = null,
+        val Address: String? = null,
+        val Tel: String? = null,
+        val Category: String? = null,
+        val Fee: String? = null,
+        val Detail: String? = null
+    )
+
+    suspend fun getBSCultures(): List<BSCulture> {
+        return try {
+            Log.d("supabase", "Starting getBSCultures")
+
+            withContext(Dispatchers.IO) {
+                try {
+                    // First get the total count
+                    val totalCount = supabase.postgrest["bs_culture"]
+                        .select(head = true, count = Count.EXACT)
+                        .count() ?: 0L
+
+                    Log.d("supabase", "Total count of bs_cultures: $totalCount")
+
+                    if (totalCount == 0L) {
+                        Log.d("supabase", "No cultures found in the 'bs_culture' table")
+                        return@withContext emptyList<BSCulture>()
+                    }
+
+                    // Use the same approach - first make a test request
+                    val testBatch = supabase.postgrest["bs_culture"]
+                        .select()
+                        .decodeList<BSCulture>()
+
+                    // The batch size is whatever limit Supabase applied to our first request
+                    val batchSize = testBatch.size
+                    Log.d("supabase", "Detected batch size from Supabase: $batchSize")
+
+                    // Now we know the batch size, fetch all records
+                    val allBSCultures = mutableListOf<BSCulture>()
+
+                    // Clean the test batch data
+                    val cleanedFirstBatch = testBatch.map { bsCulture ->
+                        // Remove newlines from period fields
+                        val cleanedRecruitmentPeriod = bsCulture.Recruitment_period?.replace("\n", "")
+                        val cleanedEducationPeriod = bsCulture.Education_period?.replace("\n", "")
+
+                        bsCulture.copy(
+                            Recruitment_period = cleanedRecruitmentPeriod,
+                            Education_period = cleanedEducationPeriod
+                        )
+                    }
+
+                    // Add the cleaned first batch
+                    allBSCultures.addAll(cleanedFirstBatch)
+
+                    var currentStart = batchSize
+
+                    // Continue fetching until we have all records
+                    while (currentStart < totalCount) {
+                        val currentEnd = currentStart + batchSize - 1
+                        Log.d("supabase", "Fetching bs_cultures batch: $currentStart to $currentEnd")
+
+                        try {
+                            // Fetch a batch using range
+                            val batch = supabase.postgrest["bs_culture"]
+                                .select(filter = {
+                                    range(from = currentStart.toLong(), to = currentEnd.toLong())
+                                })
+                                .decodeList<BSCulture>()
+
+                            Log.d("supabase", "Fetched batch of ${batch.size} bs_cultures")
+
+                            // Clean the batch data
+                            val cleanedBatch = batch.map { bsCulture ->
+                                // Remove newlines from period fields
+                                val cleanedRecruitmentPeriod = bsCulture.Recruitment_period?.replace("\n", "")
+                                val cleanedEducationPeriod = bsCulture.Education_period?.replace("\n", "")
+
+                                bsCulture.copy(
+                                    Recruitment_period = cleanedRecruitmentPeriod,
+                                    Education_period = cleanedEducationPeriod
+                                )
+                            }
+
+                            allBSCultures.addAll(cleanedBatch)
+
+                            // If we got an empty batch or fewer items than requested, we might be done
+                            if (batch.isEmpty() || batch.size < batchSize) {
+                                break
+                            }
+
+                            // Move to next batch
+                            currentStart += batchSize
+                        } catch (e: Exception) {
+                            Log.e("supabase", "Error fetching bs_cultures batch $currentStart-$currentEnd: ${e.message}", e)
+                            e.printStackTrace()
+                            // Continue to next batch despite error
+                            currentStart += batchSize
+                        }
+                    }
+
+                    Log.d("supabase", "Retrieved ${allBSCultures.size} bs_cultures out of $totalCount total")
+
+                    // Verify we got all records
+                    if (allBSCultures.size < totalCount) {
+                        Log.w("supabase", "Warning: Retrieved fewer records than expected (${allBSCultures.size} vs $totalCount)")
+                    }
+
+                    // Log a sample culture for debugging
+                    if (allBSCultures.isNotEmpty()) {
+                        val sample = allBSCultures.first()
+                        Log.d("supabase", "Sample bs_culture: id=${sample.Id}, " +
+                                "title=${sample.Title}, " +
+                                "institution=${sample.Institution}, " +
+                                "address=${sample.Address}, " +
+                                "category=${sample.Category}")
+                    }
+
+                    allBSCultures
+                } catch (e: Exception) {
+                    Log.e("supabase", "Error in getBSCultures inner block: ${e.message}", e)
+                    e.printStackTrace()
+                    emptyList()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("supabase", "Error in getBSCultures: ${e.message}", e)
+            e.printStackTrace()
+            emptyList()
+        }
+    }
+
+    // Also add a function to get a specific bs_culture by ID
+    suspend fun getBSCultureById(bsCultureId: Int): BSCulture? {
+        return try {
+            withContext(Dispatchers.IO) {
+                val response = supabase.postgrest.from("bs_culture")
+                    .select(
+                        filter = {
+                            eq("id", bsCultureId)
+                        }
+                    )
+                    .decodeSingleOrNull<BSCulture>()
+
+                if (response != null) {
+                    Log.d(TAG, "Retrieved bs_culture with ID: $bsCultureId")
+
+                    // Clean the period fields if present
+                    val cleanedRecruitmentPeriod = response.Recruitment_period?.replace("\n", "")
+                    val cleanedEducationPeriod = response.Education_period?.replace("\n", "")
+
+                    response.copy(
+                        Recruitment_period = cleanedRecruitmentPeriod,
+                        Education_period = cleanedEducationPeriod
+                    )
+                } else {
+                    Log.d(TAG, "No bs_culture found with ID: $bsCultureId")
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching bs_culture by ID: ${e.message}")
+            null
+        }
+    }
+
+    // 13. KB_Culture data (경상북도 문화강좌 데이터)
+    @Serializable
+    data class KBCulture(
+        val Id: Int,
+        val Title: String? = null,
+        val Education_period: String? = null,
+        val Quota: String? = null,
+        val Fee: String? = null,
+        val Address: String? = null,
+        val Category: String? = null,
+        val Detail: String? = null,
+        val Recruitment_period: String? = null,
+        val Institution: String? = null
+    )
+
+    suspend fun getKBCultures(): List<KBCulture> {
+        return try {
+            Log.d("supabase", "Starting getKBCultures")
+
+            withContext(Dispatchers.IO) {
+                try {
+                    // First get the total count
+                    val totalCount = supabase.postgrest["kb_culture"]
+                        .select(head = true, count = Count.EXACT)
+                        .count() ?: 0L
+
+                    Log.d("supabase", "Total count of kb_cultures: $totalCount")
+
+                    if (totalCount == 0L) {
+                        Log.d("supabase", "No cultures found in the 'kb_culture' table")
+                        return@withContext emptyList<KBCulture>()
+                    }
+
+                    // Use the same approach - first make a test request
+                    val testBatch = supabase.postgrest["kb_culture"]
+                        .select()
+                        .decodeList<KBCulture>()
+
+                    // The batch size is whatever limit Supabase applied to our first request
+                    val batchSize = testBatch.size
+                    Log.d("supabase", "Detected batch size from Supabase: $batchSize")
+
+                    // Now we know the batch size, fetch all records
+                    val allKBCultures = mutableListOf<KBCulture>()
+
+                    // Clean the test batch data
+                    val cleanedFirstBatch = testBatch.map { kbCulture ->
+                        // Remove newlines from period fields
+                        val cleanedRecruitmentPeriod = kbCulture.Recruitment_period?.replace("\n", "")
+                        val cleanedEducationPeriod = kbCulture.Education_period?.replace("\n", "")
+
+                        kbCulture.copy(
+                            Recruitment_period = cleanedRecruitmentPeriod,
+                            Education_period = cleanedEducationPeriod
+                        )
+                    }
+
+                    // Add the cleaned first batch
+                    allKBCultures.addAll(cleanedFirstBatch)
+
+                    var currentStart = batchSize
+
+                    // Continue fetching until we have all records
+                    while (currentStart < totalCount) {
+                        val currentEnd = currentStart + batchSize - 1
+                        Log.d("supabase", "Fetching kb_cultures batch: $currentStart to $currentEnd")
+
+                        try {
+                            // Fetch a batch using range
+                            val batch = supabase.postgrest["kb_culture"]
+                                .select(filter = {
+                                    range(from = currentStart.toLong(), to = currentEnd.toLong())
+                                })
+                                .decodeList<KBCulture>()
+
+                            Log.d("supabase", "Fetched batch of ${batch.size} kb_cultures")
+
+                            // Clean the batch data
+                            val cleanedBatch = batch.map { kbCulture ->
+                                // Remove newlines from period fields
+                                val cleanedRecruitmentPeriod = kbCulture.Recruitment_period?.replace("\n", "")
+                                val cleanedEducationPeriod = kbCulture.Education_period?.replace("\n", "")
+
+                                kbCulture.copy(
+                                    Recruitment_period = cleanedRecruitmentPeriod,
+                                    Education_period = cleanedEducationPeriod
+                                )
+                            }
+
+                            allKBCultures.addAll(cleanedBatch)
+
+                            // If we got an empty batch or fewer items than requested, we might be done
+                            if (batch.isEmpty() || batch.size < batchSize) {
+                                break
+                            }
+
+                            // Move to next batch
+                            currentStart += batchSize
+                        } catch (e: Exception) {
+                            Log.e("supabase", "Error fetching kb_cultures batch $currentStart-$currentEnd: ${e.message}", e)
+                            e.printStackTrace()
+                            // Continue to next batch despite error
+                            currentStart += batchSize
+                        }
+                    }
+
+                    Log.d("supabase", "Retrieved ${allKBCultures.size} kb_cultures out of $totalCount total")
+
+                    // Verify we got all records
+                    if (allKBCultures.size < totalCount) {
+                        Log.w("supabase", "Warning: Retrieved fewer records than expected (${allKBCultures.size} vs $totalCount)")
+                    }
+
+                    // Log a sample culture for debugging
+                    if (allKBCultures.isNotEmpty()) {
+                        val sample = allKBCultures.first()
+                        Log.d("supabase", "Sample kb_culture: id=${sample.Id}, " +
+                                "title=${sample.Title}, " +
+                                "institution=${sample.Institution}, " +
+                                "address=${sample.Address}, " +
+                                "category=${sample.Category}")
+                    }
+
+                    allKBCultures
+                } catch (e: Exception) {
+                    Log.e("supabase", "Error in getKBCultures inner block: ${e.message}", e)
+                    e.printStackTrace()
+                    emptyList()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("supabase", "Error in getKBCultures: ${e.message}", e)
+            e.printStackTrace()
+            emptyList()
+        }
+    }
+
+    // Also add a function to get a specific kb_culture by ID
+    suspend fun getKBCultureById(kbCultureId: Int): KBCulture? {
+        return try {
+            withContext(Dispatchers.IO) {
+                val response = supabase.postgrest.from("kb_culture")
+                    .select(
+                        filter = {
+                            eq("id", kbCultureId)
+                        }
+                    )
+                    .decodeSingleOrNull<KBCulture>()
+
+                if (response != null) {
+                    Log.d(TAG, "Retrieved kb_culture with ID: $kbCultureId")
+
+                    // Clean the period fields if present
+                    val cleanedRecruitmentPeriod = response.Recruitment_period?.replace("\n", "")
+                    val cleanedEducationPeriod = response.Education_period?.replace("\n", "")
+
+                    response.copy(
+                        Recruitment_period = cleanedRecruitmentPeriod,
+                        Education_period = cleanedEducationPeriod
+                    )
+                } else {
+                    Log.d(TAG, "No kb_culture found with ID: $kbCultureId")
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching kb_culture by ID: ${e.message}")
+            null
+        }
+    }
 }

@@ -2480,6 +2480,8 @@ fun PlaceComparisonApp(
             }
 
 
+// MainActivity.kt의 culture 섹션 수정 부분
+
             "culture" -> {
                 // Lectures content with pagination
                 Column(modifier = Modifier.fillMaxSize()) {
@@ -2630,13 +2632,15 @@ fun PlaceComparisonApp(
 
                     Divider(modifier = Modifier.padding(horizontal = 16.dp))
 
-                    // 통합된 문화 강좌 리스트 (lectures + kk_cultures)
+                    // 통합된 문화 강좌 리스트 (lectures + kk_cultures + ich_cultures + bs_cultures + kb_cultures)
                     val regularLectures = viewModel.filteredLectures.value
                     val kkCultures = viewModel.filteredKKCultures.value
                     val ichCultures = viewModel.filteredICHCultures.value
+                    val bsCultures = viewModel.filteredBSCultures.value  // BS cultures 추가
+                    val kbCultures = viewModel.filteredKBCultures.value  // KB cultures 추가
 
                     // 통합된 문화 강좌 리스트 생성
-                    val allCultures = regularLectures + kkCultures + ichCultures
+                    val allCultures = regularLectures + kkCultures + ichCultures + bsCultures + kbCultures
 
                     if (allCultures.isNotEmpty()) {
                         // Pagination state
@@ -2669,6 +2673,8 @@ fun PlaceComparisonApp(
                                             is SupabaseDatabaseHelper.Lecture -> LectureCard(lecture = culture)
                                             is SupabaseDatabaseHelper.KKCulture -> KKCultureCard(kkCulture = culture)
                                             is SupabaseDatabaseHelper.ICHCulture -> ICHCultureCard(ichCulture = culture)
+                                            is SupabaseDatabaseHelper.BSCulture -> BSCultureCard(bsCulture = culture)  // BS culture card 추가
+                                            is SupabaseDatabaseHelper.KBCulture -> KBCultureCard(kbCulture = culture)  // KB culture card 추가
                                         }
                                         Spacer(modifier = Modifier.height(8.dp))
                                     }
@@ -2731,7 +2737,8 @@ fun PlaceComparisonApp(
                                 }
                             }
                         }
-                    } else if (viewModel.isLoadingLectures || viewModel.isLoadingKKCultures || viewModel.isLoadingICHCultures)  {
+                    } else if (viewModel.isLoadingLectures || viewModel.isLoadingKKCultures || viewModel.isLoadingICHCultures ||
+                        viewModel.isLoadingBSCultures || viewModel.isLoadingKBCultures) {  // BS, KB cultures 로딩 상태 추가
                         // Show loading indicator
                         Box(
                             modifier = Modifier.fillMaxSize(),
@@ -2757,6 +2764,8 @@ fun PlaceComparisonApp(
                                         viewModel.fetchLectureData()
                                         viewModel.fetchKKCulturesData()
                                         viewModel.fetchICHCulturesData()
+                                        viewModel.fetchBSCulturesData()  // BS cultures fetch 추가
+                                        viewModel.fetchKBCulturesData()  // KB cultures fetch 추가
                                     },
                                     colors = ButtonDefaults.buttonColors(
                                         containerColor = Color(0xFFc6f584),
@@ -3900,6 +3909,274 @@ fun ICHCultureCard(ichCulture: SupabaseDatabaseHelper.ICHCulture) {
                 Button(
                     onClick = {
                         ichCulture.Detail?.let { url ->
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                            context.startActivity(intent)
+                        } ?: run {
+                            Toast.makeText(context, "신청 페이지 정보가 없습니다", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Yellow,
+                        contentColor = Color.Black
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        "신청",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+            }
+        }
+    }
+}
+
+// MainActivity.kt에 추가할 CultureCard 컴포저블
+
+// MainActivity.kt에 추가할 CultureCard 컴포저블
+
+@Composable
+fun BSCultureCard(bsCulture: SupabaseDatabaseHelper.BSCulture) {
+    val context = LocalContext.current
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Culture Title
+            Text(
+                text = bsCulture.Title ?: "강좌명 없음",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = Color.Yellow,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Institution
+            Text(
+                text = "기관: ${bsCulture.Institution ?: "정보 없음"}",
+                style = MaterialTheme.typography.titleMedium
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Address
+            bsCulture.Address?.let { address ->
+                Text(
+                    text = "위치: $address",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+            }
+
+            // Category (이제 지역 정보로 표시)
+            bsCulture.Category?.let { category ->
+                Text(
+                    text = "지역: 부산광역시 $category",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+            }
+
+            // Recruitment Period
+            Row {
+                Text(
+                    "모집기간: ",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    bsCulture.Recruitment_period ?: "정보 없음",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Education Period
+            Row {
+                Text(
+                    "교육기간: ",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    bsCulture.Education_period ?: "정보 없음",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Date (교육 날짜)
+            bsCulture.Date?.let { date ->
+                Row {
+                    Text(
+                        "교육일시: ",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        date,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+            }
+
+            // Fee
+            Text(
+                "수강료: ${bsCulture.Fee ?: "무료"}",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+
+            // Tel if available
+            bsCulture.Tel?.let { tel ->
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "연락처: $tel",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Apply button aligned to the right
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                Button(
+                    onClick = {
+                        bsCulture.Detail?.let { url ->
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                            context.startActivity(intent)
+                        } ?: run {
+                            Toast.makeText(context, "신청 페이지 정보가 없습니다", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Yellow,
+                        contentColor = Color.Black
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        "신청",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun KBCultureCard(kbCulture: SupabaseDatabaseHelper.KBCulture) {
+    val context = LocalContext.current
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Culture Title
+            Text(
+                text = kbCulture.Title ?: "강좌명 없음",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = Color.Yellow,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Institution
+            Text(
+                text = "기관: ${kbCulture.Institution ?: "정보 없음"}",
+                style = MaterialTheme.typography.titleMedium
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Address
+            kbCulture.Address?.let { address ->
+                Text(
+                    text = "위치: $address",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+            }
+
+            // Category (이제 지역 정보로 표시)
+            kbCulture.Category?.let { category ->
+                Text(
+                    text = "지역: 경상북도 $category",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+            }
+
+            // Recruitment Period
+            Row {
+                Text(
+                    "모집기간: ",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    kbCulture.Recruitment_period ?: "정보 없음",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Education Period
+            Row {
+                Text(
+                    "교육기간: ",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    kbCulture.Education_period ?: "정보 없음",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Fee
+            Text(
+                "수강료: ${kbCulture.Fee ?: "무료"}",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Apply button aligned to the right
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                Button(
+                    onClick = {
+                        kbCulture.Detail?.let { url ->
                             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
                             context.startActivity(intent)
                         } ?: run {

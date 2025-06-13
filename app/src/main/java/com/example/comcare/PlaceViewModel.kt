@@ -215,6 +215,29 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
     private val _isLoadingKBJobs = mutableStateOf<Boolean>(false)
     val isLoadingKBJobs: Boolean
         get() = _isLoadingKBJobs.value
+
+    // 1. BS_Culture 관련 상태 추가
+    private val _bsCultures = mutableStateOf<List<SupabaseDatabaseHelper.BSCulture>>(emptyList())
+    val bsCultures: State<List<SupabaseDatabaseHelper.BSCulture>> = _bsCultures
+
+    private val _filteredBSCultures = mutableStateOf<List<SupabaseDatabaseHelper.BSCulture>>(emptyList())
+    val filteredBSCultures: State<List<SupabaseDatabaseHelper.BSCulture>> = _filteredBSCultures
+
+    private val _isLoadingBSCultures = mutableStateOf<Boolean>(false)
+    val isLoadingBSCultures: Boolean
+        get() = _isLoadingBSCultures.value
+
+    // 2. KB_Culture 관련 상태 추가
+    private val _kbCultures = mutableStateOf<List<SupabaseDatabaseHelper.KBCulture>>(emptyList())
+    val kbCultures: State<List<SupabaseDatabaseHelper.KBCulture>> = _kbCultures
+
+    private val _filteredKBCultures = mutableStateOf<List<SupabaseDatabaseHelper.KBCulture>>(emptyList())
+    val filteredKBCultures: State<List<SupabaseDatabaseHelper.KBCulture>> = _filteredKBCultures
+
+    private val _isLoadingKBCultures = mutableStateOf<Boolean>(false)
+    val isLoadingKBCultures: Boolean
+        get() = _isLoadingKBCultures.value
+
     init {
         // Fetch data when ViewModel is initialized
         fetchPlacesData()
@@ -230,6 +253,8 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
         fetchICHCulturesData()
         fetchBSJobsData()
         fetchKBJobsData()
+        fetchBSCulturesData()
+        fetchKBCulturesData()
     }
 
     // 사용자 위치 설정 함수 추가
@@ -2000,6 +2025,163 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
         Log.d("PlaceViewModel", "Filtered ich_cultures: ${_filteredICHCultures.value.size} of ${_ichCultures.value.size}")
     }
 
+    fun fetchBSCulturesData() {
+        viewModelScope.launch {
+            try {
+                Log.d("PlaceViewModel", "Starting bs_cultures data fetch")
+                _isLoadingBSCultures.value = true
+
+                val bsCulturesData = withContext(Dispatchers.IO) {
+                    try {
+                        val bsCultures = supabaseHelper.getBSCultures()
+                        Log.d("PlaceViewModel", "Supabase getBSCultures returned ${bsCultures.size} items")
+
+                        if (bsCultures.isEmpty()) {
+                            Log.d("PlaceViewModel", "Supabase bs_cultures returned empty list")
+                        } else {
+                            // Log first bs_culture for debugging
+                            val firstBSCulture = bsCultures.firstOrNull()
+                            if (firstBSCulture != null) {
+                                Log.d(
+                                    "PlaceViewModel", "Sample bs_culture data: Id=${firstBSCulture.Id}, " +
+                                            "title=${firstBSCulture.Title}, " +
+                                            "institution=${firstBSCulture.Institution}, " +
+                                            "address=${firstBSCulture.Address}"
+                                )
+                            }
+                        }
+                        bsCultures
+                    } catch (e: Exception) {
+                        Log.e(
+                            "PlaceViewModel",
+                            "Error in getBSCultures Dispatchers.IO block: ${e.message}",
+                            e
+                        )
+                        emptyList()
+                    }
+                }
+
+                // Update the bs_cultures value with the fetched data
+                _bsCultures.value = bsCulturesData
+                _filteredBSCultures.value = bsCulturesData
+
+                Log.d("PlaceViewModel", "BS_Cultures data fetch complete: ${bsCulturesData.size} items")
+            } catch (e: Exception) {
+                Log.e("PlaceViewModel", "Error fetching bs_cultures data: ${e.message}", e)
+                _bsCultures.value = emptyList()
+                _filteredBSCultures.value = emptyList()
+            } finally {
+                _isLoadingBSCultures.value = false
+            }
+        }
+    }
+
+    // 5. KB_Cultures 데이터 가져오기 함수
+    fun fetchKBCulturesData() {
+        viewModelScope.launch {
+            try {
+                Log.d("PlaceViewModel", "Starting kb_cultures data fetch")
+                _isLoadingKBCultures.value = true
+
+                val kbCulturesData = withContext(Dispatchers.IO) {
+                    try {
+                        val kbCultures = supabaseHelper.getKBCultures()
+                        Log.d("PlaceViewModel", "Supabase getKBCultures returned ${kbCultures.size} items")
+
+                        if (kbCultures.isEmpty()) {
+                            Log.d("PlaceViewModel", "Supabase kb_cultures returned empty list")
+                        } else {
+                            // Log first kb_culture for debugging
+                            val firstKBCulture = kbCultures.firstOrNull()
+                            if (firstKBCulture != null) {
+                                Log.d(
+                                    "PlaceViewModel", "Sample kb_culture data: Id=${firstKBCulture.Id}, " +
+                                            "title=${firstKBCulture.Title}, " +
+                                            "institution=${firstKBCulture.Institution}, " +
+                                            "address=${firstKBCulture.Address}"
+                                )
+                            }
+                        }
+                        kbCultures
+                    } catch (e: Exception) {
+                        Log.e(
+                            "PlaceViewModel",
+                            "Error in getKBCultures Dispatchers.IO block: ${e.message}",
+                            e
+                        )
+                        emptyList()
+                    }
+                }
+
+                // Update the kb_cultures value with the fetched data
+                _kbCultures.value = kbCulturesData
+                _filteredKBCultures.value = kbCulturesData
+
+                Log.d("PlaceViewModel", "KB_Cultures data fetch complete: ${kbCulturesData.size} items")
+            } catch (e: Exception) {
+                Log.e("PlaceViewModel", "Error fetching kb_cultures data: ${e.message}", e)
+                _kbCultures.value = emptyList()
+                _filteredKBCultures.value = emptyList()
+            } finally {
+                _isLoadingKBCultures.value = false
+            }
+        }
+    }
+
+    // 6. BS_Cultures 필터링 함수
+    fun filterBSCultures(selectedCity: String, selectedDistrict: String) {
+        if (_bsCultures.value.isEmpty()) {
+            _filteredBSCultures.value = emptyList()
+            return
+        }
+
+        Log.d("PlaceViewModel", "Filtering bs_cultures with city='$selectedCity', district='$selectedDistrict'")
+
+        _filteredBSCultures.value = _bsCultures.value.filter { bsCulture ->
+            // bs_culture는 부산광역시 데이터
+            val cultureCity = "부산광역시"
+            val cultureDistrict = bsCulture.Category ?: "" // Category를 district로 사용
+
+            // City filtering
+            val cityMatch = selectedCity == "전체" || cultureCity == selectedCity
+
+            // District filtering
+            val districtMatch = selectedDistrict == "전체" || cultureDistrict == selectedDistrict
+
+            // Both conditions must match
+            cityMatch && districtMatch
+        }
+
+        Log.d("PlaceViewModel", "Filtered bs_cultures: ${_filteredBSCultures.value.size} of ${_bsCultures.value.size}")
+    }
+
+    // 7. KB_Cultures 필터링 함수
+    fun filterKBCultures(selectedCity: String, selectedDistrict: String) {
+        if (_kbCultures.value.isEmpty()) {
+            _filteredKBCultures.value = emptyList()
+            return
+        }
+
+        Log.d("PlaceViewModel", "Filtering kb_cultures with city='$selectedCity', district='$selectedDistrict'")
+
+        _filteredKBCultures.value = _kbCultures.value.filter { kbCulture ->
+            // kb_culture는 경상북도 데이터
+            val cultureCity = "경상북도"
+            val cultureDistrict = kbCulture.Category ?: "" // Category를 district로 사용
+
+            // City filtering
+            val cityMatch = selectedCity == "전체" || cultureCity == selectedCity
+
+            // District filtering
+            val districtMatch = selectedDistrict == "전체" || cultureDistrict == selectedDistrict
+
+            // Both conditions must match
+            cityMatch && districtMatch
+        }
+
+        Log.d("PlaceViewModel", "Filtered kb_cultures: ${_filteredKBCultures.value.size} of ${_kbCultures.value.size}")
+    }
+
 
     // 통합 필터링 함수
     fun filterAllCultures(selectedCity: String, selectedDistrict: String) {
@@ -2012,14 +2194,21 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
         // ICH_Cultures 필터링
         filterICHCultures(selectedCity, selectedDistrict)
 
+        // BS_Cultures 필터링
+        filterBSCultures(selectedCity, selectedDistrict)
+
+        // KB_Cultures 필터링
+        filterKBCultures(selectedCity, selectedDistrict)
+
         Log.d("PlaceViewModel", "Filtered all cultures - Regular: ${_filteredLectures.value.size}, " +
-                "KK: ${_filteredKKCultures.value.size}, ICH: ${_filteredICHCultures.value.size}")
+                "KK: ${_filteredKKCultures.value.size}, ICH: ${_filteredICHCultures.value.size}, " +
+                "BS: ${_filteredBSCultures.value.size}, KB: ${_filteredKBCultures.value.size}")
     }
 
-
-    // 통합된 필터링된 문화 강좌 개수를 반환하는 함수
+    // 9. getTotalFilteredCulturesCount 함수 수정 - BS_Cultures와 KB_Cultures 포함
     fun getTotalFilteredCulturesCount(): Int {
-        return _filteredLectures.value.size + _filteredKKCultures.value.size + _filteredICHCultures.value.size
+        return _filteredLectures.value.size + _filteredKKCultures.value.size + _filteredICHCultures.value.size +
+                _filteredBSCultures.value.size + _filteredKBCultures.value.size
     }
 
     fun getFilteredPlacesByUserLocation(): List<Place> {
@@ -2170,7 +2359,6 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
                 _lectures.value.filter { lecture ->
                     lecture.Category == userDistrict
                 }.forEach { filteredCultures.add(it) }
-
             }
 
             // KK cultures 필터링 (경기도 데이터)
@@ -2186,11 +2374,25 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
                     ichCulture.Category == userDistrict
                 }.forEach { filteredCultures.add(it) }
             }
+
+            // BS cultures 필터링 (부산광역시 데이터)
+            if (userCity == "부산광역시") {
+                _bsCultures.value.filter { bsCulture ->
+                    bsCulture.Category == userDistrict
+                }.forEach { filteredCultures.add(it) }
+            }
+
+            // KB cultures 필터링 (경상북도 데이터)
+            if (userCity == "경상북도") {
+                _kbCultures.value.filter { kbCulture ->
+                    kbCulture.Category == userDistrict
+                }.forEach { filteredCultures.add(it) }
+            }
         }
 
         return if (filteredCultures.isEmpty()) {
             // 해당 지역에 데이터가 없으면 전체 데이터 반환
-            (_lectures.value + _kkCultures.value + _ichCultures.value)
+            (_lectures.value + _kkCultures.value + _ichCultures.value + _bsCultures.value + _kbCultures.value)
         } else {
             filteredCultures
         }
