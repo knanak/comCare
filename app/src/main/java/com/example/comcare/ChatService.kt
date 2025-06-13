@@ -403,7 +403,6 @@ class ChatService(private val context: Context) {
     }
 
     // 현재 인덱스의 결과를 표시하는 함수
-    // 현재 인덱스의 결과를 표시하는 함수 수정
     private fun showCurrentResult() {
         // 탐색 모드인 경우
         if (isExploreMode && exploreResults.isNotEmpty()) {

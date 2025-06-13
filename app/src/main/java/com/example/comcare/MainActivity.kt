@@ -522,21 +522,69 @@ class MainActivity : ComponentActivity() {
                             navController = navController,
                             startDestination = "chat"
                         ) {
+                            composable(
+                                "home/{section}",
+                                arguments = listOf(
+                                    navArgument("section") {
+                                        type = NavType.StringType
+                                        defaultValue = "home"
+                                    }
+                                )
+                            ) { backStackEntry ->
+                                val startSection = backStackEntry.arguments?.getString("section") ?: "home"
+                                PlaceComparisonApp(
+                                    navController = navController,
+                                    viewModel = viewModel,
+                                    userCity = userCityState,
+                                    userDistrict = userDistrictState,
+                                    userInfo = currentUserInfo,
+                                    startSection = startSection  // 새로 추가
+                                )
+                            }
+
                             composable("home") {
                                 PlaceComparisonApp(
                                     navController = navController,
                                     viewModel = viewModel,
                                     userCity = userCityState,
                                     userDistrict = userDistrictState,
-                                    userInfo = currentUserInfo
+                                    userInfo = currentUserInfo,
+                                    startSection = "home"
                                 )
                             }
+
                             composable("searchResults") {
                                 SearchResultsScreen(
                                     viewModel = viewModel,
                                     navController = navController
                                 )
                             }
+
+                            composable(
+                                "jobSearchResults?returnSection={returnSection}",
+                                arguments = listOf(
+                                    navArgument("returnSection") {
+                                        type = NavType.StringType
+                                        defaultValue = "jobs"
+                                    }
+                                )
+                            ) { backStackEntry ->
+                                val returnSection = backStackEntry.arguments?.getString("returnSection") ?: "jobs"
+                                JobSearchResultsScreen(
+                                    viewModel = viewModel,
+                                    navController = navController,
+                                    returnSection = returnSection
+                                )
+                            }
+                            // 기존 route도 유지 (호환성)
+                            composable("jobSearchResults") {
+                                JobSearchResultsScreen(
+                                    viewModel = viewModel,
+                                    navController = navController,
+                                    returnSection = "jobs"
+                                )
+                            }
+
                             composable("chat") {
                                 ChatScreen(
                                     activity = this@MainActivity,
@@ -1007,10 +1055,11 @@ fun PlaceComparisonApp(
     viewModel: PlaceViewModel,
     userCity: String = "",  // 파라미터 추가
     userDistrict: String = "",  // 파라미터 추가
-    userInfo: UserInfo? = null  // 사용자 정보 추가
+    userInfo: UserInfo? = null,
+    startSection: String = "home"
 ) {
     Log.d("PlaceComparisonApp", "받은 위치 정보: City=$userCity, District=$userDistrict")
-    var currentSection by remember { mutableStateOf("home") }
+    var currentSection by remember { mutableStateOf(startSection) }  // startSection으로 초기화
     var selectedCity by remember { mutableStateOf("전체") }
     var selectedDistrict by remember { mutableStateOf("전체") }
     var selectedServiceCategory by remember { mutableStateOf("전체") }
@@ -2207,7 +2256,7 @@ fun PlaceComparisonApp(
             }
 
             "jobs" -> {
-                // Jobs content with pagination
+                // Jobs content with filter section
                 Column(modifier = Modifier.fillMaxSize()) {
                     // Section header
                     Row(
@@ -2260,7 +2309,6 @@ fun PlaceComparisonApp(
                             // Reset district when city changes
                             LaunchedEffect(selectedCity) {
                                 selectedDistrict = "전체"
-                                viewModel.filterAllJobs(selectedCity, selectedDistrict)
                             }
 
                             // City and District Dropdowns side by side
@@ -2344,143 +2392,88 @@ fun PlaceComparisonApp(
                                                 onClick = {
                                                     selectedDistrict = district
                                                     expandedDistrictMenu = false
-                                                    viewModel.filterAllJobs(selectedCity, selectedDistrict)
                                                 }
                                             )
                                         }
                                     }
                                 }
                             }
+
+                            // Add search button
+                            Spacer(modifier = Modifier.height(24.dp))
+
+                            Button(
+                                onClick = {
+                                    // Apply filters
+                                    viewModel.filterAllJobs(selectedCity, selectedDistrict)
+                                    // Navigate to job search results screen
+                                    navController.navigate("jobSearchResults?returnSection=jobs")
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFFc6f584),
+                                    contentColor = Color.Black
+                                )
+                            ) {
+                                Text(
+                                    "검색하기",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
 
                     Divider(modifier = Modifier.padding(horizontal = 16.dp))
 
-                    // Jobs list with pagination
-                    val regularJobs = viewModel.filteredJobs.value
-                    val kkJobs = viewModel.filteredKKJobs.value
-                    val ichJobs = viewModel.filteredICHJobs.value
-                    val bsJobs = viewModel.filteredBSJobs.value  // BS jobs 추가
-                    val kbJobs = viewModel.filteredKBJobs.value  // KB jobs 추가
-
-                    // 통합된 일자리 리스트 생성 (BS, KB jobs 포함)
-                    val allJobs = regularJobs + kkJobs + ichJobs + bsJobs + kbJobs
-
-                    if (allJobs.isNotEmpty()) {
-                        // Pagination state
-                        var currentPage by remember { mutableStateOf(0) }
-                        val itemsPerPage = 5
-                        val totalPages = ceil(allJobs.size.toFloat() / itemsPerPage).toInt()
-
-                        // Calculate current page items
-                        val startIndex = currentPage * itemsPerPage
-                        val endIndex = minOf(startIndex + itemsPerPage, allJobs.size)
-                        val currentPageItems = allJobs.subList(startIndex, endIndex)
-
-                        Column(
-                            modifier = Modifier.fillMaxSize()
-                        ) {
-                            // Main content area - shows jobs for current page
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxWidth()
-                            ) {
-                                LazyColumn(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(horizontal = 16.dp),
-                                    contentPadding = PaddingValues(vertical = 8.dp)
-                                ) {
-                                    items(currentPageItems) { job ->
-                                        when (job) {
-                                            is SupabaseDatabaseHelper.Job -> JobCard(job = job)
-                                            is SupabaseDatabaseHelper.KKJob -> KKJobCard(kkJob = job)
-                                            is SupabaseDatabaseHelper.ICHJob -> ICHJobCard(ichJob = job)
-                                            is SupabaseDatabaseHelper.BSJob -> BSJobCard(bsJob = job)  // BS job card 추가
-                                            is SupabaseDatabaseHelper.KBJob -> KBJobCard(kbJob = job)  // KB job card 추가
-                                        }
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                    }
-                                }
-                            }
-
-                            // Pagination controls
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 8.dp, horizontal = 16.dp),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                // Calculate which page numbers to show
-                                val pageGroupSize = 4
-                                val startPage = (currentPage / pageGroupSize) * pageGroupSize
-                                val endPage = minOf(startPage + pageGroupSize, totalPages)
-
-                                // Previous button
-                                if (startPage > 0) {
-                                    Text(
-                                        text = "이전",
-                                        modifier = Modifier
-                                            .clickable {
-                                                // Go to last page of previous group
-                                                currentPage = startPage - 1
-                                            }
-                                            .padding(horizontal = 12.dp, vertical = 4.dp),
-                                        color = Color(0xFF4A7C25),
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-
-                                // Page numbers
-                                for (i in startPage until endPage) {
-                                    val pageNumber = i + 1
-                                    Text(
-                                        text = pageNumber.toString(),
-                                        modifier = Modifier
-                                            .clickable { currentPage = i }
-                                            .padding(horizontal = 12.dp, vertical = 4.dp),
-                                        color = if (currentPage == i) Color(0xFF4A7C25) else Color(0xFF757575),
-                                        fontWeight = if (currentPage == i) FontWeight.Bold else FontWeight.Normal,
-                                        style = MaterialTheme.typography.bodyLarge
-                                    )
-                                }
-
-                                // "다음" (next) button if there are more pages
-                                if (endPage < totalPages) {
-                                    Text(
-                                        text = "다음",
-                                        modifier = Modifier
-                                            .clickable { currentPage = endPage }
-                                            .padding(horizontal = 12.dp, vertical = 4.dp),
-                                        color = Color(0xFF4A7C25),
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-                        }
-                    } else if (viewModel.isLoading || viewModel.isLoadingKKJobs || viewModel.isLoadingICHJobs ||
-                        viewModel.isLoadingBSJobs || viewModel.isLoadingKBJobs) {  // BS, KB jobs 로딩 상태 추가
-                        // Show loading indicator
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                CircularProgressIndicator(color = Color(0xFF4A7C25))
-                                Spacer(modifier = Modifier.height(16.dp))
-                                Text("일자리 정보를 불러오는 중...")
-                            }
-                        }
-                    }
+                    // Show recent jobs preview (최근 일자리 미리보기)
+//                    Box(
+//                        modifier = Modifier.fillMaxSize(),
+//                        contentAlignment = Alignment.Center
+//                    ) {
+//                        Column(
+//                            modifier = Modifier.padding(16.dp),
+//                            horizontalAlignment = Alignment.CenterHorizontally
+//                        ) {
+//                            Text(
+//                                text = "검색 조건을 선택하고\n'검색하기' 버튼을 눌러주세요",
+//                                style = MaterialTheme.typography.titleMedium,
+//                                textAlign = TextAlign.Center,
+//                                color = Color.Gray
+//                            )
+//
+//                            Spacer(modifier = Modifier.height(32.dp))
+//
+//                            // 최근 일자리 미리보기 (선택사항)
+//                            Text(
+//                                text = "또는",
+//                                style = MaterialTheme.typography.bodyLarge,
+//                                color = Color.Gray
+//                            )
+//
+//                            Spacer(modifier = Modifier.height(16.dp))
+//
+//                            Button(
+//                                onClick = {
+//                                    // 전체 일자리 보기
+//                                    viewModel.filterAllJobs("전체", "전체")
+//                                    navController.navigate("jobSearchResults")
+//                                },
+//                                colors = ButtonDefaults.buttonColors(
+//                                    containerColor = Color(0xFFfba064),
+//                                    contentColor = Color.Black
+//                                )
+//                            ) {
+//                                Text(
+//                                    "전체 일자리 보기",
+//                                    style = MaterialTheme.typography.titleMedium,
+//                                    fontWeight = FontWeight.Bold
+//                                )
+//                            }
+//                        }
+//                    }
                 }
             }
-
-
-// MainActivity.kt의 culture 섹션 수정 부분
 
             "culture" -> {
                 // Lectures content with pagination
@@ -2915,6 +2908,189 @@ fun SearchResultsScreen(
         }
     }
 }
+
+@Composable
+fun JobSearchResultsScreen(
+    viewModel: PlaceViewModel,
+    navController: NavController,
+    returnSection: String = "jobs"
+) {
+    val regularJobs = viewModel.filteredJobs.value
+    val kkJobs = viewModel.filteredKKJobs.value
+    val ichJobs = viewModel.filteredICHJobs.value
+    val bsJobs = viewModel.filteredBSJobs.value
+    val kbJobs = viewModel.filteredKBJobs.value
+
+    // 통합된 일자리 리스트 생성
+    val allJobs = regularJobs + kkJobs + ichJobs + bsJobs + kbJobs
+
+    // 시스템 뒤로 가기 버튼 처리
+    BackHandler(enabled = true) {
+        navController.navigate("home/$returnSection") {
+            popUpTo("jobSearchResults") { inclusive = true }
+        }
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Top Bar with back button
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = Color(0xFFc6f584),
+            shadowElevation = 4.dp
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = {
+                        navController.navigate("home/$returnSection") {
+                            popUpTo("jobSearchResults") { inclusive = true }
+                        }
+                    },
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ArrowBack,
+                        contentDescription = "Back",
+                        modifier = Modifier.size(28.dp),
+                        tint = Color.Black
+                    )
+                }
+
+                Text(
+                    text = "검색 결과 : ${allJobs.size}개",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = Color.Black,
+                    modifier = Modifier.padding(start = 8.dp)
+                )
+            }
+        }
+
+        Divider()
+
+        // Results list with pagination
+        if (allJobs.isNotEmpty()) {
+            var currentPage by remember { mutableStateOf(0) }
+            val itemsPerPage = 5
+            val totalPages = ceil(allJobs.size.toFloat() / itemsPerPage).toInt()
+
+            Column(
+                modifier = Modifier.fillMaxSize()
+            ) {
+                // Main content area - shows jobs for current page
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                ) {
+                    val startIndex = currentPage * itemsPerPage
+                    val endIndex = minOf(startIndex + itemsPerPage, allJobs.size)
+                    val currentPageItems = allJobs.subList(startIndex, endIndex)
+
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 16.dp),
+                        contentPadding = PaddingValues(vertical = 8.dp)
+                    ) {
+                        items(currentPageItems) { job ->
+                            when (job) {
+                                is SupabaseDatabaseHelper.Job -> JobCard(job = job)
+                                is SupabaseDatabaseHelper.KKJob -> KKJobCard(kkJob = job)
+                                is SupabaseDatabaseHelper.ICHJob -> ICHJobCard(ichJob = job)
+                                is SupabaseDatabaseHelper.BSJob -> BSJobCard(bsJob = job)
+                                is SupabaseDatabaseHelper.KBJob -> KBJobCard(kbJob = job)
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+                    }
+                }
+
+                // Pagination controls
+                if (totalPages > 1) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp, horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Calculate which page numbers to show
+                        val pageGroupSize = 4
+                        val startPage = (currentPage / pageGroupSize) * pageGroupSize
+                        val endPage = minOf(startPage + pageGroupSize, totalPages)
+
+                        // Previous button
+                        if (startPage > 0) {
+                            Text(
+                                text = "이전",
+                                modifier = Modifier
+                                    .clickable {
+                                        currentPage = startPage - 1
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                                color = Color(0xFF4A7C25),
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        // Page numbers
+                        for (i in startPage until endPage) {
+                            val pageNumber = i + 1
+                            Text(
+                                text = pageNumber.toString(),
+                                modifier = Modifier
+                                    .clickable { currentPage = i }
+                                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                                color = if (currentPage == i) Color(0xFF4A7C25) else Color(0xFF757575),
+                                fontWeight = if (currentPage == i) FontWeight.Bold else FontWeight.Normal,
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        }
+
+                        // Next button
+                        if (endPage < totalPages) {
+                            Text(
+                                text = "다음",
+                                modifier = Modifier
+                                    .clickable { currentPage = endPage }
+                                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                                color = Color(0xFF4A7C25),
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+        } else if (viewModel.isLoading || viewModel.isLoadingKKJobs || viewModel.isLoadingICHJobs ||
+            viewModel.isLoadingBSJobs || viewModel.isLoadingKBJobs) {
+            // Show loading indicator
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator(color = Color(0xFF4A7C25))
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("일자리 정보를 불러오는 중...")
+                }
+            }
+        } else {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("검색 결과가 없습니다. 다른 조건으로 검색해보세요.")
+            }
+        }
+    }
+}
+
 
 @Composable
 fun PlaceCard(place: Place) {
@@ -5660,8 +5836,8 @@ fun MessageItem(
                         message.text
                     }
 
-                    // 전화번호 패턴 찾기 (Tel: 뒤의 모든 전화번호 형식)
-                    val telPattern = """📞 전화:\s*(.+?)(?=\n|$)""".toRegex()
+                    // 전화번호 패턴 찾기 (전화: 또는 📞 전화: 뒤의 모든 전화번호 형식)
+                    val telPattern = """(?:📞\s*)?전화:\s*(.+?)(?=\n|$)""".toRegex()
                     val telMatches = telPattern.findAll(displayText)
 
                     if (!message.isFromUser && telMatches.count() > 0) {
