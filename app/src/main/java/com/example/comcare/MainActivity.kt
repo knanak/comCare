@@ -1102,10 +1102,52 @@ fun PlaceComparisonApp(
         viewModel.serviceSubcategories.value[selectedServiceCategory] ?: listOf("전체")
     }
 
+    // 사용자 위치 또는 기본 위치 결정
+    val effectiveCity = remember(userCity) {
+        if (userCity.isEmpty() || userCity == "위치 확인 중..." || userCity == "위치 권한 없음") {
+            "서울특별시"
+        } else {
+            userCity
+        }
+    }
+
+    val effectiveDistrict = remember(userDistrict) {
+        if (userDistrict.isEmpty() || userDistrict == "위치 확인 중..." || userDistrict == "위치 권한 없음") {
+            "강북구"
+        } else {
+            userDistrict
+        }
+    }
+
+    // 필요한 도시의 데이터만 로드
+    LaunchedEffect(effectiveCity) {
+        when (effectiveCity) {
+            "서울특별시" -> {
+                viewModel.fetchSeoulData() // 서울 데이터만 로드
+            }
+            "경기도" -> {
+                viewModel.fetchGyeonggiData() // 경기도 데이터만 로드
+            }
+            "인천광역시" -> {
+                viewModel.fetchIncheonData() // 인천 데이터만 로드
+            }
+            "부산광역시" -> {
+                viewModel.fetchBusanData() // 부산 데이터만 로드
+            }
+            "경상북도" -> {
+                viewModel.fetchGyeongbukData() // 경북 데이터만 로드
+            }
+        }
+    }
+
+    // 사용자 위치 설정
     LaunchedEffect(userCity, userDistrict) {
         if (userCity.isNotEmpty() && userDistrict.isNotEmpty() &&
             userCity != "위치 확인 중..." && userCity != "위치 권한 없음") {
             viewModel.setUserLocation(userCity, userDistrict)
+        } else {
+            // 기본 위치 설정
+            viewModel.setUserLocation("서울특별시", "강북구")
         }
     }
 

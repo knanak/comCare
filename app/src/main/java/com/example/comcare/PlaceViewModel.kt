@@ -322,6 +322,134 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
     fun getUserCity(): String = userCity
     fun getUserDistrict(): String = userDistrict
 
+
+    fun fetchSeoulData() {
+        viewModelScope.launch {
+            try {
+                // 서울 시설 데이터
+                if (_allPlaces.value.isEmpty()) {
+                    fetchPlacesData() // API와 Supabase 데이터
+                }
+
+                // 서울 일자리 데이터
+                if (_jobs.value.isEmpty()) {
+                    fetchJobsData()
+                }
+
+                // 서울 문화 데이터
+                if (_lectures.value.isEmpty()) {
+                    fetchLectureData()
+                }
+            } catch (e: Exception) {
+                Log.e("PlaceViewModel", "Error fetching Seoul data: ${e.message}")
+            }
+        }
+    }
+
+    fun fetchGyeonggiData() {
+        viewModelScope.launch {
+            try {
+                // 경기도 시설 데이터
+                if (_kkFacilities.value.isEmpty()) {
+                    fetchKKFacilitiesData()
+                }
+                if (_kkFacility2s.value.isEmpty()) {
+                    fetchKKFacility2sData()
+                }
+
+                // 경기도 일자리 데이터
+                if (_kkJobs.value.isEmpty()) {
+                    fetchKKJobsData()
+                }
+
+                // 경기도 문화 데이터
+                if (_kkCultures.value.isEmpty()) {
+                    fetchKKCulturesData()
+                }
+            } catch (e: Exception) {
+                Log.e("PlaceViewModel", "Error fetching Gyeonggi data: ${e.message}")
+            }
+        }
+    }
+
+    fun fetchIncheonData() {
+        viewModelScope.launch {
+            try {
+                // 인천 시설 데이터
+                if (_ichFacilities.value.isEmpty()) {
+                    fetchICHFacilitiesData()
+                }
+                if (_ichFacility2s.value.isEmpty()) {
+                    fetchICHFacility2sData()
+                }
+
+                // 인천 일자리 데이터
+                if (_ichJobs.value.isEmpty()) {
+                    fetchICHJobsData()
+                }
+
+                // 인천 문화 데이터
+                if (_ichCultures.value.isEmpty()) {
+                    fetchICHCulturesData()
+                }
+            } catch (e: Exception) {
+                Log.e("PlaceViewModel", "Error fetching Incheon data: ${e.message}")
+            }
+        }
+    }
+
+    fun fetchBusanData() {
+        viewModelScope.launch {
+            try {
+                // 부산 시설 데이터
+                if (_bsFacilities.value.isEmpty()) {
+                    fetchBSFacilitiesData()
+                }
+                if (_bsFacility2s.value.isEmpty()) {
+                    fetchBSFacility2sData()
+                }
+
+                // 부산 일자리 데이터
+                if (_bsJobs.value.isEmpty()) {
+                    fetchBSJobsData()
+                }
+
+                // 부산 문화 데이터
+                if (_bsCultures.value.isEmpty()) {
+                    fetchBSCulturesData()
+                }
+            } catch (e: Exception) {
+                Log.e("PlaceViewModel", "Error fetching Busan data: ${e.message}")
+            }
+        }
+    }
+
+    fun fetchGyeongbukData() {
+        viewModelScope.launch {
+            try {
+                // 경북 시설 데이터
+                if (_kbFacilities.value.isEmpty()) {
+                    fetchKBFacilitiesData()
+                }
+                if (_kbFacility2s.value.isEmpty()) {
+                    fetchKBFacility2sData()
+                }
+
+                // 경북 일자리 데이터
+                if (_kbJobs.value.isEmpty()) {
+                    fetchKBJobsData()
+                }
+
+                // 경북 문화 데이터
+                if (_kbCultures.value.isEmpty()) {
+                    fetchKBCulturesData()
+                }
+            } catch (e: Exception) {
+                Log.e("PlaceViewModel", "Error fetching Gyeongbuk data: ${e.message}")
+            }
+        }
+    }
+
     fun initializeServiceCategories() {
         // 미리 정의된 서비스 카테고리 설정
         _serviceCategories.value = listOf(
