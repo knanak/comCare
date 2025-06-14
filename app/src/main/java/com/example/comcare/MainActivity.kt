@@ -2386,42 +2386,24 @@ fun PlaceComparisonApp(
                 }
             }
 
+// "jobs" 섹션 수정
             "jobs" -> {
                 // Jobs content with filter section
                 Column(modifier = Modifier.fillMaxSize()) {
-                    // Section header
-//                    Row(
-//                        modifier = Modifier
-//                            .fillMaxWidth()
-//                            .padding(horizontal = 16.dp, vertical = 8.dp),
-//                        verticalAlignment = Alignment.CenterVertically,
-//                        horizontalArrangement = Arrangement.SpaceBetween
-//                    ) {
-//                        Text(
-//                            text = "노인 일자리 정보",
-//                            style = MaterialTheme.typography.titleMedium,
-//                            fontWeight = FontWeight.Bold
-//                        )
-//
-//                        Text(
-//                            text = "총 ${viewModel.getTotalFilteredJobsCount()}개",
-//                            style = MaterialTheme.typography.bodyLarge,
-//                        )
-//                    }
-
-                    // Add location filter section
+                    // Add location filter section - 시설과 동일한 디자인 적용
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                            .padding(16.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             // Location Filter Title
                             Text(
-                                "위치 검색:",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
+                                "위치:",
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFffffff)
                             )
 
                             Spacer(modifier = Modifier.height(8.dp))
@@ -2432,12 +2414,10 @@ fun PlaceComparisonApp(
                             var selectedCity by remember { mutableStateOf("전체") }
                             var selectedDistrict by remember { mutableStateOf("전체") }
 
-                            // 통합된 job cities 사용
                             val availableDistricts = remember(selectedCity) {
                                 viewModel.jobDistricts.value[selectedCity] ?: listOf("전체")
                             }
 
-                            // Reset district when city changes
                             LaunchedEffect(selectedCity) {
                                 selectedDistrict = "전체"
                             }
@@ -2460,10 +2440,15 @@ fun PlaceComparisonApp(
                                         ) {
                                             Text(
                                                 selectedCity,
-                                                style = MaterialTheme.typography.bodyLarge,
+                                                style = MaterialTheme.typography.titleLarge,
+                                                color = Color(0xFFffffff),
                                                 fontWeight = FontWeight.Bold
                                             )
-                                            Text("▼")
+                                            Text(
+                                                "▼",
+                                                style = MaterialTheme.typography.titleLarge,
+                                                color = Color(0xFFffffff)
+                                            )
                                         }
                                     }
 
@@ -2476,7 +2461,9 @@ fun PlaceComparisonApp(
                                                 text = {
                                                     Text(
                                                         city,
-                                                        style = MaterialTheme.typography.bodyLarge
+                                                        style = MaterialTheme.typography.titleLarge,
+                                                        color = Color(0xFFffffff),
+                                                        fontWeight = FontWeight.Medium
                                                     )
                                                 },
                                                 onClick = {
@@ -2501,10 +2488,15 @@ fun PlaceComparisonApp(
                                         ) {
                                             Text(
                                                 selectedDistrict,
-                                                style = MaterialTheme.typography.bodyLarge,
+                                                style = MaterialTheme.typography.titleLarge,
+                                                color = Color(0xFFffffff),
                                                 fontWeight = FontWeight.Bold
                                             )
-                                            Text("▼")
+                                            Text(
+                                                "▼",
+                                                style = MaterialTheme.typography.titleLarge,
+                                                color = Color(0xFFffffff)
+                                            )
                                         }
                                     }
 
@@ -2517,7 +2509,9 @@ fun PlaceComparisonApp(
                                                 text = {
                                                     Text(
                                                         district,
-                                                        style = MaterialTheme.typography.bodyLarge
+                                                        style = MaterialTheme.typography.titleLarge,
+                                                        color = Color(0xFFffffff),
+                                                        fontWeight = FontWeight.Medium
                                                     )
                                                 },
                                                 onClick = {
@@ -2535,10 +2529,12 @@ fun PlaceComparisonApp(
 
                             Button(
                                 onClick = {
-                                    // 필터 적용하고 데이터 가져오기
-                                    viewModel.searchAndFilterJobs(selectedCity, selectedDistrict)
-                                    // 검색 결과 화면으로 이동
-                                    navController.navigate("jobSearchResults?returnSection=jobs")
+                                    if (selectedCity == "전체" || selectedDistrict == "전체") {
+                                        showLocationDialog = true
+                                    } else {
+                                        viewModel.searchAndFilterJobs(selectedCity, selectedDistrict)
+                                        navController.navigate("jobSearchResults?returnSection=jobs")
+                                    }
                                 },
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = ButtonDefaults.buttonColors(
@@ -2559,42 +2555,24 @@ fun PlaceComparisonApp(
                 }
             }
 
+// "culture" 섹션 수정
             "culture" -> {
                 // Lectures content with pagination
                 Column(modifier = Modifier.fillMaxSize()) {
-                    // Section header
-//                    Row(
-//                        modifier = Modifier
-//                            .fillMaxWidth()
-//                            .padding(horizontal = 16.dp, vertical = 8.dp),
-//                        verticalAlignment = Alignment.CenterVertically,
-//                        horizontalArrangement = Arrangement.SpaceBetween
-//                    ) {
-//                        Text(
-//                            text = "시니어 문화강좌 정보",
-//                            style = MaterialTheme.typography.titleMedium,
-//                            fontWeight = FontWeight.Bold
-//                        )
-//
-////                        Text(
-////                            text = "총 ${viewModel.getTotalFilteredCulturesCount()}개",
-////                            style = MaterialTheme.typography.bodyLarge,
-////                        )
-//                    }
-
-                    // Add location filter section
+                    // Add location filter section - 시설과 동일한 디자인 적용
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                            .padding(16.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             // Location Filter Title
                             Text(
-                                "위치 검색:",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
+                                "위치:",
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFffffff)
                             )
 
                             Spacer(modifier = Modifier.height(8.dp))
@@ -2605,12 +2583,10 @@ fun PlaceComparisonApp(
                             var selectedCity by remember { mutableStateOf("전체") }
                             var selectedDistrict by remember { mutableStateOf("전체") }
 
-                            // 통합된 culture cities 사용
                             val availableDistricts = remember(selectedCity) {
                                 viewModel.cultureDistricts.value[selectedCity] ?: listOf("전체")
                             }
 
-                            // Reset district when city changes
                             LaunchedEffect(selectedCity) {
                                 selectedDistrict = "전체"
                                 viewModel.filterAllCultures(selectedCity, selectedDistrict)
@@ -2634,10 +2610,15 @@ fun PlaceComparisonApp(
                                         ) {
                                             Text(
                                                 selectedCity,
-                                                style = MaterialTheme.typography.bodyLarge,
+                                                style = MaterialTheme.typography.titleLarge,
+                                                color = Color(0xFFffffff),
                                                 fontWeight = FontWeight.Bold
                                             )
-                                            Text("▼")
+                                            Text(
+                                                "▼",
+                                                style = MaterialTheme.typography.titleLarge,
+                                                color = Color(0xFFffffff)
+                                            )
                                         }
                                     }
 
@@ -2650,7 +2631,9 @@ fun PlaceComparisonApp(
                                                 text = {
                                                     Text(
                                                         city,
-                                                        style = MaterialTheme.typography.bodyLarge
+                                                        style = MaterialTheme.typography.titleLarge,
+                                                        color = Color(0xFFffffff),
+                                                        fontWeight = FontWeight.Medium
                                                     )
                                                 },
                                                 onClick = {
@@ -2675,10 +2658,15 @@ fun PlaceComparisonApp(
                                         ) {
                                             Text(
                                                 selectedDistrict,
-                                                style = MaterialTheme.typography.bodyLarge,
+                                                style = MaterialTheme.typography.titleLarge,
+                                                color = Color(0xFFffffff),
                                                 fontWeight = FontWeight.Bold
                                             )
-                                            Text("▼")
+                                            Text(
+                                                "▼",
+                                                style = MaterialTheme.typography.titleLarge,
+                                                color = Color(0xFFffffff)
+                                            )
                                         }
                                     }
 
@@ -2691,7 +2679,9 @@ fun PlaceComparisonApp(
                                                 text = {
                                                     Text(
                                                         district,
-                                                        style = MaterialTheme.typography.bodyLarge
+                                                        style = MaterialTheme.typography.titleLarge,
+                                                        color = Color(0xFFffffff),
+                                                        fontWeight = FontWeight.Medium
                                                     )
                                                 },
                                                 onClick = {
@@ -2711,13 +2701,14 @@ fun PlaceComparisonApp(
                             // Add search button
                             Spacer(modifier = Modifier.height(24.dp))
 
-                            // MainActivity.kt의 "culture" 섹션에서 검색 버튼 클릭 시
                             Button(
                                 onClick = {
-                                    // 필터 적용하고 데이터 가져오기
-                                    viewModel.searchAndFilterCultures(selectedCity, selectedDistrict)
-                                    // 검색 결과 화면으로 이동
-                                    navController.navigate("cultureSearchResults?returnSection=culture")
+                                    if (selectedCity == "전체" || selectedDistrict == "전체") {
+                                        showLocationDialog = true
+                                    } else {
+                                        viewModel.searchAndFilterCultures(selectedCity, selectedDistrict)
+                                        navController.navigate("cultureSearchResults?returnSection=culture")
+                                    }
                                 },
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = ButtonDefaults.buttonColors(
@@ -2736,8 +2727,7 @@ fun PlaceComparisonApp(
 
                     Divider(modifier = Modifier.padding(horizontal = 16.dp))
 
-
-                    // Show guidance message instead of immediate results
+                    // Show guidance message
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
@@ -2746,12 +2736,7 @@ fun PlaceComparisonApp(
                             modifier = Modifier.padding(16.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-//                            Text(
-//                                text = "지역을 선택하고\n'검색하기' 버튼을 눌러주세요",
-//                                style = MaterialTheme.typography.titleMedium,
-//                                textAlign = TextAlign.Center,
-//                                color = Color.Gray
-//                            )
+                            // 빈 공간으로 유지
                         }
                     }
                 }
