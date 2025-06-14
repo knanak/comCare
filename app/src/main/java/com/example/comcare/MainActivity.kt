@@ -2724,9 +2724,10 @@ fun SearchResultsScreen(
     navController: NavController
 ) {
     val places = viewModel.filteredPlaces.value
+    val isLoading = viewModel.isInitialLoading
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Top Bar with back button
+        // Top Bar는 그대로 유지
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -2749,13 +2750,49 @@ fun SearchResultsScreen(
 
         Divider()
 
-        // Results list
-        val itemsPerPage = 5
-        var currentPage by remember { mutableStateOf(0) }
+        // 로딩 상태에 따라 다른 UI 표시
+        if (isLoading) {
+            // 로딩 화면
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.DarkGray),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    // 오비서 아이콘 이미지
+                    Image(
+                        painter = painterResource(id = R.drawable.main_icon),
+                        contentDescription = "오비서 로고",
+                        modifier = Modifier.size(120.dp)
+                    )
 
-        val totalPages = ceil(places.size.toFloat() / itemsPerPage).toInt()
+                    Spacer(modifier = Modifier.height(32.dp))
 
-        if (places.isNotEmpty()) {
+                    CircularProgressIndicator(
+                        color = Color(0xFFc6f584),
+                        strokeWidth = 4.dp,
+                        modifier = Modifier.size(48.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Text(
+                        text = "검색 중...",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.Gray
+                    )
+                }
+            }
+        } else if (places.isNotEmpty()) {
+            // 기존 결과 표시 코드
+            var currentPage by remember { mutableStateOf(0) }
+            val itemsPerPage = 5
+            val totalPages = ceil(places.size.toFloat() / itemsPerPage).toInt()
+
             Column(
                 modifier = Modifier.fillMaxSize()
             ) {

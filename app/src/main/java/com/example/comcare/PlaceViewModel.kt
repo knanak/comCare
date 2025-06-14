@@ -62,6 +62,11 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
     private var userCity: String = ""
     private var userDistrict: String = ""
 
+
+    private val _isInitialLoading = mutableStateOf(true)
+    val isInitialLoading: Boolean
+        get() = _isInitialLoading.value
+
     // 1. facilities data
     // Using MutableState for the places list
     private val _allPlaces = mutableStateOf<List<Place>>(emptyList())
@@ -344,6 +349,7 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
         viewModelScope.launch {
             try {
                 Log.d("PlaceViewModel", "Starting facility search - City: $selectedCity, District: $selectedDistrict")
+                _isInitialLoading.value = true
 
                 // 로딩 상태 설정
                 _isLoadingKKFacilities.value = true
@@ -512,6 +518,7 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
             } catch (e: Exception) {
                 Log.e("PlaceViewModel", "Error searching facilities: ${e.message}")
             } finally {
+                _isInitialLoading.value = false
                 _isLoadingKKFacilities.value = false
                 _isLoadingICHFacilities.value = false
                 _isLoadingBSFacilities.value = false
