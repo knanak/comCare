@@ -272,18 +272,18 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
     init {
         // Fetch data when ViewModel is initialized
         fetchPlacesData()
-        fetchJobsData()
+//        fetchJobsData()
 //        fetchLectureData()
-        fetchKKJobsData()
+//        fetchKKJobsData()
 //        fetchKKCulturesData()
         fetchKKFacilitiesData()
         fetchKKFacility2sData()
         fetchICHFacilitiesData()
         fetchICHFacility2sData()
-        fetchICHJobsData()
+//        fetchICHJobsData()
 //        fetchICHCulturesData()
-        fetchBSJobsData()
-        fetchKBJobsData()
+//        fetchBSJobsData()
+//        fetchKBJobsData()
 //        fetchBSCulturesData()
 //        fetchKBCulturesData()
         fetchBSFacilitiesData()
@@ -316,6 +316,115 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
     // 사용자 위치 정보 getter 함수 추가
     fun getUserCity(): String = userCity
     fun getUserDistrict(): String = userDistrict
+
+
+    // PlaceViewModel.kt에 추가할 내용
+
+    // 고용 데이터 검색 및 필터링 함수
+    fun searchAndFilterJobs(selectedCity: String, selectedDistrict: String) {
+        viewModelScope.launch {
+            try {
+                // 로딩 상태 설정
+                _isLoading.value = true
+                _isLoadingKKJobs.value = true
+                _isLoadingICHJobs.value = true
+                _isLoadingBSJobs.value = true
+                _isLoadingKBJobs.value = true
+
+                // 선택된 도시에 따라 해당하는 데이터만 가져오기
+                when (selectedCity) {
+                    "서울특별시" -> {
+                        val jobs = withContext(Dispatchers.IO) {
+                            supabaseHelper.getFilteredJobs(selectedCity, selectedDistrict)
+                        }
+                        _jobs.value = jobs
+                        _filteredJobs.value = jobs
+
+                        // 다른 지역 데이터는 비우기
+                        _filteredKKJobs.value = emptyList()
+                        _filteredICHJobs.value = emptyList()
+                        _filteredBSJobs.value = emptyList()
+                        _filteredKBJobs.value = emptyList()
+                    }
+
+                    "경기도" -> {
+                        val kkJobs = withContext(Dispatchers.IO) {
+                            supabaseHelper.getFilteredKKJobs(selectedDistrict)
+                        }
+                        _kkJobs.value = kkJobs
+                        _filteredKKJobs.value = kkJobs
+
+                        // 다른 지역 데이터는 비우기
+                        _filteredJobs.value = emptyList()
+                        _filteredICHJobs.value = emptyList()
+                        _filteredBSJobs.value = emptyList()
+                        _filteredKBJobs.value = emptyList()
+                    }
+
+                    "인천광역시" -> {
+                        val ichJobs = withContext(Dispatchers.IO) {
+                            supabaseHelper.getFilteredICHJobs(selectedDistrict)
+                        }
+                        _ichJobs.value = ichJobs
+                        _filteredICHJobs.value = ichJobs
+
+                        // 다른 지역 데이터는 비우기
+                        _filteredJobs.value = emptyList()
+                        _filteredKKJobs.value = emptyList()
+                        _filteredBSJobs.value = emptyList()
+                        _filteredKBJobs.value = emptyList()
+                    }
+
+                    "부산광역시" -> {
+                        val bsJobs = withContext(Dispatchers.IO) {
+                            supabaseHelper.getFilteredBSJobs(selectedDistrict)
+                        }
+                        _bsJobs.value = bsJobs
+                        _filteredBSJobs.value = bsJobs
+
+                        // 다른 지역 데이터는 비우기
+                        _filteredJobs.value = emptyList()
+                        _filteredKKJobs.value = emptyList()
+                        _filteredICHJobs.value = emptyList()
+                        _filteredKBJobs.value = emptyList()
+                    }
+
+                    "경상북도" -> {
+                        val kbJobs = withContext(Dispatchers.IO) {
+                            supabaseHelper.getFilteredKBJobs(selectedDistrict)
+                        }
+                        _kbJobs.value = kbJobs
+                        _filteredKBJobs.value = kbJobs
+
+                        // 다른 지역 데이터는 비우기
+                        _filteredJobs.value = emptyList()
+                        _filteredKKJobs.value = emptyList()
+                        _filteredICHJobs.value = emptyList()
+                        _filteredBSJobs.value = emptyList()
+                    }
+
+                    "전체" -> {
+                        // 전체 선택 시 모든 데이터 가져오기 (또는 비우기)
+                        // 데이터가 너무 많다면 비우거나 일부만 가져오기
+                        _filteredJobs.value = emptyList()
+                        _filteredKKJobs.value = emptyList()
+                        _filteredICHJobs.value = emptyList()
+                        _filteredBSJobs.value = emptyList()
+                        _filteredKBJobs.value = emptyList()
+                    }
+                }
+
+            } catch (e: Exception) {
+                Log.e("PlaceViewModel", "Error searching jobs: ${e.message}")
+            } finally {
+                _isLoading.value = false
+                _isLoadingKKJobs.value = false
+                _isLoadingICHJobs.value = false
+                _isLoadingBSJobs.value = false
+                _isLoadingKBJobs.value = false
+            }
+        }
+    }
 
     fun searchAndFilterCultures(selectedCity: String, selectedDistrict: String) {
         viewModelScope.launch {

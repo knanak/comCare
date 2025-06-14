@@ -3508,4 +3508,134 @@ class SupabaseDatabaseHelper(private val context: Context) {
         }
     }
 
+
+    // 필터링된 일자리 가져오기
+    suspend fun getFilteredJobs(city: String, district: String): List<Job> {
+        return try {
+            withContext(Dispatchers.IO) {
+                if (city == "서울특별시" && district != "전체") {
+                    supabase.postgrest["job"]
+                        .select(filter = {
+                            like("Address", "%$city%")
+                            like("Address", "%$district%")
+                        })
+                        .decodeList<Job>()
+                } else if (city != "전체") {
+                    supabase.postgrest["job"]
+                        .select(filter = {
+                            like("Address", "%$city%")
+                        })
+                        .decodeList<Job>()
+                } else {
+                    supabase.postgrest["job"]
+                        .select()
+                        .decodeList<Job>()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching filtered jobs: ${e.message}")
+            emptyList()
+        }
+    }
+
+    // 경기도 일자리 필터링
+    suspend fun getFilteredKKJobs(district: String): List<KKJob> {
+        return try {
+            withContext(Dispatchers.IO) {
+                if (district != "전체") {
+                    supabase.postgrest["kk_job"]
+                        .select(filter = {
+                            like("Address", "%경기%")
+                            like("Address", "%$district%")
+                        })
+                        .decodeList<KKJob>()
+                } else {
+                    supabase.postgrest["kk_job"]
+                        .select(filter = {
+                            like("Address", "%경기%")
+                        })
+                        .decodeList<KKJob>()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching filtered kk_jobs: ${e.message}")
+            emptyList()
+        }
+    }
+
+    // 인천광역시 일자리 필터링
+    suspend fun getFilteredICHJobs(district: String): List<ICHJob> {
+        return try {
+            withContext(Dispatchers.IO) {
+                if (district != "전체") {
+                    supabase.postgrest["ich_job"]
+                        .select(filter = {
+                            like("Address", "%인천%")
+                            like("Address", "%$district%")
+                        })
+                        .decodeList<ICHJob>()
+                } else {
+                    supabase.postgrest["ich_job"]
+                        .select(filter = {
+                            like("Address", "%인천%")
+                        })
+                        .decodeList<ICHJob>()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching filtered ich_jobs: ${e.message}")
+            emptyList()
+        }
+    }
+
+    // 부산광역시 일자리 필터링
+    suspend fun getFilteredBSJobs(district: String): List<BSJob> {
+        return try {
+            withContext(Dispatchers.IO) {
+                if (district != "전체") {
+                    supabase.postgrest["bs_job"]
+                        .select(filter = {
+                            like("Address", "%부산%")
+                            like("Address", "%$district%")
+                        })
+                        .decodeList<BSJob>()
+                } else {
+                    supabase.postgrest["bs_job"]
+                        .select(filter = {
+                            like("Address", "%부산%")
+                        })
+                        .decodeList<BSJob>()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching filtered bs_jobs: ${e.message}")
+            emptyList()
+        }
+    }
+
+    // 경상북도 일자리 필터링
+    suspend fun getFilteredKBJobs(district: String): List<KBJob> {
+        return try {
+            withContext(Dispatchers.IO) {
+                if (district != "전체") {
+                    supabase.postgrest["kb_job"]
+                        .select(filter = {
+                            like("Address", "%경상북도%")
+                            like("Address", "%$district%")
+                        })
+                        .decodeList<KBJob>()
+                } else {
+                    supabase.postgrest["kb_job"]
+                        .select(filter = {
+                            like("Address", "%경상북도%")
+                        })
+                        .decodeList<KBJob>()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching filtered kb_jobs: ${e.message}")
+            emptyList()
+        }
+    }
+
 }

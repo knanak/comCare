@@ -1253,6 +1253,14 @@ fun PlaceComparisonApp(
                 onClick = {
                     currentSection = "jobs"
                     showFilters = false
+                    // 데이터를 미리 가져오지 않음 (검색 버튼을 눌렀을 때만 가져옴)
+
+                    // 디버그 로그 (선택사항)
+                    Log.d("JobsDebug", "서울 일자리: ${viewModel.jobs.value.size}개")
+                    Log.d("JobsDebug", "KK 일자리: ${viewModel.kkJobs.value.size}개")
+                    Log.d("JobsDebug", "ICH 일자리: ${viewModel.ichJobs.value.size}개")
+                    Log.d("JobsDebug", "BS 일자리: ${viewModel.bsJobs.value.size}개")
+                    Log.d("JobsDebug", "KB 일자리: ${viewModel.kbJobs.value.size}개")
                 },
                 modifier = Modifier
                     .weight(1f)
@@ -1282,11 +1290,11 @@ fun PlaceComparisonApp(
                     // Fetch lecture data when this button is clicked
 //                    viewModel.fetchLectureData()
 
-//                    Log.d("CultureDebug", "SEOUL문화: ${viewModel.lectures.value.size}개")
-//                    Log.d("CultureDebug", "KK문화: ${viewModel.kkCultures.value.size}개")
-//                    Log.d("CultureDebug", "ICH문화: ${viewModel.ichCultures.value.size}개")
-//                    Log.d("CultureDebug", "BS문화: ${viewModel.bsCultures.value.size}개")
-//                    Log.d("CultureDebug", "KB문화: ${viewModel.kbCultures.value.size}개")
+                    Log.d("CultureDebug", "SEOUL문화: ${viewModel.lectures.value.size}개")
+                    Log.d("CultureDebug", "KK문화: ${viewModel.kkCultures.value.size}개")
+                    Log.d("CultureDebug", "ICH문화: ${viewModel.ichCultures.value.size}개")
+                    Log.d("CultureDebug", "BS문화: ${viewModel.bsCultures.value.size}개")
+                    Log.d("CultureDebug", "KB문화: ${viewModel.kbCultures.value.size}개")
                 },
                 modifier = Modifier
                     .weight(1f)
@@ -2281,24 +2289,24 @@ fun PlaceComparisonApp(
                 // Jobs content with filter section
                 Column(modifier = Modifier.fillMaxSize()) {
                     // Section header
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = "노인 일자리 정보",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-
-                        Text(
-                            text = "총 ${viewModel.getTotalFilteredJobsCount()}개",
-                            style = MaterialTheme.typography.bodyLarge,
-                        )
-                    }
+//                    Row(
+//                        modifier = Modifier
+//                            .fillMaxWidth()
+//                            .padding(horizontal = 16.dp, vertical = 8.dp),
+//                        verticalAlignment = Alignment.CenterVertically,
+//                        horizontalArrangement = Arrangement.SpaceBetween
+//                    ) {
+//                        Text(
+//                            text = "노인 일자리 정보",
+//                            style = MaterialTheme.typography.titleMedium,
+//                            fontWeight = FontWeight.Bold
+//                        )
+//
+//                        Text(
+//                            text = "총 ${viewModel.getTotalFilteredJobsCount()}개",
+//                            style = MaterialTheme.typography.bodyLarge,
+//                        )
+//                    }
 
                     // Add location filter section
                     Card(
@@ -2426,9 +2434,9 @@ fun PlaceComparisonApp(
 
                             Button(
                                 onClick = {
-                                    // Apply filters
-                                    viewModel.filterAllJobs(selectedCity, selectedDistrict)
-                                    // Navigate to job search results screen
+                                    // 필터 적용하고 데이터 가져오기
+                                    viewModel.searchAndFilterJobs(selectedCity, selectedDistrict)
+                                    // 검색 결과 화면으로 이동
                                     navController.navigate("jobSearchResults?returnSection=jobs")
                                 },
                                 modifier = Modifier.fillMaxWidth(),
@@ -2447,53 +2455,6 @@ fun PlaceComparisonApp(
                     }
 
                     Divider(modifier = Modifier.padding(horizontal = 16.dp))
-
-                    // Show recent jobs preview (최근 일자리 미리보기)
-//                    Box(
-//                        modifier = Modifier.fillMaxSize(),
-//                        contentAlignment = Alignment.Center
-//                    ) {
-//                        Column(
-//                            modifier = Modifier.padding(16.dp),
-//                            horizontalAlignment = Alignment.CenterHorizontally
-//                        ) {
-//                            Text(
-//                                text = "검색 조건을 선택하고\n'검색하기' 버튼을 눌러주세요",
-//                                style = MaterialTheme.typography.titleMedium,
-//                                textAlign = TextAlign.Center,
-//                                color = Color.Gray
-//                            )
-//
-//                            Spacer(modifier = Modifier.height(32.dp))
-//
-//                            // 최근 일자리 미리보기 (선택사항)
-//                            Text(
-//                                text = "또는",
-//                                style = MaterialTheme.typography.bodyLarge,
-//                                color = Color.Gray
-//                            )
-//
-//                            Spacer(modifier = Modifier.height(16.dp))
-//
-//                            Button(
-//                                onClick = {
-//                                    // 전체 일자리 보기
-//                                    viewModel.filterAllJobs("전체", "전체")
-//                                    navController.navigate("jobSearchResults")
-//                                },
-//                                colors = ButtonDefaults.buttonColors(
-//                                    containerColor = Color(0xFFfba064),
-//                                    contentColor = Color.Black
-//                                )
-//                            ) {
-//                                Text(
-//                                    "전체 일자리 보기",
-//                                    style = MaterialTheme.typography.titleMedium,
-//                                    fontWeight = FontWeight.Bold
-//                                )
-//                            }
-//                        }
-//                    }
                 }
             }
 
@@ -2501,24 +2462,24 @@ fun PlaceComparisonApp(
                 // Lectures content with pagination
                 Column(modifier = Modifier.fillMaxSize()) {
                     // Section header
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = "시니어 문화강좌 정보",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-
+//                    Row(
+//                        modifier = Modifier
+//                            .fillMaxWidth()
+//                            .padding(horizontal = 16.dp, vertical = 8.dp),
+//                        verticalAlignment = Alignment.CenterVertically,
+//                        horizontalArrangement = Arrangement.SpaceBetween
+//                    ) {
 //                        Text(
-//                            text = "총 ${viewModel.getTotalFilteredCulturesCount()}개",
-//                            style = MaterialTheme.typography.bodyLarge,
+//                            text = "시니어 문화강좌 정보",
+//                            style = MaterialTheme.typography.titleMedium,
+//                            fontWeight = FontWeight.Bold
 //                        )
-                    }
+//
+////                        Text(
+////                            text = "총 ${viewModel.getTotalFilteredCulturesCount()}개",
+////                            style = MaterialTheme.typography.bodyLarge,
+////                        )
+//                    }
 
                     // Add location filter section
                     Card(
