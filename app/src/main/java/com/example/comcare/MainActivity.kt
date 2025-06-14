@@ -269,9 +269,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            // 로그인 후에만 위치 권한 확인 - 디버깅 로그 추가
-            // MainActivity의 setContent 내부
-// PlaceComparisonTheme 블록 바로 위에 추가
 
 // 1. 로그인 후에만 위치 권한 확인
             LaunchedEffect(isLoggedIn) {
@@ -1093,6 +1090,8 @@ fun PlaceComparisonApp(
     // 사용자 메뉴 표시 상태
     var showUserMenu by remember { mutableStateOf(false) }
 
+    var showLocationDialog by remember { mutableStateOf(false) }
+
     // Get available districts for the selected city
     val availableDistricts = remember(selectedCity) {
         viewModel.districts.value[selectedCity] ?: listOf("전체")
@@ -1161,6 +1160,48 @@ fun PlaceComparisonApp(
 //                }
 //            }
 //        }
+        if (showLocationDialog) {
+            AlertDialog(
+                onDismissRequest = { showLocationDialog = false },
+                icon = {
+                    Icon(
+                        imageVector = Icons.Default.LocationOn,
+                        contentDescription = "Location",
+                        tint = Color(0xFFc6f584),  // 아이콘은 연두색 유지
+                        modifier = Modifier.size(28.dp)
+                    )
+                },
+                title = {
+                    Text(
+                        text = "지역 선택 필요",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White  // 타이틀 흰색
+                    )
+                },
+                text = {
+                    Text(
+                        text = "검색하려면 지역(시/도와 구/군)을 선택해주세요.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Color.White  // 본문 흰색
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = { showLocationDialog = false }
+                    ) {
+                        Text(
+                            "확인",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFc6f584)  // 버튼 텍스트는 연두색
+                        )
+                    }
+                },
+                containerColor = Color.DarkGray,  // 배경색 다크 그레이
+                shape = RoundedCornerShape(12.dp)
+            )
+        }
 
         Row(
             modifier = Modifier
@@ -1199,6 +1240,22 @@ fun PlaceComparisonApp(
                 onClick = {
                     currentSection = "welfareFacilities"
                     showFilters = true  // Always show filters when facilities button is pressed
+                    viewModel.initializeServiceCategories()
+
+                    // 디버그 로그 (선택사항)
+                    Log.d("FacilityDebug", "========== 시설 데이터 현황 ==========")
+                    Log.d("FacilityDebug", "전체 시설: ${viewModel.filteredPlaces.value.size}개")
+                    Log.d("FacilityDebug", "서울 API 시설: ${viewModel.filteredPlaces.value.filter { it.id.toIntOrNull() == null && it.address.contains("서울") }.size}개")
+                    Log.d("FacilityDebug", "서울 Supabase 시설: ${viewModel.filteredPlaces.value.filter { it.id.toIntOrNull() != null && it.address.contains("서울") }.size}개")
+                    Log.d("FacilityDebug", "KK 시설 (경기): ${viewModel.kkFacilities.value.size}개")
+                    Log.d("FacilityDebug", "KK2 시설 (경기): ${viewModel.kkFacility2s.value.size}개")
+                    Log.d("FacilityDebug", "ICH 시설 (인천): ${viewModel.ichFacilities.value.size}개")
+                    Log.d("FacilityDebug", "ICH2 시설 (인천): ${viewModel.ichFacility2s.value.size}개")
+                    Log.d("FacilityDebug", "BS 시설 (부산): ${viewModel.bsFacilities.value.size}개")
+                    Log.d("FacilityDebug", "BS2 시설 (부산): ${viewModel.bsFacility2s.value.size}개")
+                    Log.d("FacilityDebug", "KB 시설 (경북): ${viewModel.kbFacilities.value.size}개")
+                    Log.d("FacilityDebug", "KB2 시설 (경북): ${viewModel.kbFacility2s.value.size}개")
+                    Log.d("FacilityDebug", "=====================================")
                 },
                 modifier = Modifier
                     .weight(1f)
@@ -1742,15 +1799,17 @@ fun PlaceComparisonApp(
 
                     Button(
                         onClick = {
-                            // Apply filters
-                            viewModel.filterPlaces(
-                                selectedCity,
-                                selectedDistrict,
-                                selectedServiceCategory,
-                                selectedServiceSubcategory
-                            )
-                            // Navigate to results screen
-                            navController.navigate("searchResults")
+                            if (selectedCity == "전체" || selectedDistrict == "전체") {
+                                showLocationDialog = true  // 👈 다이얼로그 표시
+                            } else {
+                                viewModel.searchAndFilterFacilities(
+                                    selectedCity,
+                                    selectedDistrict,
+                                    selectedServiceCategory,
+                                    selectedServiceSubcategory
+                                )
+                                navController.navigate("searchResults")
+                            }
                         },
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(

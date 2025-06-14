@@ -271,25 +271,25 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
 
     init {
         // Fetch data when ViewModel is initialized
-        fetchPlacesData()
+//        fetchPlacesData()
 //        fetchJobsData()
 //        fetchLectureData()
 //        fetchKKJobsData()
 //        fetchKKCulturesData()
-        fetchKKFacilitiesData()
-        fetchKKFacility2sData()
-        fetchICHFacilitiesData()
-        fetchICHFacility2sData()
+//        fetchKKFacilitiesData()
+//        fetchKKFacility2sData()
+//        fetchICHFacilitiesData()
+//        fetchICHFacility2sData()
 //        fetchICHJobsData()
 //        fetchICHCulturesData()
 //        fetchBSJobsData()
 //        fetchKBJobsData()
 //        fetchBSCulturesData()
 //        fetchKBCulturesData()
-        fetchBSFacilitiesData()
-        fetchKBFacilitiesData()
-        fetchBSFacility2sData()
-        fetchKBFacility2sData()
+//        fetchBSFacilitiesData()
+//        fetchKBFacilitiesData()
+//        fetchBSFacility2sData()
+//        fetchKBFacility2sData()
     }
 
     // 사용자 위치 설정 함수 추가
@@ -317,8 +317,446 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
     fun getUserCity(): String = userCity
     fun getUserDistrict(): String = userDistrict
 
+    fun initializeServiceCategories() {
+        // 미리 정의된 서비스 카테고리 설정
+        _serviceCategories.value = listOf(
+            "전체",
+            "장기요양기관",
+            "노인여가복지시설",
+        )
 
-    // PlaceViewModel.kt에 추가할 내용
+        // 서브카테고리 설정
+        _serviceSubcategories.value = mapOf(
+            "전체" to listOf("전체"),
+            "장기요양기관" to listOf("전체", "노인요양시설", "노인요양공동생활가정", "주야간보호", "단기보호", "방문요양", "방문간호", "방문목욕"),
+            "노인여가복지시설" to listOf("전체", "노인복지관", "경로당", "노인교실"),
+
+        )
+    }
+
+
+    fun searchAndFilterFacilities(
+        selectedCity: String,
+        selectedDistrict: String,
+        selectedServiceCategory: String,
+        selectedServiceSubcategory: String
+    ) {
+        viewModelScope.launch {
+            try {
+                Log.d("PlaceViewModel", "Starting facility search - City: $selectedCity, District: $selectedDistrict")
+
+                // 로딩 상태 설정
+                _isLoadingKKFacilities.value = true
+                _isLoadingICHFacilities.value = true
+                _isLoadingBSFacilities.value = true
+                _isLoadingKBFacilities.value = true
+
+                val allFacilities = mutableListOf<Place>()
+
+                // 선택된 도시에 따라 해당하는 데이터만 가져오기
+                when (selectedCity) {
+                    "서울특별시" -> {
+                        // API 데이터 가져오기
+                        val apiData = withContext(Dispatchers.IO) {
+                            fetchApiDataFiltered(selectedCity, selectedDistrict)
+                        }
+                        allFacilities.addAll(apiData)
+
+                        // Supabase 시설 데이터 가져오기
+                        val supabaseData = withContext(Dispatchers.IO) {
+                            supabaseHelper.getFilteredFacilities(selectedCity, selectedDistrict)
+                        }
+
+                        // Convert Facility objects to Place objects
+                        val places = supabaseData.map { facility ->
+                            // Extract city and district from address
+                            val addressParts = facility.address.trim().split(" ")
+                            val district = if (addressParts.size > 1) addressParts[1] else ""
+
+                            // Handle service information
+                            val originalService2 = facility.service2
+                            val (newService1, newService2) = if (originalService2.contains("치매")) {
+                                val dementiaIndex = originalService2.indexOf("치매")
+                                var service1Part = originalService2.substring(0, dementiaIndex).trim()
+                                if (service1Part.endsWith("내")) {
+                                    service1Part = service1Part.substring(0, service1Part.length - 1)
+                                }
+                                val service2Part = originalService2.substring(dementiaIndex).trim()
+                                Pair(service1Part, service2Part)
+                            } else {
+                                Pair(originalService2, facility.service2 ?: "")
+                            }
+
+                            // Clean rating
+                            val cleanRating = facility.rating.replace("\n", " ")
+
+                            Place(
+                                id = facility.id.toString(),
+                                name = facility.name,
+                                facilityCode = "",
+                                facilityKind = originalService2,
+                                facilityKindDetail = "장기요양기관",
+                                district = district,
+                                address = facility.address,
+                                tel = facility.tel,
+                                zipCode = "",
+                                service1 = listOf("장기요양기관"),
+                                service2 = listOf(newService1),
+                                rating = cleanRating,
+                                rating_year = facility.rating_year,
+                                full = facility.full,
+                                now = facility.now,
+                                wating = facility.wating,
+                                bus = facility.bus
+                            )
+                        }
+                        allFacilities.addAll(places)
+                    }
+
+                    "경기도" -> {
+                        // KK Facility 데이터
+                        val kkFacilities = withContext(Dispatchers.IO) {
+                            supabaseHelper.getFilteredKKFacilities(selectedDistrict)
+                        }
+                        val kkPlaces = convertKKFacilitiesToPlaces(kkFacilities)
+                        allFacilities.addAll(kkPlaces)
+
+                        // KK Facility2 데이터
+                        val kkFacility2s = withContext(Dispatchers.IO) {
+                            supabaseHelper.getFilteredKKFacility2s(selectedDistrict)
+                        }
+                        val kk2Places = convertKKFacility2sToPlaces(kkFacility2s)
+                        allFacilities.addAll(kk2Places)
+                    }
+
+                    "인천광역시" -> {
+                        // ICH Facility 데이터
+                        val ichFacilities = withContext(Dispatchers.IO) {
+                            supabaseHelper.getFilteredICHFacilities(selectedDistrict)
+                        }
+                        val ichPlaces = convertICHFacilitiesToPlaces(ichFacilities)
+                        allFacilities.addAll(ichPlaces)
+
+                        // ICH Facility2 데이터
+                        val ichFacility2s = withContext(Dispatchers.IO) {
+                            supabaseHelper.getFilteredICHFacility2s(selectedDistrict)
+                        }
+                        val ich2Places = convertICHFacility2sToPlaces(ichFacility2s)
+                        allFacilities.addAll(ich2Places)
+                    }
+
+                    "부산광역시" -> {
+                        // BS Facility 데이터
+                        val bsFacilities = withContext(Dispatchers.IO) {
+                            supabaseHelper.getFilteredBSFacilities(selectedDistrict)
+                        }
+                        val bsPlaces = convertBSFacilitiesToPlaces(bsFacilities)
+                        allFacilities.addAll(bsPlaces)
+
+                        // BS Facility2 데이터
+                        val bsFacility2s = withContext(Dispatchers.IO) {
+                            supabaseHelper.getFilteredBSFacility2s(selectedDistrict)
+                        }
+                        val bs2Places = convertBSFacility2sToPlaces(bsFacility2s)
+                        allFacilities.addAll(bs2Places)
+                    }
+
+                    "경상북도" -> {
+                        // KB Facility 데이터
+                        val kbFacilities = withContext(Dispatchers.IO) {
+                            supabaseHelper.getFilteredKBFacilities(selectedDistrict)
+                        }
+                        val kbPlaces = convertKBFacilitiesToPlaces(kbFacilities)
+                        allFacilities.addAll(kbPlaces)
+
+                        // KB Facility2 데이터
+                        val kbFacility2s = withContext(Dispatchers.IO) {
+                            supabaseHelper.getFilteredKBFacility2s(selectedDistrict)
+                        }
+                        val kb2Places = convertKBFacility2sToPlaces(kbFacility2s)
+                        allFacilities.addAll(kb2Places)
+                    }
+
+                    "전체" -> {
+                        // 전체 선택 시 처리 (데이터가 너무 많으면 제한적으로 가져오기)
+                        // 또는 빈 리스트 반환
+                        allFacilities.clear()
+                    }
+                }
+
+                // 서비스 카테고리로 필터링
+                val filteredByService = if (selectedServiceCategory != "전체") {
+                    allFacilities.filter { place ->
+                        val categoryMatch = place.facilityKindDetail == selectedServiceCategory
+                        val subcategoryMatch = if (selectedServiceSubcategory == "전체") {
+                            true
+                        } else {
+                            place.service1.any { it.contains(selectedServiceSubcategory) } ||
+                                    place.service2.any { it.contains(selectedServiceSubcategory) }
+                        }
+                        categoryMatch && subcategoryMatch
+                    }
+                } else {
+                    allFacilities
+                }
+
+                // 결과 업데이트
+                _allPlaces.value = filteredByService
+                _filteredPlaces.value = filteredByService
+
+                // 서비스 카테고리 처리
+                processServiceCategories(filteredByService)
+
+                Log.d("PlaceViewModel", "Facility search complete: ${filteredByService.size} items")
+
+            } catch (e: Exception) {
+                Log.e("PlaceViewModel", "Error searching facilities: ${e.message}")
+            } finally {
+                _isLoadingKKFacilities.value = false
+                _isLoadingICHFacilities.value = false
+                _isLoadingBSFacilities.value = false
+                _isLoadingKBFacilities.value = false
+            }
+        }
+    }
+
+    // 필터링된 API 데이터 가져오기
+    private suspend fun fetchApiDataFiltered(city: String, district: String): List<Place> {
+        // 서울 열린데이터 API는 구별 필터링을 지원하지 않을 수 있으므로
+        // 전체 데이터를 가져온 후 필터링
+        val allApiData = fetchApiData()
+        return if (district != "전체") {
+            allApiData.filter { place ->
+                place.district == district
+            }
+        } else {
+            allApiData
+        }
+    }
+
+    // 변환 헬퍼 함수들
+    private fun convertKKFacilitiesToPlaces(facilities: List<SupabaseDatabaseHelper.KKFacility>): List<Place> {
+        return facilities.map { facility ->
+            val addressParts = facility.Address?.trim()?.split(" ") ?: emptyList()
+            val district = if (addressParts.size > 1) addressParts[1] else ""
+
+            Place(
+                id = "kk_${facility.Id}",
+                name = facility.Title ?: "이름 없음",
+                facilityCode = "",
+                facilityKind = facility.Service2 ?: "",
+                facilityKindDetail = facility.Service1 ?: "복지시설",
+                district = district,
+                address = facility.Address ?: "",
+                tel = facility.Tel ?: "",
+                zipCode = "",
+                service1 = listOf(facility.Service1 ?: "복지시설"),
+                service2 = listOf(facility.Service2 ?: ""),
+                rating = facility.Rating?.replace("\n", " ") ?: "",
+                rating_year = "",
+                full = facility.Full ?: "0",
+                now = facility.Now ?: "0",
+                wating = facility.Wating ?: "0",
+                bus = facility.Bus ?: ""
+            )
+        }
+    }
+
+    // KK Facility2 변환 함수
+    private fun convertKKFacility2sToPlaces(facilities: List<SupabaseDatabaseHelper.KKFacility2>): List<Place> {
+        return facilities.map { facility ->
+            val addressParts = facility.Address?.trim()?.split(" ") ?: emptyList()
+            val district = if (addressParts.size > 1) addressParts[1] else ""
+
+            Place(
+                id = "kk2_${facility.Id}",
+                name = facility.Title ?: "이름 없음",
+                facilityCode = "",
+                facilityKind = facility.Service2 ?: "",
+                facilityKindDetail = facility.Service1 ?: "복지시설",
+                district = district,
+                address = facility.Address ?: "",
+                tel = facility.Tel ?: "",
+                zipCode = "",
+                service1 = listOf(facility.Service1 ?: "복지시설"),
+                service2 = listOf(facility.Service2 ?: ""),
+                rating = "",
+                rating_year = "",
+                full = facility.Quota?.toString() ?: "0",
+                now = facility.Users?.toString() ?: "0",
+                wating = "0",
+                bus = ""
+            )
+        }
+    }
+
+    // ICH Facility 변환 함수
+    private fun convertICHFacilitiesToPlaces(facilities: List<SupabaseDatabaseHelper.ICHFacility>): List<Place> {
+        return facilities.map { facility ->
+            val addressParts = facility.Address?.trim()?.split(" ") ?: emptyList()
+            val district = if (addressParts.size > 1) addressParts[1] else ""
+
+            Place(
+                id = "ich_${facility.Id}",
+                name = facility.Title ?: "이름 없음",
+                facilityCode = "",
+                facilityKind = facility.Service2 ?: "",
+                facilityKindDetail = facility.Service1 ?: "복지시설",
+                district = district,
+                address = facility.Address ?: "",
+                tel = facility.Tel ?: "",
+                zipCode = "",
+                service1 = listOf(facility.Service1 ?: "복지시설"),
+                service2 = listOf(facility.Service2 ?: ""),
+                rating = facility.Rating?.replace("\n", " ") ?: "",
+                rating_year = "",
+                full = facility.Full ?: "0",
+                now = facility.Now ?: "0",
+                wating = facility.Wating ?: "0",
+                bus = facility.Bus ?: ""
+            )
+        }
+    }
+
+    // ICH Facility2 변환 함수
+    private fun convertICHFacility2sToPlaces(facilities: List<SupabaseDatabaseHelper.ICHFacility2>): List<Place> {
+        return facilities.map { facility ->
+            val addressParts = facility.Address?.trim()?.split(" ") ?: emptyList()
+            val district = if (addressParts.size > 1) addressParts[1] else ""
+
+            Place(
+                id = "ich2_${facility.Id}",
+                name = facility.Title ?: "이름 없음",
+                facilityCode = "",
+                facilityKind = facility.Service2 ?: "",
+                facilityKindDetail = facility.Service1 ?: "복지시설",
+                district = district,
+                address = facility.Address ?: "",
+                tel = facility.Tel ?: "",
+                zipCode = "",
+                service1 = listOf(facility.Service1 ?: "복지시설"),
+                service2 = listOf(facility.Service2 ?: ""),
+                rating = "",
+                rating_year = "",
+                full = "0",
+                now = "0",
+                wating = "0",
+                bus = ""
+            )
+        }
+    }
+
+    // BS Facility 변환 함수
+    private fun convertBSFacilitiesToPlaces(facilities: List<SupabaseDatabaseHelper.BSFacility>): List<Place> {
+        return facilities.map { facility ->
+            val addressParts = facility.Address?.trim()?.split(" ") ?: emptyList()
+            val district = if (addressParts.size > 1) addressParts[1] else ""
+
+            Place(
+                id = "bs_${facility.Id}",
+                name = facility.Title ?: "이름 없음",
+                facilityCode = "",
+                facilityKind = facility.Service2 ?: "",
+                facilityKindDetail = facility.Service1 ?: "복지시설",
+                district = district,
+                address = facility.Address ?: "",
+                tel = facility.Tel ?: "",
+                zipCode = "",
+                service1 = listOf(facility.Service1 ?: "복지시설"),
+                service2 = listOf(facility.Service2 ?: ""),
+                rating = facility.Rating?.replace("\n", " ") ?: "",
+                rating_year = "",
+                full = facility.Full ?: "0",
+                now = facility.Now ?: "0",
+                wating = facility.Wating ?: "0",
+                bus = facility.Bus ?: ""
+            )
+        }
+    }
+
+    // BS Facility2 변환 함수
+    private fun convertBSFacility2sToPlaces(facilities: List<SupabaseDatabaseHelper.BSFacility2>): List<Place> {
+        return facilities.map { facility ->
+            val addressParts = facility.Address?.trim()?.split(" ") ?: emptyList()
+            val district = if (addressParts.size > 1) addressParts[1] else ""
+
+            Place(
+                id = "bs2_${facility.Id}",
+                name = facility.Title ?: "이름 없음",
+                facilityCode = "",
+                facilityKind = facility.Service2 ?: "",
+                facilityKindDetail = facility.Service1 ?: "복지시설",
+                district = district,
+                address = facility.Address ?: "",
+                tel = facility.Tel ?: "",
+                zipCode = "",
+                service1 = listOf(facility.Service1 ?: "복지시설"),
+                service2 = listOf(facility.Service2 ?: ""),
+                rating = "",
+                rating_year = "",
+                full = facility.Quota?.toString() ?: "0",
+                now = facility.Users?.toString() ?: "0",
+                wating = "0",
+                bus = ""
+            )
+        }
+    }
+
+    // KB Facility 변환 함수
+    private fun convertKBFacilitiesToPlaces(facilities: List<SupabaseDatabaseHelper.KBFacility>): List<Place> {
+        return facilities.map { facility ->
+            val addressParts = facility.Address?.trim()?.split(" ") ?: emptyList()
+            val district = if (addressParts.size > 1) addressParts[1] else ""
+
+            Place(
+                id = "kb_${facility.Id}",
+                name = facility.Title ?: "이름 없음",
+                facilityCode = "",
+                facilityKind = facility.Service2 ?: "",
+                facilityKindDetail = facility.Service1 ?: "복지시설",
+                district = district,
+                address = facility.Address ?: "",
+                tel = facility.Tel ?: "",
+                zipCode = "",
+                service1 = listOf(facility.Service1 ?: "복지시설"),
+                service2 = listOf(facility.Service2 ?: ""),
+                rating = facility.Rating?.replace("\n", " ") ?: "",
+                rating_year = "",
+                full = facility.Full ?: "0",
+                now = facility.Now ?: "0",
+                wating = facility.Wating ?: "0",
+                bus = facility.Bus ?: ""
+            )
+        }
+    }
+
+    // KB Facility2 변환 함수
+    private fun convertKBFacility2sToPlaces(facilities: List<SupabaseDatabaseHelper.KBFacility2>): List<Place> {
+        return facilities.map { facility ->
+            val addressParts = facility.Address?.trim()?.split(" ") ?: emptyList()
+            val district = if (addressParts.size > 1) addressParts[1] else ""
+
+            Place(
+                id = "kb2_${facility.Id}",
+                name = facility.Title ?: "이름 없음",
+                facilityCode = "",
+                facilityKind = facility.Service2 ?: "",
+                facilityKindDetail = facility.Service1 ?: "복지시설",
+                district = district,
+                address = facility.Address ?: "",
+                tel = facility.Tel ?: "",
+                zipCode = "",
+                service1 = listOf(facility.Service1 ?: "복지시설"),
+                service2 = listOf(facility.Service2 ?: ""),
+                rating = "",
+                rating_year = "",
+                full = facility.Quota?.toString() ?: "0",
+                now = facility.Users?.toString() ?: "0",
+                wating = "0",
+                bus = ""
+            )
+        }
+    }
 
     // 고용 데이터 검색 및 필터링 함수
     fun searchAndFilterJobs(selectedCity: String, selectedDistrict: String) {

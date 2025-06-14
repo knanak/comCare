@@ -3638,4 +3638,228 @@ class SupabaseDatabaseHelper(private val context: Context) {
         }
     }
 
+    suspend fun getFilteredFacilities(city: String, district: String): List<facilities> {
+        return try {
+            withContext(Dispatchers.IO) {
+                if (district != "전체") {
+                    supabase.postgrest["facilities"]
+                        .select(filter = {
+                            like("address", "%$city%")
+                            like("address", "%$district%")
+                        })
+                        .decodeList<facilities>()
+                } else {
+                    supabase.postgrest["facilities"]
+                        .select(filter = {
+                            like("address", "%$city%")
+                        })
+                        .decodeList<facilities>()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching filtered facilities: ${e.message}")
+            emptyList()
+        }
+    }
+
+    // 경기도 시설 필터링
+    suspend fun getFilteredKKFacilities(district: String): List<KKFacility> {
+        return try {
+            withContext(Dispatchers.IO) {
+                if (district != "전체") {
+                    supabase.postgrest["kk_facility"]
+                        .select(filter = {
+                            like("Address", "%경기%")
+                            like("Address", "%$district%")
+                        })
+                        .decodeList<KKFacility>()
+                } else {
+                    supabase.postgrest["kk_facility"]
+                        .select(filter = {
+                            like("Address", "%경기%")
+                        })
+                        .decodeList<KKFacility>()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching filtered kk_facilities: ${e.message}")
+            emptyList()
+        }
+    }
+
+    // 경기도 시설2 필터링
+    suspend fun getFilteredKKFacility2s(district: String): List<KKFacility2> {
+        return try {
+            withContext(Dispatchers.IO) {
+                if (district != "전체") {
+                    supabase.postgrest["kk_facility2"]
+                        .select(filter = {
+                            like("Address", "%경기%")
+                            like("Address", "%$district%")
+                        })
+                        .decodeList<KKFacility2>()
+                } else {
+                    supabase.postgrest["kk_facility2"]
+                        .select(filter = {
+                            like("Address", "%경기%")
+                        })
+                        .decodeList<KKFacility2>()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching filtered kk_facility2s: ${e.message}")
+            emptyList()
+        }
+    }
+
+    // 인천광역시 시설 필터링
+    suspend fun getFilteredICHFacilities(district: String): List<ICHFacility> {
+        return try {
+            withContext(Dispatchers.IO) {
+                if (district != "전체") {
+                    supabase.postgrest["ich_facility"]
+                        .select(filter = {
+                            like("Address", "%인천%")
+                            like("Address", "%$district%")
+                        })
+                        .decodeList<ICHFacility>()
+                } else {
+                    supabase.postgrest["ich_facility"]
+                        .select(filter = {
+                            like("Address", "%인천%")
+                        })
+                        .decodeList<ICHFacility>()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching filtered ich_facilities: ${e.message}")
+            emptyList()
+        }
+    }
+
+    // 인천광역시 시설2 필터링
+    suspend fun getFilteredICHFacility2s(district: String): List<ICHFacility2> {
+        return try {
+            withContext(Dispatchers.IO) {
+                if (district != "전체") {
+                    supabase.postgrest["ich_facility2"]
+                        .select(filter = {
+                            like("Address", "%인천%")
+                            like("Address", "%$district%")
+                        })
+                        .decodeList<ICHFacility2>()
+                } else {
+                    supabase.postgrest["ich_facility2"]
+                        .select(filter = {
+                            like("Address", "%인천%")
+                        })
+                        .decodeList<ICHFacility2>()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching filtered ich_facility2s: ${e.message}")
+            emptyList()
+        }
+    }
+
+    // 부산광역시 시설 필터링
+    suspend fun getFilteredBSFacilities(district: String): List<BSFacility> {
+        return try {
+            withContext(Dispatchers.IO) {
+                if (district != "전체") {
+                    supabase.postgrest["bs_facility"]
+                        .select(filter = {
+                            like("Address", "%부산%")
+                            like("Address", "%$district%")
+                        })
+                        .decodeList<BSFacility>()
+                } else {
+                    supabase.postgrest["bs_facility"]
+                        .select(filter = {
+                            like("Address", "%부산%")
+                        })
+                        .decodeList<BSFacility>()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching filtered bs_facilities: ${e.message}")
+            emptyList()
+        }
+    }
+
+    // 부산광역시 시설2 필터링
+    suspend fun getFilteredBSFacility2s(district: String): List<BSFacility2> {
+        return try {
+            withContext(Dispatchers.IO) {
+                if (district != "전체") {
+                    supabase.postgrest["bs_facility2"]
+                        .select(filter = {
+                            like("Address", "%부산%")
+                            like("Address", "%$district%")
+                        })
+                        .decodeList<BSFacility2>()
+                } else {
+                    supabase.postgrest["bs_facility2"]
+                        .select(filter = {
+                            like("Address", "%부산%")
+                        })
+                        .decodeList<BSFacility2>()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching filtered bs_facility2s: ${e.message}")
+            emptyList()
+        }
+    }
+
+    // 경상북도 시설 필터링
+    suspend fun getFilteredKBFacilities(district: String): List<KBFacility> {
+        return try {
+            withContext(Dispatchers.IO) {
+                if (district != "전체") {
+                    supabase.postgrest["kb_facility"]
+                        .select(filter = {
+                            like("Address", "%경상북도%")
+                            like("Address", "%$district%")
+                        })
+                        .decodeList<KBFacility>()
+                } else {
+                    supabase.postgrest["kb_facility"]
+                        .select(filter = {
+                            like("Address", "%경상북도%")
+                        })
+                        .decodeList<KBFacility>()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching filtered kb_facilities: ${e.message}")
+            emptyList()
+        }
+    }
+
+    // 경상북도 시설2 필터링
+    suspend fun getFilteredKBFacility2s(district: String): List<KBFacility2> {
+        return try {
+            withContext(Dispatchers.IO) {
+                if (district != "전체") {
+                    supabase.postgrest["kb_facility2"]
+                        .select(filter = {
+                            like("Address", "%경상북도%")
+                            like("Address", "%$district%")
+                        })
+                        .decodeList<KBFacility2>()
+                } else {
+                    supabase.postgrest["kb_facility2"]
+                        .select(filter = {
+                            like("Address", "%경상북도%")
+                        })
+                        .decodeList<KBFacility2>()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching filtered kb_facility2s: ${e.message}")
+            emptyList()
+        }
+    }
+
 }
