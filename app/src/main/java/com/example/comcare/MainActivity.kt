@@ -584,6 +584,22 @@ class MainActivity : ComponentActivity() {
                                     returnSection = "jobs"
                                 )
                             }
+                            composable(
+                                "cultureSearchResults?returnSection={returnSection}",
+                                arguments = listOf(
+                                    navArgument("returnSection") {
+                                        type = NavType.StringType
+                                        defaultValue = "culture"
+                                    }
+                                )
+                            ) { backStackEntry ->
+                                val returnSection = backStackEntry.arguments?.getString("returnSection") ?: "culture"
+                                CultureSearchResultsScreen(
+                                    viewModel = viewModel,
+                                    navController = navController,
+                                    returnSection = returnSection
+                                )
+                            }
 
                             composable("chat") {
                                 ChatScreen(
@@ -2613,161 +2629,60 @@ fun PlaceComparisonApp(
                                                 onClick = {
                                                     selectedDistrict = district
                                                     expandedDistrictMenu = false
-                                                    viewModel.filterAllCultures(selectedCity, selectedDistrict)
+                                                    viewModel.filterAllCultures(
+                                                        selectedCity,
+                                                        selectedDistrict
+                                                    )
                                                 }
                                             )
                                         }
                                     }
                                 }
                             }
+
+                            // Add search button
+                            Spacer(modifier = Modifier.height(24.dp))
+
+                            Button(
+                                onClick = {
+                                    // Apply filters
+                                    viewModel.filterAllCultures(selectedCity, selectedDistrict)
+                                    // Navigate to culture search results screen
+                                    navController.navigate("cultureSearchResults?returnSection=culture")
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFFc6f584),
+                                    contentColor = Color.Black
+                                )
+                            ) {
+                                Text(
+                                    "검색하기",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
 
                     Divider(modifier = Modifier.padding(horizontal = 16.dp))
 
-                    // 통합된 문화 강좌 리스트 (lectures + kk_cultures + ich_cultures + bs_cultures + kb_cultures)
-                    val regularLectures = viewModel.filteredLectures.value
-                    val kkCultures = viewModel.filteredKKCultures.value
-                    val ichCultures = viewModel.filteredICHCultures.value
-                    val bsCultures = viewModel.filteredBSCultures.value  // BS cultures 추가
-                    val kbCultures = viewModel.filteredKBCultures.value  // KB cultures 추가
 
-                    // 통합된 문화 강좌 리스트 생성
-                    val allCultures = regularLectures + kkCultures + ichCultures + bsCultures + kbCultures
-
-                    if (allCultures.isNotEmpty()) {
-                        // Pagination state
-                        var currentPage by remember { mutableStateOf(0) }
-                        val itemsPerPage = 5
-                        val totalPages = ceil(allCultures.size.toFloat() / itemsPerPage).toInt()
-
-                        // Calculate current page items
-                        val startIndex = currentPage * itemsPerPage
-                        val endIndex = minOf(startIndex + itemsPerPage, allCultures.size)
-                        val currentPageItems = allCultures.subList(startIndex, endIndex)
-
+                    // Show guidance message instead of immediate results
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
                         Column(
-                            modifier = Modifier.fillMaxSize()
+                            modifier = Modifier.padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            // Main content area - shows cultures for current page
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxWidth()
-                            ) {
-                                LazyColumn(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(horizontal = 16.dp),
-                                    contentPadding = PaddingValues(vertical = 8.dp)
-                                ) {
-                                    items(currentPageItems) { culture ->
-                                        when (culture) {
-                                            is SupabaseDatabaseHelper.Lecture -> LectureCard(lecture = culture)
-                                            is SupabaseDatabaseHelper.KKCulture -> KKCultureCard(kkCulture = culture)
-                                            is SupabaseDatabaseHelper.ICHCulture -> ICHCultureCard(ichCulture = culture)
-                                            is SupabaseDatabaseHelper.BSCulture -> BSCultureCard(bsCulture = culture)  // BS culture card 추가
-                                            is SupabaseDatabaseHelper.KBCulture -> KBCultureCard(kbCulture = culture)  // KB culture card 추가
-                                        }
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                    }
-                                }
-                            }
-
-                            // Pagination controls
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 8.dp, horizontal = 16.dp),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                // Calculate which page numbers to show
-                                val pageGroupSize = 4
-                                val startPage = (currentPage / pageGroupSize) * pageGroupSize
-                                val endPage = minOf(startPage + pageGroupSize, totalPages)
-
-                                if (startPage > 0) {
-                                    Text(
-                                        text = "이전",
-                                        modifier = Modifier
-                                            .clickable {
-                                                // Go to last page of previous group
-                                                currentPage = startPage - 1
-                                            }
-                                            .padding(horizontal = 12.dp, vertical = 4.dp),
-                                        color = Color(0xFF4A7C25),
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-
-                                // Page numbers
-                                for (i in startPage until endPage) {
-                                    val pageNumber = i + 1
-                                    Text(
-                                        text = pageNumber.toString(),
-                                        modifier = Modifier
-                                            .clickable { currentPage = i }
-                                            .padding(horizontal = 12.dp, vertical = 4.dp),
-                                        color = if (currentPage == i) Color(0xFF4A7C25) else Color(0xFF757575),
-                                        fontWeight = if (currentPage == i) FontWeight.Bold else FontWeight.Normal,
-                                        style = MaterialTheme.typography.bodyLarge
-                                    )
-                                }
-
-                                // "다음" (next) button if there are more pages
-                                if (endPage < totalPages) {
-                                    Text(
-                                        text = "다음",
-                                        modifier = Modifier
-                                            .clickable { currentPage = endPage }
-                                            .padding(horizontal = 12.dp, vertical = 4.dp),
-                                        color = Color(0xFF4A7C25),
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-                        }
-                    } else if (viewModel.isLoadingLectures || viewModel.isLoadingKKCultures || viewModel.isLoadingICHCultures ||
-                        viewModel.isLoadingBSCultures || viewModel.isLoadingKBCultures) {  // BS, KB cultures 로딩 상태 추가
-                        // Show loading indicator
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                CircularProgressIndicator(color = Color(0xFF4A7C25))
-                                Spacer(modifier = Modifier.height(16.dp))
-                                Text("강좌 정보를 불러오는 중...")
-                            }
-                        }
-                    } else {
-                        // Show message when no data
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("강좌 정보가 없습니다")
-                                Spacer(modifier = Modifier.height(16.dp))
-                                Button(
-                                    onClick = {
-                                        viewModel.fetchLectureData()
-                                        viewModel.fetchKKCulturesData()
-                                        viewModel.fetchICHCulturesData()
-                                        viewModel.fetchBSCulturesData()  // BS cultures fetch 추가
-                                        viewModel.fetchKBCulturesData()  // KB cultures fetch 추가
-                                    },
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = Color(0xFFc6f584),
-                                        contentColor = Color.Black
-                                    )
-                                ) {
-                                    Text("새로고침")
-                                }
-                            }
+                            Text(
+                                text = "지역을 선택하고\n'검색하기' 버튼을 눌러주세요",
+                                style = MaterialTheme.typography.titleMedium,
+                                textAlign = TextAlign.Center,
+                                color = Color.Gray
+                            )
                         }
                     }
                 }
@@ -3078,6 +2993,193 @@ fun JobSearchResultsScreen(
                     CircularProgressIndicator(color = Color(0xFF4A7C25))
                     Spacer(modifier = Modifier.height(16.dp))
                     Text("일자리 정보를 불러오는 중...")
+                }
+            }
+        } else {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("검색 결과가 없습니다. 다른 조건으로 검색해보세요.")
+            }
+        }
+    }
+}
+
+// MainActivity.kt에 추가할 CultureSearchResultsScreen Composable
+// 다음 import들이 필요합니다:
+// import androidx.compose.ui.text.style.TextAlign
+// 기타 필요한 import들은 이미 MainActivity에 포함되어 있습니다.
+
+@Composable
+fun CultureSearchResultsScreen(
+    viewModel: PlaceViewModel,
+    navController: NavController,
+    returnSection: String = "culture"
+) {
+    val regularLectures = viewModel.filteredLectures.value
+    val kkCultures = viewModel.filteredKKCultures.value
+    val ichCultures = viewModel.filteredICHCultures.value
+    val bsCultures = viewModel.filteredBSCultures.value
+    val kbCultures = viewModel.filteredKBCultures.value
+
+    // 통합된 문화 강좌 리스트 생성
+    val allCultures = regularLectures + kkCultures + ichCultures + bsCultures + kbCultures
+
+    // 시스템 뒤로 가기 버튼 처리
+    BackHandler(enabled = true) {
+        navController.navigate("home/$returnSection") {
+            popUpTo("cultureSearchResults") { inclusive = true }
+        }
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Top Bar with back button
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = Color(0xFFc6f584),
+            shadowElevation = 4.dp
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = {
+                        navController.navigate("home/$returnSection") {
+                            popUpTo("cultureSearchResults") { inclusive = true }
+                        }
+                    },
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ArrowBack,
+                        contentDescription = "Back",
+                        modifier = Modifier.size(28.dp),
+                        tint = Color.Black
+                    )
+                }
+
+                Text(
+                    text = "검색 결과 : ${allCultures.size}개",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = Color.Black,
+                    modifier = Modifier.padding(start = 8.dp)
+                )
+            }
+        }
+
+        Divider()
+
+        // Results list with pagination
+        if (allCultures.isNotEmpty()) {
+            var currentPage by remember { mutableStateOf(0) }
+            val itemsPerPage = 5
+            val totalPages = ceil(allCultures.size.toFloat() / itemsPerPage).toInt()
+
+            Column(
+                modifier = Modifier.fillMaxSize()
+            ) {
+                // Main content area - shows cultures for current page
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                ) {
+                    val startIndex = currentPage * itemsPerPage
+                    val endIndex = minOf(startIndex + itemsPerPage, allCultures.size)
+                    val currentPageItems = allCultures.subList(startIndex, endIndex)
+
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 16.dp),
+                        contentPadding = PaddingValues(vertical = 8.dp)
+                    ) {
+                        items(currentPageItems) { culture ->
+                            when (culture) {
+                                is SupabaseDatabaseHelper.Lecture -> LectureCard(lecture = culture)
+                                is SupabaseDatabaseHelper.KKCulture -> KKCultureCard(kkCulture = culture)
+                                is SupabaseDatabaseHelper.ICHCulture -> ICHCultureCard(ichCulture = culture)
+                                is SupabaseDatabaseHelper.BSCulture -> BSCultureCard(bsCulture = culture)
+                                is SupabaseDatabaseHelper.KBCulture -> KBCultureCard(kbCulture = culture)
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+                    }
+                }
+
+                // Pagination controls
+                if (totalPages > 1) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp, horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Calculate which page numbers to show
+                        val pageGroupSize = 4
+                        val startPage = (currentPage / pageGroupSize) * pageGroupSize
+                        val endPage = minOf(startPage + pageGroupSize, totalPages)
+
+                        // Previous button
+                        if (startPage > 0) {
+                            Text(
+                                text = "이전",
+                                modifier = Modifier
+                                    .clickable {
+                                        currentPage = startPage - 1
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                                color = Color(0xFF4A7C25),
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        // Page numbers
+                        for (i in startPage until endPage) {
+                            val pageNumber = i + 1
+                            Text(
+                                text = pageNumber.toString(),
+                                modifier = Modifier
+                                    .clickable { currentPage = i }
+                                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                                color = if (currentPage == i) Color(0xFF4A7C25) else Color(0xFF757575),
+                                fontWeight = if (currentPage == i) FontWeight.Bold else FontWeight.Normal,
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        }
+
+                        // Next button
+                        if (endPage < totalPages) {
+                            Text(
+                                text = "다음",
+                                modifier = Modifier
+                                    .clickable { currentPage = endPage }
+                                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                                color = Color(0xFF4A7C25),
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+        } else if (viewModel.isLoadingLectures || viewModel.isLoadingKKCultures || viewModel.isLoadingICHCultures ||
+            viewModel.isLoadingBSCultures || viewModel.isLoadingKBCultures) {
+            // Show loading indicator
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator(color = Color(0xFF4A7C25))
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("문화 강좌 정보를 불러오는 중...")
                 }
             }
         } else {
