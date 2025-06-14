@@ -1280,7 +1280,13 @@ fun PlaceComparisonApp(
                 onClick = {
                     currentSection = "culture"
                     // Fetch lecture data when this button is clicked
-                    viewModel.fetchLectureData()
+//                    viewModel.fetchLectureData()
+
+//                    Log.d("CultureDebug", "SEOUL문화: ${viewModel.lectures.value.size}개")
+//                    Log.d("CultureDebug", "KK문화: ${viewModel.kkCultures.value.size}개")
+//                    Log.d("CultureDebug", "ICH문화: ${viewModel.ichCultures.value.size}개")
+//                    Log.d("CultureDebug", "BS문화: ${viewModel.bsCultures.value.size}개")
+//                    Log.d("CultureDebug", "KB문화: ${viewModel.kbCultures.value.size}개")
                 },
                 modifier = Modifier
                     .weight(1f)
@@ -2508,10 +2514,10 @@ fun PlaceComparisonApp(
                             fontWeight = FontWeight.Bold
                         )
 
-                        Text(
-                            text = "총 ${viewModel.getTotalFilteredCulturesCount()}개",
-                            style = MaterialTheme.typography.bodyLarge,
-                        )
+//                        Text(
+//                            text = "총 ${viewModel.getTotalFilteredCulturesCount()}개",
+//                            style = MaterialTheme.typography.bodyLarge,
+//                        )
                     }
 
                     // Add location filter section
@@ -2643,11 +2649,12 @@ fun PlaceComparisonApp(
                             // Add search button
                             Spacer(modifier = Modifier.height(24.dp))
 
+                            // MainActivity.kt의 "culture" 섹션에서 검색 버튼 클릭 시
                             Button(
                                 onClick = {
-                                    // Apply filters
-                                    viewModel.filterAllCultures(selectedCity, selectedDistrict)
-                                    // Navigate to culture search results screen
+                                    // 필터 적용하고 데이터 가져오기
+                                    viewModel.searchAndFilterCultures(selectedCity, selectedDistrict)
+                                    // 검색 결과 화면으로 이동
                                     navController.navigate("cultureSearchResults?returnSection=culture")
                                 },
                                 modifier = Modifier.fillMaxWidth(),
@@ -2677,12 +2684,12 @@ fun PlaceComparisonApp(
                             modifier = Modifier.padding(16.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Text(
-                                text = "지역을 선택하고\n'검색하기' 버튼을 눌러주세요",
-                                style = MaterialTheme.typography.titleMedium,
-                                textAlign = TextAlign.Center,
-                                color = Color.Gray
-                            )
+//                            Text(
+//                                text = "지역을 선택하고\n'검색하기' 버튼을 눌러주세요",
+//                                style = MaterialTheme.typography.titleMedium,
+//                                textAlign = TextAlign.Center,
+//                                color = Color.Gray
+//                            )
                         }
                     }
                 }

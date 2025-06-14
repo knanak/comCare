@@ -3311,4 +3311,201 @@ class SupabaseDatabaseHelper(private val context: Context) {
             null
         }
     }
+
+// SupabaseDatabaseHelper.kt
+
+    // 필터링된 문화 강좌 가져오기
+    suspend fun getFilteredLectures(city: String, district: String): List<Lecture> {
+        return try {
+            withContext(Dispatchers.IO) {
+                // 서울특별시만 Category로 필터링 가능
+                if (city == "서울특별시" && district != "전체") {
+                    supabase.postgrest["lecture"]
+                        .select(filter = {
+                            eq("Category", district)
+                        })
+                        .decodeList<Lecture>()
+                } else {
+                    // 전체 데이터 가져오기
+                    supabase.postgrest["lecture"]
+                        .select()
+                        .decodeList<Lecture>()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching filtered lectures: ${e.message}")
+            emptyList()
+        }
+    }
+
+    // 경기도 문화 강좌 필터링
+    suspend fun getFilteredKKCultures(district: String): List<KKCulture> {
+        return try {
+            withContext(Dispatchers.IO) {
+                if (district != "전체") {
+                    supabase.postgrest["kk_culture"]
+                        .select(filter = {
+                            eq("Category", district)
+                        })
+                        .decodeList<KKCulture>()
+                } else {
+                    supabase.postgrest["kk_culture"]
+                        .select()
+                        .decodeList<KKCulture>()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching filtered kk_cultures: ${e.message}")
+            emptyList()
+        }
+    }
+
+    // 인천광역시 문화 강좌 필터링
+    suspend fun getFilteredICHCultures(district: String): List<ICHCulture> {
+        return try {
+            withContext(Dispatchers.IO) {
+                if (district != "전체") {
+                    supabase.postgrest["ich_culture"]
+                        .select(filter = {
+                            eq("Category", district)
+                        })
+                        .decodeList<ICHCulture>()
+                } else {
+                    supabase.postgrest["ich_culture"]
+                        .select()
+                        .decodeList<ICHCulture>()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching filtered ich_cultures: ${e.message}")
+            emptyList()
+        }
+    }
+
+    // 부산광역시 문화 강좌 필터링
+    suspend fun getFilteredBSCultures(district: String): List<BSCulture> {
+        return try {
+            withContext(Dispatchers.IO) {
+                if (district != "전체") {
+                    supabase.postgrest["bs_culture"]
+                        .select(filter = {
+                            eq("Category", district)
+                        })
+                        .decodeList<BSCulture>()
+                } else {
+                    supabase.postgrest["bs_culture"]
+                        .select()
+                        .decodeList<BSCulture>()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching filtered bs_cultures: ${e.message}")
+            emptyList()
+        }
+    }
+
+    // 경상북도 문화 강좌 필터링
+    suspend fun getFilteredKBCultures(district: String): List<KBCulture> {
+        return try {
+            withContext(Dispatchers.IO) {
+                if (district != "전체") {
+                    supabase.postgrest["kb_culture"]
+                        .select(filter = {
+                            eq("Category", district)
+                        })
+                        .decodeList<KBCulture>()
+                } else {
+                    supabase.postgrest["kb_culture"]
+                        .select()
+                        .decodeList<KBCulture>()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching filtered kb_cultures: ${e.message}")
+            emptyList()
+        }
+    }
+
+    // 페이징 처리가 포함된 버전
+    suspend fun getFilteredLecturesPaged(
+        city: String,
+        district: String,
+        page: Int,
+        pageSize: Int = 20
+    ): List<Lecture> {
+        return try {
+            withContext(Dispatchers.IO) {
+                val from = page * pageSize
+                val to = from + pageSize - 1
+
+                if (city == "서울특별시" && district != "전체") {
+                    supabase.postgrest["lecture"]
+                        .select(filter = {
+                            eq("Category", district)
+                            range(from = from.toLong(), to = to.toLong())
+                        })
+                        .decodeList<Lecture>()
+                } else {
+                    supabase.postgrest["lecture"]
+                        .select(filter = {
+                            range(from = from.toLong(), to = to.toLong())
+                        })
+                        .decodeList<Lecture>()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching paged lectures: ${e.message}")
+            emptyList()
+        }
+    }
+
+    // 전체 개수와 함께 가져오는 버전
+    suspend fun getFilteredLecturesWithCount(
+        city: String,
+        district: String,
+        page: Int,
+        pageSize: Int = 20
+    ): Pair<List<Lecture>, Int> {
+        return try {
+            withContext(Dispatchers.IO) {
+                // 전체 개수 조회
+                val totalCount = if (city == "서울특별시" && district != "전체") {
+                    supabase.postgrest["lecture"]
+                        .select(head = true, count = Count.EXACT, filter = {
+                            eq("Category", district)
+                        })
+                        .count() ?: 0L
+                } else {
+                    supabase.postgrest["lecture"]
+                        .select(head = true, count = Count.EXACT)
+                        .count() ?: 0L
+                }
+
+                // 실제 데이터 조회
+                val from = page * pageSize
+                val to = from + pageSize - 1
+
+                val data = if (city == "서울특별시" && district != "전체") {
+                    supabase.postgrest["lecture"]
+                        .select(filter = {
+                            eq("Category", district)
+                            range(from = from.toLong(), to = to.toLong())
+                        })
+                        .decodeList<Lecture>()
+                } else {
+                    supabase.postgrest["lecture"]
+                        .select(filter = {
+                            range(from = from.toLong(), to = to.toLong())
+                        })
+                        .decodeList<Lecture>()
+                }
+
+                Pair(data, totalCount.toInt())
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching lectures with count: ${e.message}")
+            Pair(emptyList(), 0)
+        }
+    }
+
 }

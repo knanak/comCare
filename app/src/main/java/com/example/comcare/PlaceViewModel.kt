@@ -273,19 +273,19 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
         // Fetch data when ViewModel is initialized
         fetchPlacesData()
         fetchJobsData()
-        fetchLectureData()
+//        fetchLectureData()
         fetchKKJobsData()
-        fetchKKCulturesData()
+//        fetchKKCulturesData()
         fetchKKFacilitiesData()
         fetchKKFacility2sData()
         fetchICHFacilitiesData()
         fetchICHFacility2sData()
         fetchICHJobsData()
-        fetchICHCulturesData()
+//        fetchICHCulturesData()
         fetchBSJobsData()
         fetchKBJobsData()
-        fetchBSCulturesData()
-        fetchKBCulturesData()
+//        fetchBSCulturesData()
+//        fetchKBCulturesData()
         fetchBSFacilitiesData()
         fetchKBFacilitiesData()
         fetchBSFacility2sData()
@@ -316,6 +316,111 @@ class PlaceViewModel(private val supabaseHelper: SupabaseDatabaseHelper) : ViewM
     // 사용자 위치 정보 getter 함수 추가
     fun getUserCity(): String = userCity
     fun getUserDistrict(): String = userDistrict
+
+    fun searchAndFilterCultures(selectedCity: String, selectedDistrict: String) {
+        viewModelScope.launch {
+            try {
+                // 로딩 상태 설정
+                _isLoadingLectures.value = true
+                _isLoadingKKCultures.value = true
+                _isLoadingICHCultures.value = true
+                _isLoadingBSCultures.value = true
+                _isLoadingKBCultures.value = true
+
+                // 선택된 도시에 따라 해당하는 데이터만 가져오기
+                when (selectedCity) {
+                    "서울특별시" -> {
+                        val lectures = withContext(Dispatchers.IO) {
+                            supabaseHelper.getFilteredLectures(selectedCity, selectedDistrict)
+                        }
+                        _lectures.value = lectures
+                        _filteredLectures.value = lectures
+
+                        // 다른 지역 데이터는 비우기
+                        _filteredKKCultures.value = emptyList()
+                        _filteredICHCultures.value = emptyList()
+                        _filteredBSCultures.value = emptyList()
+                        _filteredKBCultures.value = emptyList()
+                    }
+
+                    "경기도" -> {
+                        val kkCultures = withContext(Dispatchers.IO) {
+                            supabaseHelper.getFilteredKKCultures(selectedDistrict)
+                        }
+                        _kkCultures.value = kkCultures
+                        _filteredKKCultures.value = kkCultures
+
+                        // 다른 지역 데이터는 비우기
+                        _filteredLectures.value = emptyList()
+                        _filteredICHCultures.value = emptyList()
+                        _filteredBSCultures.value = emptyList()
+                        _filteredKBCultures.value = emptyList()
+                    }
+
+                    "인천광역시" -> {
+                        val ichCultures = withContext(Dispatchers.IO) {
+                            supabaseHelper.getFilteredICHCultures(selectedDistrict)
+                        }
+                        _ichCultures.value = ichCultures
+                        _filteredICHCultures.value = ichCultures
+
+                        // 다른 지역 데이터는 비우기
+                        _filteredLectures.value = emptyList()
+                        _filteredKKCultures.value = emptyList()
+                        _filteredBSCultures.value = emptyList()
+                        _filteredKBCultures.value = emptyList()
+                    }
+
+                    "부산광역시" -> {
+                        val bsCultures = withContext(Dispatchers.IO) {
+                            supabaseHelper.getFilteredBSCultures(selectedDistrict)
+                        }
+                        _bsCultures.value = bsCultures
+                        _filteredBSCultures.value = bsCultures
+
+                        // 다른 지역 데이터는 비우기
+                        _filteredLectures.value = emptyList()
+                        _filteredKKCultures.value = emptyList()
+                        _filteredICHCultures.value = emptyList()
+                        _filteredKBCultures.value = emptyList()
+                    }
+
+                    "경상북도" -> {
+                        val kbCultures = withContext(Dispatchers.IO) {
+                            supabaseHelper.getFilteredKBCultures(selectedDistrict)
+                        }
+                        _kbCultures.value = kbCultures
+                        _filteredKBCultures.value = kbCultures
+
+                        // 다른 지역 데이터는 비우기
+                        _filteredLectures.value = emptyList()
+                        _filteredKKCultures.value = emptyList()
+                        _filteredICHCultures.value = emptyList()
+                        _filteredBSCultures.value = emptyList()
+                    }
+
+                    "전체" -> {
+                        // 전체 선택 시 모든 데이터 가져오기 (또는 비우기)
+                        // 데이터가 너무 많다면 비우거나 일부만 가져오기
+                        _filteredLectures.value = emptyList()
+                        _filteredKKCultures.value = emptyList()
+                        _filteredICHCultures.value = emptyList()
+                        _filteredBSCultures.value = emptyList()
+                        _filteredKBCultures.value = emptyList()
+                    }
+                }
+
+            } catch (e: Exception) {
+                Log.e("PlaceViewModel", "Error searching cultures: ${e.message}")
+            } finally {
+                _isLoadingLectures.value = false
+                _isLoadingKKCultures.value = false
+                _isLoadingICHCultures.value = false
+                _isLoadingBSCultures.value = false
+                _isLoadingKBCultures.value = false
+            }
+        }
+    }
 
     private fun fetchPlacesData() {
         viewModelScope.launch {
