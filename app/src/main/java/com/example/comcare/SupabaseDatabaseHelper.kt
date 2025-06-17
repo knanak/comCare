@@ -203,8 +203,7 @@ class SupabaseDatabaseHelper(private val context: Context) {
         }
     }
 
-    // 회원가입 함수
-// 회원가입 함수 - 디버깅 로그 추가
+    // SupabaseDatabaseHelper의 registerUser 함수 수정
     suspend fun registerUser(
         userId: String,
         password: String,
@@ -222,26 +221,26 @@ class SupabaseDatabaseHelper(private val context: Context) {
                     .select(filter = {
                         eq("user_id", userId)
                     })
-                    .decodeList<User>()  // decodeSingleOrNull 대신 decodeList 사용
+                    .decodeList<User>()
 
                 Log.d(TAG, "기존 사용자 수: ${existingUsers.size}")
 
                 if (existingUsers.isNotEmpty()) {
                     Log.d(TAG, "User ID already exists: $userId")
-                    existingUsers.forEach { user ->
-                        Log.d(TAG, "기존 사용자 정보: id=${user.id}, user_id=${user.user_id}")
-                    }
                     return@withContext null
                 }
 
                 Log.d(TAG, "중복 없음 - 새 사용자 생성 진행")
+
+                // 전화번호에서 하이픈 제거
+                val cleanPhoneNumber = phoneNumber.replace("-", "")
 
                 // 새 사용자 생성
                 val newUser = buildJsonObject {
                     put("user_id", JsonPrimitive(userId))
                     put("password", JsonPrimitive(hashPassword(password)))
                     put("birth_date", JsonPrimitive(birthDate))
-                    put("tel", JsonPrimitive(phoneNumber))
+                    put("tel", JsonPrimitive(cleanPhoneNumber)) // 하이픈 제거된 번호 저장
                     put("created_at", JsonPrimitive(getCurrentTimestampIso8601()))
                 }
 
@@ -258,12 +257,6 @@ class SupabaseDatabaseHelper(private val context: Context) {
                 } catch (insertError: Exception) {
                     Log.e(TAG, "Insert 중 오류 발생: ${insertError.message}")
                     Log.e(TAG, "Insert 오류 상세: ", insertError)
-
-                    // 혹시 unique constraint 오류인지 확인
-                    if (insertError.message?.contains("duplicate") == true ||
-                        insertError.message?.contains("unique") == true) {
-                        Log.e(TAG, "Unique constraint 위반 - 중복된 user_id")
-                    }
                     null
                 }
             }
@@ -371,6 +364,67 @@ class SupabaseDatabaseHelper(private val context: Context) {
         }
     }
 
+    // 아이디 중복 확인 함수 (더 간단하게)
+    suspend fun isUserIdAvailable(userId: String): Boolean {
+        return try {
+            withContext(Dispatchers.IO) {
+                Log.d(TAG, "Checking availability for user_id: '$userId'")
+
+                val existingUser = supabase.postgrest["users"]
+                    .select(filter = {
+                        eq("user_id", userId)
+                    })
+                    .decodeSingleOrNull<User>()
+
+                val isAvailable = existingUser == null
+                Log.d(TAG, "User ID '$userId' available: $isAvailable")
+
+                isAvailable
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking user_id availability: ${e.message}")
+            false
+        }
+    }
+
+    // 전화번호 형식 검증 함수
+    fun isValidPhoneNumber(phoneNumber: String): Boolean {
+        // 하이픈 제거
+        val cleanNumber = phoneNumber.replace("-", "")
+
+        // 010으로 시작하고 총 11자리인지 확인
+        return cleanNumber.startsWith("010") && cleanNumber.length == 11 && cleanNumber.all { it.isDigit() }
+    }
+
+    // 생년월일 형식 검증 함수
+    fun isValidBirthDate(birthDate: String): Boolean {
+        if (birthDate.length != 8 || !birthDate.all { it.isDigit() }) {
+            return false
+        }
+
+        try {
+            val year = birthDate.substring(0, 4).toInt()
+            val month = birthDate.substring(4, 6).toInt()
+            val day = birthDate.substring(6, 8).toInt()
+
+            // 기본 범위 검증
+            if (year < 1900 || year > 2024) return false
+            if (month < 1 || month > 12) return false
+            if (day < 1 || day > 31) return false
+
+            // 월별 일수 검증
+            val daysInMonth = when (month) {
+                2 -> if (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)) 29 else 28
+                4, 6, 9, 11 -> 30
+                else -> 31
+            }
+
+            return day <= daysInMonth
+        } catch (e: Exception) {
+            return false
+        }
+    }
+
     // 카카오 사용자 정보 저장/업데이트 함수
     suspend fun upsertUser(
         kakaoId: String,
@@ -379,7 +433,7 @@ class SupabaseDatabaseHelper(private val context: Context) {
     ): User? {
         return try {
             withContext(Dispatchers.IO) {
-                Log.d(TAG, "=== upsertUser 시작 ===")g
+                Log.d(TAG, "=== upsertUser 시작 ===")
                 Log.d(TAG, "kakaoId: $kakaoId")
                 Log.d(TAG, "address: $address")
                 Log.d(TAG, "tel: $tel")

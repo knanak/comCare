@@ -119,7 +119,9 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.foundation.lazy.LazyColumn
 
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.unit.sp
+
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.layout.Row
 
 
 // 사용자 정보 데이터 클래스
@@ -1373,6 +1375,11 @@ fun SignUpScreen(
     var phoneNumber by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
 
+    // 추가 상태 변수
+    var isCheckingDuplicate by remember { mutableStateOf(false) }
+    var isUserIdAvailable by remember { mutableStateOf<Boolean?>(null) }
+    var userIdChecked by remember { mutableStateOf(false) }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -1393,33 +1400,105 @@ fun SignUpScreen(
                 modifier = Modifier.padding(bottom = 40.dp)
             )
 
-            // 아이디 입력
-            OutlinedTextField(
-                value = userId,
-                onValueChange = { userId = it },
-                label = {
-                    Text(
-                        "아이디",
-                        fontSize = 20.sp,
+            // 아이디 입력 및 중복 확인
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.Bottom
+            ) {
+                OutlinedTextField(
+                    value = userId,
+                    onValueChange = {
+                        userId = it
+                        // 아이디가 변경되면 중복 확인 상태 초기화
+                        isUserIdAvailable = null
+                        userIdChecked = false
+                    },
+                    label = {
+                        Text(
+                            "아이디",
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.Black
+                        )
+                    },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    textStyle = TextStyle(
+                        fontSize = 22.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.Black
+                    ),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = when {
+                            isUserIdAvailable == true -> Color.Green
+                            isUserIdAvailable == false -> Color.Red
+                            else -> Color.Black
+                        },
+                        unfocusedBorderColor = when {
+                            isUserIdAvailable == true -> Color.Green
+                            isUserIdAvailable == false -> Color.Red
+                            else -> Color.Gray
+                        },
+                        focusedLabelColor = Color.Black,
+                        unfocusedLabelColor = Color.Black.copy(alpha = 0.7f),
+                        cursorColor = Color.Black
                     )
-                },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                textStyle = TextStyle(
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.Black
-                ),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Color.Black,
-                    unfocusedBorderColor = Color.Gray,
-                    focusedLabelColor = Color.Black,
-                    unfocusedLabelColor = Color.Black.copy(alpha = 0.7f),
-                    cursorColor = Color.Black
                 )
-            )
+
+                Button(
+                    onClick = {
+                        if (userId.isNotEmpty()) {
+                            isCheckingDuplicate = true
+                            coroutineScope.launch {
+                                isUserIdAvailable = supabaseHelper.isUserIdAvailable(userId)
+                                userIdChecked = true
+                                isCheckingDuplicate = false
+
+                                if (isUserIdAvailable == true) {
+                                    Toast.makeText(context, "사용 가능한 아이디입니다.", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    Toast.makeText(context, "이미 사용중인 아이디입니다.", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        } else {
+                            Toast.makeText(context, "아이디를 입력해주세요.", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    modifier = Modifier.height(56.dp),
+                    enabled = !isCheckingDuplicate,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.DarkGray,
+                        contentColor = Color.White
+                    )
+                ) {
+                    if (isCheckingDuplicate) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = Color.White
+                        )
+                    } else {
+                        Text(
+                            "중복확인",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
+            // 아이디 상태 메시지
+            if (isUserIdAvailable != null && userIdChecked) {
+                Text(
+                    text = if (isUserIdAvailable == true) "✓ 사용 가능한 아이디입니다" else "✗ 이미 사용중인 아이디입니다",
+                    color = if (isUserIdAvailable == true) Color.Green else Color.Red,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp)
+                )
+            }
 
             Spacer(modifier = Modifier.height(20.dp))
 
@@ -1505,17 +1584,25 @@ fun SignUpScreen(
                     cursorColor = Color.Black,
                     focusedPlaceholderColor = Color.Gray,
                     unfocusedPlaceholderColor = Color.Gray
-                )
+                ),
+                supportingText = {
+                    Text(
+                        "예: 19900315 (1990년 3월 15일)",
+                        fontSize = 14.sp,
+                        color = Color.Gray
+                    )
+                }
             )
 
             Spacer(modifier = Modifier.height(20.dp))
 
             // 핸드폰 번호 입력
+            // 핸드폰 번호 입력
             OutlinedTextField(
                 value = phoneNumber,
                 onValueChange = {
-                    // 숫자와 하이픈만 입력 가능
-                    if (it.all { char -> char.isDigit() || char == '-' }) {
+                    // 숫자만 입력 가능 (하이픈 제거)
+                    if (it.all { char -> char.isDigit() }) {
                         phoneNumber = it
                     }
                 },
@@ -1529,7 +1616,7 @@ fun SignUpScreen(
                 },
                 placeholder = {
                     Text(
-                        "010-1234-5678",
+                        "01012345678",
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.Gray
@@ -1542,7 +1629,7 @@ fun SignUpScreen(
                     fontWeight = FontWeight.Bold,
                     color = Color.Black
                 ),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), // Phone에서 Number로 변경
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = Color.Black,
                     unfocusedBorderColor = Color.Gray,
@@ -1551,7 +1638,14 @@ fun SignUpScreen(
                     cursorColor = Color.Black,
                     focusedPlaceholderColor = Color.Gray,
                     unfocusedPlaceholderColor = Color.Gray
-                )
+                ),
+                supportingText = {
+                    Text(
+                        "010으로 시작하는 11자리 숫자를 입력해주세요",
+                        fontSize = 14.sp,
+                        color = Color.Gray
+                    )
+                }
             )
 
             Spacer(modifier = Modifier.height(40.dp))
@@ -1559,73 +1653,72 @@ fun SignUpScreen(
             // 가입하기 버튼
             Button(
                 onClick = {
-                    if (userId.isNotEmpty() && password.isNotEmpty() &&
-                        birthDate.isNotEmpty() && phoneNumber.isNotEmpty()) {
-
-                        if (birthDate.length != 8) {
-                            Toast.makeText(context, "생년월일을 8자리로 입력해주세요.", Toast.LENGTH_SHORT).show()
-                            return@Button
+                    when {
+                        userId.isEmpty() || password.isEmpty() || birthDate.isEmpty() || phoneNumber.isEmpty() -> {
+                            Toast.makeText(context, "모든 정보를 입력해주세요.", Toast.LENGTH_SHORT).show()
+                        }
+                        !userIdChecked || isUserIdAvailable != true -> {
+                            Toast.makeText(context, "아이디 중복 확인을 해주세요.", Toast.LENGTH_SHORT).show()
+                        }
+                        !supabaseHelper.isValidBirthDate(birthDate) -> {
+                            Toast.makeText(
+                                context,
+                                "올바른 생년월일 형식이 아닙니다.\nYYYYMMDD 형식으로 입력해주세요.\n예: 19900315",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                        // 가입하기 버튼 onClick 내부
+                        !supabaseHelper.isValidPhoneNumber(phoneNumber) -> {
+                            Toast.makeText(
+                                context,
+                                "올바른 전화번호 형식이 아닙니다.\n010으로 시작하는 11자리 숫자를 입력해주세요.",
+                                Toast.LENGTH_LONG
+                            ).show()
                         }
 
-                        coroutineScope.launch {
-                            try {
-                                // 먼저 중복 확인
-                                val exists = supabaseHelper.checkUserIdExists(userId)
-                                if (exists) {
-                                    Toast.makeText(context, "이미 존재하는 아이디입니다.", Toast.LENGTH_SHORT).show()
-                                    return@launch
-                                }
-
-                                // Supabase에 사용자 등록
-                                val newUser = supabaseHelper.registerUser(
-                                    userId = userId,
-                                    password = password,
-                                    birthDate = birthDate,
-                                    phoneNumber = phoneNumber
-                                )
-
-                                if (newUser != null) {
-                                    Toast.makeText(context, "회원가입이 완료되었습니다.", Toast.LENGTH_SHORT).show()
-
-                                    // 자동 로그인
-                                    val userInfo = UserInfo(
-                                        id = newUser.id?.hashCode()?.toLong() ?: -1L,
-                                        nickname = newUser.user_id ?: "사용자",
-                                        profileImageUrl = null
+                        else -> {
+                            // 모든 검증 통과 - 회원가입 진행
+                            coroutineScope.launch {
+                                try {
+                                    val newUser = supabaseHelper.registerUser(
+                                        userId = userId,
+                                        password = password,
+                                        birthDate = birthDate,
+                                        phoneNumber = phoneNumber
                                     )
 
-                                    // MainActivity의 currentUserId를 user_id로 설정
-                                    val mainActivity = context as? MainActivity
-                                    mainActivity?.currentUserId = newUser.user_id ?: ""  // ← 중요!
-                                    mainActivity?.currentUserKakaoId = null
+                                    if (newUser != null) {
+                                        Toast.makeText(context, "회원가입이 완료되었습니다.", Toast.LENGTH_SHORT).show()
 
-                                    Log.d("SignUp", "Registration successful - currentUserId set to: ${newUser.user_id}")
+                                        // 자동 로그인
+                                        val userInfo = UserInfo(
+                                            id = newUser.id?.hashCode()?.toLong() ?: -1L,
+                                            nickname = newUser.user_id ?: "사용자",
+                                            profileImageUrl = null
+                                        )
 
-                                    onSignUpSuccess(userInfo)
-                                } else {
-                                    // 더 구체적인 에러 메시지
-                                    Toast.makeText(
-                                        context,
-                                        "회원가입에 실패했습니다. 다시 시도해주세요.",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
+                                        // MainActivity의 currentUserId를 user_id로 설정
+                                        val mainActivity = context as? MainActivity
+                                        mainActivity?.currentUserId = newUser.user_id ?: ""
+                                        mainActivity?.currentUserKakaoId = null
+
+                                        Log.d("SignUp", "Registration successful - currentUserId set to: ${newUser.user_id}")
+
+                                        onSignUpSuccess(userInfo)
+                                    } else {
+                                        Toast.makeText(context, "회원가입에 실패했습니다. 다시 시도해주세요.", Toast.LENGTH_SHORT).show()
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e("SignUp", "Registration error: ${e.message}", e)
+                                    Toast.makeText(context, "회원가입 중 오류가 발생했습니다.", Toast.LENGTH_SHORT).show()
                                 }
-                            } catch (e: Exception) {
-                                Log.e("SignUp", "회원가입 오류: ${e.message}", e)
-                                Toast.makeText(
-                                    context,
-                                    "회원가입 중 오류가 발생했습니다: ${e.message}",
-                                    Toast.LENGTH_LONG
-                                ).show()
                             }
                         }
-                    } else {
-                        Toast.makeText(context, "모든 정보를 입력해주세요.", Toast.LENGTH_SHORT).show()
                     }
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp),
+                    .height(64.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color.Black,
                     contentColor = Color.White
@@ -1634,12 +1727,12 @@ fun SignUpScreen(
             ) {
                 Text(
                     "가입하기",
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
             // 뒤로가기 버튼
             TextButton(
@@ -1647,7 +1740,8 @@ fun SignUpScreen(
             ) {
                 Text(
                     "이미 계정이 있으신가요? 로그인",
-                    style = MaterialTheme.typography.bodyLarge,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
                     color = Color.Black
                 )
             }
