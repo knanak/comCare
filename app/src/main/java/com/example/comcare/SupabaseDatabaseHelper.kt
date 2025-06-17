@@ -25,6 +25,13 @@ import io.github.jan.supabase.postgrest.query.Order
 import kotlinx.serialization.json.Json
 
 
+import javax.crypto.SecretKeyFactory
+import javax.crypto.spec.PBEKeySpec
+import java.security.SecureRandom
+import android.util.Base64
+import java.security.MessageDigest
+
+
 class SupabaseDatabaseHelper(private val context: Context) {
 
     companion object {
@@ -62,12 +69,16 @@ class SupabaseDatabaseHelper(private val context: Context) {
     @Serializable
     data class User(
         val id: String? = null,
-        val kakao_id: String,
+        val kakao_id: String? = null,  // nullable로 변경 (일반 회원은 kakao_id가 없음)
+        val user_id: String? = null,   // 추가
+        val password: String? = null,   // 추가 (해시된 패스워드)
+        val birth_date: String? = null, // 추가
         val address: String? = null,
         val tel: String? = null,
         val created_at: String? = null,
         val updated_at: String? = null
     )
+
 
     // SearchHistory 테이블 데이터 클래스
     @Serializable
@@ -92,9 +103,275 @@ class SupabaseDatabaseHelper(private val context: Context) {
         val created_at: String? = null
     )
 
-    // 사용자 정보 저장/업데이트 함수
-// SupabaseDatabaseHelper.kt의 upsertUser 함수를 다음과 같이 수정
 
+    // 안전한 패스워드 해싱 함수 (PBKDF2 사용)
+    private fun hashPassword(password: String): String {
+        return try {
+            // Salt 생성 (16 bytes)
+            val salt = ByteArray(16)
+            SecureRandom().nextBytes(salt)
+
+            // PBKDF2 해싱
+            val iterations = 10000
+            val keyLength = 256
+
+            val spec = PBEKeySpec(password.toCharArray(), salt, iterations, keyLength)
+            val factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
+            val hash = factory.generateSecret(spec).encoded
+
+            // Salt와 해시를 합쳐서 저장 (Base64 인코딩)
+            val combined = ByteArray(salt.size + hash.size)
+            System.arraycopy(salt, 0, combined, 0, salt.size)
+            System.arraycopy(hash, 0, combined, salt.size, hash.size)
+
+            Base64.encodeToString(combined, Base64.NO_WRAP)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error hashing password: ${e.message}")
+            // 폴백: 기본 SHA-256 사용
+            try {
+                val digest = MessageDigest.getInstance("SHA-256")
+                val hash = digest.digest(password.toByteArray())
+                Base64.encodeToString(hash, Base64.NO_WRAP)
+            } catch (e2: Exception) {
+                Log.e(TAG, "Fallback hash also failed: ${e2.message}")
+                password // 최악의 경우 원본 반환 (개발용)
+            }
+        }
+    }
+
+    // 패스워드 검증 함수
+    private fun verifyPassword(password: String, storedHash: String): Boolean {
+        return try {
+            // Base64 디코딩
+            val combined = Base64.decode(storedHash, Base64.NO_WRAP)
+
+            // Salt 추출 (처음 16 bytes)
+            val salt = ByteArray(16)
+            System.arraycopy(combined, 0, salt, 0, 16)
+
+            // 저장된 해시 추출 (나머지 bytes)
+            val storedHashBytes = ByteArray(combined.size - 16)
+            System.arraycopy(combined, 16, storedHashBytes, 0, storedHashBytes.size)
+
+            // 입력된 패스워드를 같은 salt로 해싱
+            val iterations = 10000
+            val keyLength = 256
+
+            val spec = PBEKeySpec(password.toCharArray(), salt, iterations, keyLength)
+            val factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
+            val computedHash = factory.generateSecret(spec).encoded
+
+            // 해시 비교
+            storedHashBytes.contentEquals(computedHash)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error verifying password: ${e.message}")
+            // 폴백: 단순 문자열 비교 (개발용)
+            password == storedHash
+        }
+    }
+
+    // 로그인 함수 수정 (verifyPassword 사용)
+    suspend fun loginUser(userId: String, password: String): User? {
+        return try {
+            withContext(Dispatchers.IO) {
+                Log.d(TAG, "Attempting login for user_id: $userId")
+
+                // user_id로 사용자 조회
+                val user = supabase.postgrest["users"]
+                    .select(filter = {
+                        eq("user_id", userId)
+                    })
+                    .decodeSingleOrNull<User>()
+
+                if (user != null && user.password != null) {
+                    // 패스워드 검증
+                    if (verifyPassword(password, user.password)) {
+                        Log.d(TAG, "Login successful for user: ${user.user_id}")
+                        user
+                    } else {
+                        Log.d(TAG, "Login failed - invalid password")
+                        null
+                    }
+                } else {
+                    Log.d(TAG, "Login failed - user not found")
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error during login: ${e.message}", e)
+            null
+        }
+    }
+
+    // 회원가입 함수
+// 회원가입 함수 - 디버깅 로그 추가
+    suspend fun registerUser(
+        userId: String,
+        password: String,
+        birthDate: String,
+        phoneNumber: String
+    ): User? {
+        return try {
+            withContext(Dispatchers.IO) {
+                Log.d(TAG, "=== registerUser 시작 ===")
+                Log.d(TAG, "Registering new user: $userId")
+
+                // 중복 user_id 확인
+                Log.d(TAG, "중복 확인 중...")
+                val existingUsers = supabase.postgrest["users"]
+                    .select(filter = {
+                        eq("user_id", userId)
+                    })
+                    .decodeList<User>()  // decodeSingleOrNull 대신 decodeList 사용
+
+                Log.d(TAG, "기존 사용자 수: ${existingUsers.size}")
+
+                if (existingUsers.isNotEmpty()) {
+                    Log.d(TAG, "User ID already exists: $userId")
+                    existingUsers.forEach { user ->
+                        Log.d(TAG, "기존 사용자 정보: id=${user.id}, user_id=${user.user_id}")
+                    }
+                    return@withContext null
+                }
+
+                Log.d(TAG, "중복 없음 - 새 사용자 생성 진행")
+
+                // 새 사용자 생성
+                val newUser = buildJsonObject {
+                    put("user_id", JsonPrimitive(userId))
+                    put("password", JsonPrimitive(hashPassword(password)))
+                    put("birth_date", JsonPrimitive(birthDate))
+                    put("tel", JsonPrimitive(phoneNumber))
+                    put("created_at", JsonPrimitive(getCurrentTimestampIso8601()))
+                }
+
+                Log.d(TAG, "생성할 사용자 데이터: $newUser")
+
+                try {
+                    val response = supabase.postgrest["users"]
+                        .insert(newUser)
+                        .decodeSingle<User>()
+
+                    Log.d(TAG, "User registered successfully: ${response.user_id}")
+                    Log.d(TAG, "생성된 사용자 ID: ${response.id}")
+                    response
+                } catch (insertError: Exception) {
+                    Log.e(TAG, "Insert 중 오류 발생: ${insertError.message}")
+                    Log.e(TAG, "Insert 오류 상세: ", insertError)
+
+                    // 혹시 unique constraint 오류인지 확인
+                    if (insertError.message?.contains("duplicate") == true ||
+                        insertError.message?.contains("unique") == true) {
+                        Log.e(TAG, "Unique constraint 위반 - 중복된 user_id")
+                    }
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "=== registerUser 전체 오류 ===")
+            Log.e(TAG, "Error during registration: ${e.message}", e)
+            e.printStackTrace()
+            null
+        }
+    }
+
+    // user_id가 정확히 일치하는지 확인하는 별도 함수
+    suspend fun checkUserIdExists(userId: String): Boolean {
+        return try {
+            withContext(Dispatchers.IO) {
+                Log.d(TAG, "Checking if user_id exists: '$userId'")
+
+                // 전체 users 목록을 가져와서 확인 (테스트용)
+                val allUsers = supabase.postgrest["users"]
+                    .select()
+                    .decodeList<User>()
+
+                Log.d(TAG, "전체 사용자 수: ${allUsers.size}")
+
+                // user_id가 있는 사용자들만 필터링
+                val usersWithUserId = allUsers.filter { !it.user_id.isNullOrEmpty() }
+                Log.d(TAG, "user_id가 있는 사용자 수: ${usersWithUserId.size}")
+
+                // 정확히 일치하는 user_id가 있는지 확인
+                val exists = usersWithUserId.any { it.user_id == userId }
+                Log.d(TAG, "user_id '$userId' 존재 여부: $exists")
+
+                // 비슷한 user_id 출력 (디버깅용)
+                usersWithUserId.forEach { user ->
+                    if (user.user_id?.contains(userId) == true || userId.contains(user.user_id ?: "")) {
+                        Log.d(TAG, "유사한 user_id 발견: '${user.user_id}'")
+                    }
+                }
+
+                exists
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking user_id existence: ${e.message}")
+            false
+        }
+    }
+
+
+    // 통합 사용자 조회 함수 (kakao_id 또는 user_id로 조회)
+    suspend fun getUserByIdentifier(identifier: String): User? {
+        return try {
+            withContext(Dispatchers.IO) {
+                Log.d(TAG, "Getting user by identifier: $identifier")
+
+                // 먼저 kakao_id로 조회
+                var user = supabase.postgrest["users"]
+                    .select(filter = {
+                        eq("kakao_id", identifier)
+                    })
+                    .decodeSingleOrNull<User>()
+
+                // kakao_id로 못 찾으면 user_id로 조회
+                if (user == null) {
+                    user = supabase.postgrest["users"]
+                        .select(filter = {
+                            eq("user_id", identifier)
+                        })
+                        .decodeSingleOrNull<User>()
+                }
+
+                if (user != null) {
+                    Log.d(TAG, "User found: id=${user.id}, kakao_id=${user.kakao_id}, user_id=${user.user_id}")
+                } else {
+                    Log.d(TAG, "No user found with identifier: $identifier")
+                }
+
+                user
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching user by identifier: ${e.message}")
+            null
+        }
+    }
+    // user_id로 사용자 정보 가져오기
+    suspend fun getUserByUserId(userId: String): User? {
+        return try {
+            withContext(Dispatchers.IO) {
+                val response = supabase.postgrest["users"]
+                    .select(filter = {
+                        eq("user_id", userId)
+                    })
+                    .decodeSingleOrNull<User>()
+
+                if (response != null) {
+                    Log.d(TAG, "Retrieved user with user_id: $userId")
+                } else {
+                    Log.d(TAG, "No user found with user_id: $userId")
+                }
+
+                response
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching user by user_id: ${e.message}")
+            null
+        }
+    }
+
+    // 카카오 사용자 정보 저장/업데이트 함수
     suspend fun upsertUser(
         kakaoId: String,
         address: String? = null,
@@ -102,7 +379,7 @@ class SupabaseDatabaseHelper(private val context: Context) {
     ): User? {
         return try {
             withContext(Dispatchers.IO) {
-                Log.d(TAG, "=== upsertUser 시작 ===")
+                Log.d(TAG, "=== upsertUser 시작 ===")g
                 Log.d(TAG, "kakaoId: $kakaoId")
                 Log.d(TAG, "address: $address")
                 Log.d(TAG, "tel: $tel")

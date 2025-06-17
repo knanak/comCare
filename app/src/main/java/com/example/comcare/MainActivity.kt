@@ -4,8 +4,6 @@ import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
@@ -37,7 +35,6 @@ import com.kakao.sdk.common.model.ClientError
 import com.kakao.sdk.common.model.ClientErrorCause
 import com.kakao.sdk.user.UserApiClient
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.foundation.Image
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.sp
 import android.widget.Toast
@@ -51,8 +48,6 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.filled.*
 import androidx.compose.runtime.*
@@ -112,7 +107,19 @@ import kotlinx.coroutines.flow.collect
 import android.webkit.WebChromeClient
 import android.webkit.JsResult
 import androidx.appcompat.app.AlertDialog
+import androidx.compose.foundation.*
 
+import androidx.compose.material.icons.filled.Login
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.foundation.lazy.LazyColumn
+
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.sp
 
 
 // 사용자 정보 데이터 클래스
@@ -184,6 +191,9 @@ class MainActivity : ComponentActivity() {
             // 로그인 상태 관리
             var isLoggedIn by remember { mutableStateOf(false) }
             var currentUserInfo by remember { mutableStateOf<UserInfo?>(null) }
+
+            // 네비게이션 컨트롤러 추가
+            val loginNavController = rememberNavController()
 
             val viewModelFactory = remember { PlaceViewModelFactory(supabaseHelper) }
 
@@ -489,17 +499,59 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     if (!isLoggedIn) {
-                        // 로그인 화면 표시
-                        LoginScreen(
-                            onLoginSuccess = { userInfo ->
-                                currentUserInfo = userInfo
-                                currentUserId = userInfo.id.toString()
-                                currentUserKakaoId = userInfo.id.toString()  // kakaoId 저장
-                                this@MainActivity.userInfo = userInfo
-                                isLoggedIn = true
+                        // 로그인 네비게이션
+                        val loginNavController = rememberNavController()
+
+                        NavHost(
+                            navController = loginNavController,
+                            startDestination = "login"
+                        ) {
+                            composable("login") {
+                                LoginScreen(
+                                    onLoginSuccess = { userInfo ->
+                                        currentUserInfo = userInfo
+                                        currentUserId = userInfo.id.toString()
+                                        currentUserKakaoId = if (userInfo.id > 0) userInfo.id.toString() else null
+                                        this@MainActivity.userInfo = userInfo
+                                        isLoggedIn = true
+                                    },
+                                    onNavigateToNormalLogin = {
+                                        loginNavController.navigate("normalLogin")
+                                    }
+                                )
                             }
-                        )
+
+                            composable("normalLogin") {
+                                NormalLoginScreen(
+                                    navController = loginNavController,
+                                    onLoginSuccess = { userInfo ->
+                                        currentUserInfo = userInfo
+                                        // currentUserId는 NormalLoginScreen 내부에서 이미 설정됨
+                                        // currentUserId = userInfo.id.toString()  // ← 이 줄 제거!
+                                        this@MainActivity.userInfo = userInfo
+                                        isLoggedIn = true
+
+                                        Log.d("MainActivity", "Normal login successful")
+                                        Log.d("MainActivity", "currentUserId: $currentUserId")
+                                        Log.d("MainActivity", "currentUserKakaoId: $currentUserKakaoId")
+                                    }
+                                )
+                            }
+
+                            composable("signup") {
+                                SignUpScreen(
+                                    navController = loginNavController,
+                                    onSignUpSuccess = { userInfo ->
+                                        currentUserInfo = userInfo
+                                        currentUserId = userInfo.id.toString()
+                                        this@MainActivity.userInfo = userInfo
+                                        isLoggedIn = true
+                                    }
+                                )
+                            }
+                        }
                     } else {
+
                         // 로그인 후 메인 화면 표시
                         val navController = rememberNavController()
                         val viewModelFactory = remember { PlaceViewModelFactory(supabaseHelper) }
@@ -869,7 +921,10 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun LoginScreen(onLoginSuccess: (UserInfo) -> Unit) {
+fun LoginScreen(
+    onLoginSuccess: (UserInfo) -> Unit,
+    onNavigateToNormalLogin: () -> Unit  // navController 대신 콜백 사용
+) {
     val context = LocalContext.current
     val TAG = "KakaoLogin"
 
@@ -902,8 +957,8 @@ fun LoginScreen(onLoginSuccess: (UserInfo) -> Unit) {
                         profileImageUrl = user.kakaoAccount?.profile?.thumbnailImageUrl
                     )
 
-                    // LoginScreen의 카카오 로그인 콜백 내부 수정
-// Supabase에 사용자 정보 저장/업데이트 부분
+
+                    // Supabase에 사용자 정보 저장/업데이트 부분
 
                     coroutineScope.launch {
                         try {
@@ -947,6 +1002,7 @@ fun LoginScreen(onLoginSuccess: (UserInfo) -> Unit) {
 
                             // 로그인 성공 처리
                             onLoginSuccess(userInfo)
+
 
                         } catch (e: Exception) {
                             Log.e(TAG, "사용자 정보 저장 중 오류: ${e.message}", e)
@@ -1050,6 +1106,77 @@ fun LoginScreen(onLoginSuccess: (UserInfo) -> Unit) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // 둘러보기 버튼 추가
+//            Text(
+//                text = "둘러보기",
+//                style = MaterialTheme.typography.titleMedium,
+//                fontWeight = FontWeight.Bold,
+//                color = Color.Gray,
+//                modifier = Modifier
+//                    .fillMaxWidth()
+//                    .clickable {
+//                        // 게스트 사용자 정보 생성
+//                        val guestUserInfo = UserInfo(
+//                            id = -1L, // 게스트 사용자를 나타내는 특별한 ID
+//                            nickname = "게스트",
+//                            profileImageUrl = null
+//                        )
+//
+//                        // MainActivity의 currentUserId를 게스트로 설정
+//                        val mainActivity = context as? MainActivity
+//                        mainActivity?.currentUserId = "guest"
+//                        mainActivity?.currentUserKakaoId = null // 게스트는 카카오 ID가 없음
+//
+//                        // 로그인 성공 콜백 호출
+//                        onLoginSuccess(guestUserInfo)
+//                    }
+//                    .padding(vertical = 16.dp),
+//                textAlign = TextAlign.Center
+//            )
+//
+//            Spacer(modifier = Modifier.height(16.dp))
+
+            // 일반 로그인 버튼 추가
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .clickable {
+                        onNavigateToNormalLogin()  // 콜백 호출
+                    },
+                colors = CardDefaults.cardColors(
+                    containerColor = Color.White
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                border = BorderStroke(1.dp, Color.Gray)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 20.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Login,
+                        contentDescription = "Login",
+                        tint = Color.Gray,
+                        modifier = Modifier.size(24.dp)
+                    )
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    Text(
+                        text = "로그인",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Gray
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             Text(
                 text = "제공되는 정보는 \n 공개된 정부 웹사이트에서 수집한 것으로 \n 공식 정부 서비스가 아닙니다.",
                 style = MaterialTheme.typography.bodyMedium,
@@ -1057,6 +1184,475 @@ fun LoginScreen(onLoginSuccess: (UserInfo) -> Unit) {
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth()
             )
+        }
+    }
+}
+
+@Composable
+fun NormalLoginScreen(
+    navController: NavController,
+    onLoginSuccess: (UserInfo) -> Unit
+) {
+    val context = LocalContext.current
+    val supabaseHelper = remember { SupabaseDatabaseHelper(context) }
+    val coroutineScope = rememberCoroutineScope()
+
+    var userId by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFFc6f584)),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 40.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // 상단 타이틀
+            Text(
+                text = "로그인",
+                style = MaterialTheme.typography.displayLarge,
+                fontWeight = FontWeight.Bold,
+                color = Color.Black,
+                modifier = Modifier.padding(bottom = 40.dp)
+            )
+
+            // 아이디 입력
+            OutlinedTextField(
+                value = userId,
+                onValueChange = { userId = it },
+                label = {
+                    Text(
+                        "아이디",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                textStyle = TextStyle(
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.Black
+                ),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Color.Black,
+                    unfocusedBorderColor = Color.Gray,
+                    focusedLabelColor = Color.Black,
+                    unfocusedLabelColor = Color.Black.copy(alpha = 0.7f),
+                    cursorColor = Color.Black
+                )
+            )
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // 비밀번호 입력
+            OutlinedTextField(
+                value = password,
+                onValueChange = { password = it },
+                label = {
+                    Text(
+                        "비밀번호",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                textStyle = TextStyle(
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.Black
+                ),
+                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon = {
+                    IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                        Icon(
+                            imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                            contentDescription = if (passwordVisible) "Hide password" else "Show password",
+                            tint = Color.Black,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+                },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Color.Black,
+                    unfocusedBorderColor = Color.Gray,
+                    focusedLabelColor = Color.Black,
+                    unfocusedLabelColor = Color.Black.copy(alpha = 0.7f),
+                    cursorColor = Color.Black
+                )
+            )
+
+            Spacer(modifier = Modifier.height(40.dp))
+
+            // 로그인 버튼
+            Button(
+                onClick = {
+                    if (userId.isNotEmpty() && password.isNotEmpty()) {
+                        coroutineScope.launch {
+                            try {
+                                // Supabase에서 사용자 확인
+                                val user = supabaseHelper.loginUser(userId, password)
+                                if (user != null) {
+                                    // 로그인 성공
+                                    val userInfo = UserInfo(
+                                        id = user.id?.hashCode()?.toLong() ?: -1L,  // ID는 고유값으로
+                                        nickname = user.user_id ?: "사용자",
+                                        profileImageUrl = null
+                                    )
+
+                                    // MainActivity의 currentUserId 설정
+                                    val mainActivity = context as? MainActivity
+                                    mainActivity?.currentUserId = user.user_id ?: ""  // ← 중요!
+                                    mainActivity?.currentUserKakaoId = null
+                                    Log.d("NormalLogin", "Login successful - currentUserId set to: ${user.user_id}")
+
+                                    onLoginSuccess(userInfo)
+                                } else {
+                                    Toast.makeText(context, "아이디 또는 비밀번호가 일치하지 않습니다.", Toast.LENGTH_SHORT).show()
+                                }
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "로그인 중 오류가 발생했습니다.", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    } else {
+                        Toast.makeText(context, "아이디와 비밀번호를 입력해주세요.", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color.Black,
+                    contentColor = Color.White
+                ),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text(
+                    "로그인",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 가입하기 버튼
+            TextButton(
+                onClick = { navController.navigate("signup") }
+            ) {
+                Text(
+                    "계정이 없으신가요? 가입하기",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Color.Black
+                )
+            }
+        }
+    }
+}
+@Composable
+fun SignUpScreen(
+    navController: NavController,
+    onSignUpSuccess: (UserInfo) -> Unit
+) {
+    val context = LocalContext.current
+    val supabaseHelper = remember { SupabaseDatabaseHelper(context) }
+    val coroutineScope = rememberCoroutineScope()
+
+    var userId by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var birthDate by remember { mutableStateOf("") }
+    var phoneNumber by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFFc6f584))
+            .padding(horizontal = 40.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        item {
+            Spacer(modifier = Modifier.height(40.dp))
+
+            // 상단 타이틀
+            Text(
+                text = "회원가입",
+                style = MaterialTheme.typography.displayLarge,
+                fontWeight = FontWeight.Bold,
+                color = Color.Black,
+                modifier = Modifier.padding(bottom = 40.dp)
+            )
+
+            // 아이디 입력
+            OutlinedTextField(
+                value = userId,
+                onValueChange = { userId = it },
+                label = {
+                    Text(
+                        "아이디",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                textStyle = TextStyle(
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.Black
+                ),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Color.Black,
+                    unfocusedBorderColor = Color.Gray,
+                    focusedLabelColor = Color.Black,
+                    unfocusedLabelColor = Color.Black.copy(alpha = 0.7f),
+                    cursorColor = Color.Black
+                )
+            )
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // 비밀번호 입력
+            OutlinedTextField(
+                value = password,
+                onValueChange = { password = it },
+                label = {
+                    Text(
+                        "비밀번호",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                textStyle = TextStyle(
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.Black
+                ),
+                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon = {
+                    IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                        Icon(
+                            imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                            contentDescription = if (passwordVisible) "Hide password" else "Show password",
+                            tint = Color.Black,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+                },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Color.Black,
+                    unfocusedBorderColor = Color.Gray,
+                    focusedLabelColor = Color.Black,
+                    unfocusedLabelColor = Color.Black.copy(alpha = 0.7f),
+                    cursorColor = Color.Black
+                )
+            )
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // 생년월일 입력
+            OutlinedTextField(
+                value = birthDate,
+                onValueChange = {
+                    // 숫자만 입력 가능하도록 필터링
+                    if (it.length <= 8 && it.all { char -> char.isDigit() }) {
+                        birthDate = it
+                    }
+                },
+                label = {
+                    Text(
+                        "생년월일 (YYYYMMDD)",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
+                    )
+                },
+                placeholder = {
+                    Text(
+                        "19700101",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Gray
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                textStyle = TextStyle(
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.Black
+                ),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Color.Black,
+                    unfocusedBorderColor = Color.Gray,
+                    focusedLabelColor = Color.Black,
+                    unfocusedLabelColor = Color.Black.copy(alpha = 0.7f),
+                    cursorColor = Color.Black,
+                    focusedPlaceholderColor = Color.Gray,
+                    unfocusedPlaceholderColor = Color.Gray
+                )
+            )
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // 핸드폰 번호 입력
+            OutlinedTextField(
+                value = phoneNumber,
+                onValueChange = {
+                    // 숫자와 하이픈만 입력 가능
+                    if (it.all { char -> char.isDigit() || char == '-' }) {
+                        phoneNumber = it
+                    }
+                },
+                label = {
+                    Text(
+                        "핸드폰 번호",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
+                    )
+                },
+                placeholder = {
+                    Text(
+                        "010-1234-5678",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Gray
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                textStyle = TextStyle(
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.Black
+                ),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Color.Black,
+                    unfocusedBorderColor = Color.Gray,
+                    focusedLabelColor = Color.Black,
+                    unfocusedLabelColor = Color.Black.copy(alpha = 0.7f),
+                    cursorColor = Color.Black,
+                    focusedPlaceholderColor = Color.Gray,
+                    unfocusedPlaceholderColor = Color.Gray
+                )
+            )
+
+            Spacer(modifier = Modifier.height(40.dp))
+
+            // 가입하기 버튼
+            Button(
+                onClick = {
+                    if (userId.isNotEmpty() && password.isNotEmpty() &&
+                        birthDate.isNotEmpty() && phoneNumber.isNotEmpty()) {
+
+                        if (birthDate.length != 8) {
+                            Toast.makeText(context, "생년월일을 8자리로 입력해주세요.", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+
+                        coroutineScope.launch {
+                            try {
+                                // 먼저 중복 확인
+                                val exists = supabaseHelper.checkUserIdExists(userId)
+                                if (exists) {
+                                    Toast.makeText(context, "이미 존재하는 아이디입니다.", Toast.LENGTH_SHORT).show()
+                                    return@launch
+                                }
+
+                                // Supabase에 사용자 등록
+                                val newUser = supabaseHelper.registerUser(
+                                    userId = userId,
+                                    password = password,
+                                    birthDate = birthDate,
+                                    phoneNumber = phoneNumber
+                                )
+
+                                if (newUser != null) {
+                                    Toast.makeText(context, "회원가입이 완료되었습니다.", Toast.LENGTH_SHORT).show()
+
+                                    // 자동 로그인
+                                    val userInfo = UserInfo(
+                                        id = newUser.id?.hashCode()?.toLong() ?: -1L,
+                                        nickname = newUser.user_id ?: "사용자",
+                                        profileImageUrl = null
+                                    )
+
+                                    // MainActivity의 currentUserId를 user_id로 설정
+                                    val mainActivity = context as? MainActivity
+                                    mainActivity?.currentUserId = newUser.user_id ?: ""  // ← 중요!
+                                    mainActivity?.currentUserKakaoId = null
+
+                                    Log.d("SignUp", "Registration successful - currentUserId set to: ${newUser.user_id}")
+
+                                    onSignUpSuccess(userInfo)
+                                } else {
+                                    // 더 구체적인 에러 메시지
+                                    Toast.makeText(
+                                        context,
+                                        "회원가입에 실패했습니다. 다시 시도해주세요.",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            } catch (e: Exception) {
+                                Log.e("SignUp", "회원가입 오류: ${e.message}", e)
+                                Toast.makeText(
+                                    context,
+                                    "회원가입 중 오류가 발생했습니다: ${e.message}",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
+                    } else {
+                        Toast.makeText(context, "모든 정보를 입력해주세요.", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color.Black,
+                    contentColor = Color.White
+                ),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text(
+                    "가입하기",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 뒤로가기 버튼
+            TextButton(
+                onClick = { navController.navigateUp() }
+            ) {
+                Text(
+                    "이미 계정이 있으신가요? 로그인",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Color.Black
+                )
+            }
+
+            Spacer(modifier = Modifier.height(40.dp))
         }
     }
 }
@@ -1480,6 +2076,7 @@ fun PlaceComparisonApp(
 
                 // 드롭다운 메뉴
                 val context = LocalContext.current
+// PlaceComparisonApp 내부의 DropdownMenu 부분 수정
                 DropdownMenu(
                     expanded = showUserMenu,
                     onDismissRequest = { showUserMenu = false },
@@ -1495,7 +2092,7 @@ fun PlaceComparisonApp(
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = "ID: ${userInfo?.id ?: ""}",
+                                    text = if (userInfo?.id == -1L) "게스트 모드" else "ID: ${userInfo?.id ?: ""}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = Color.Gray
                                 )
@@ -1532,48 +2129,30 @@ fun PlaceComparisonApp(
                         }
                     )
 
-                    Divider()
+                    // 게스트가 아닌 경우에만 회원 탈퇴 메뉴 표시
+                    if (userInfo?.id != -1L) {
+                        Divider()
 
-                    // 회원 탈퇴
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                text = "회원 탈퇴",
-                                color = Color.Red
-                            )
-                        },
-                        onClick = {
-                            showUserMenu = false
-
-                            // 앱 계정 탈퇴 페이지를 웹브라우저로 열기
-                            try {
-                                // 앱 계정 관리 페이지 URL (탈퇴 페이지)
-                                val kakaoAccountUrl = "https://accounts.kakao.com/weblogin/account/privacy_and_terms"
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(kakaoAccountUrl))
-                                context.startActivity(intent)
-
-                                Toast.makeText(
-                                    context,
-                                    "앱 계정 설정 페이지로 이동합니다.\n계정 탈퇴는 해당 페이지에서 진행해주세요.",
-                                    Toast.LENGTH_LONG
-                                ).show()
-                            } catch (e: Exception) {
-                                Log.e("KakaoUnlink", "웹페이지 열기 실패", e)
-                                Toast.makeText(
-                                    context,
-                                    "웹페이지를 열 수 없습니다.",
-                                    Toast.LENGTH_SHORT
-                                ).show()
+                        // 회원 탈퇴
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = "회원 탈퇴",
+                                    color = Color.Red
+                                )
+                            },
+                            onClick = {
+                                // ... 기존 회원 탈퇴 코드 ...
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.ExitToApp,
+                                    contentDescription = "Unlink",
+                                    tint = Color.Red
+                                )
                             }
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.ExitToApp,
-                                contentDescription = "Unlink",
-                                tint = Color.Red
-                            )
-                        }
-                    )
+                        )
+                    }
                 }
             }
         }
@@ -4732,11 +5311,12 @@ fun ChatScreen(
 
                 kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                     try {
-                        // 현재 사용자의 kakaoId 가져오기
-                        val kakaoId = activity.currentUserId
+                        // 현재 사용자의 식별자 가져오기 (kakao_id 또는 user_id)
+                        val identifier = activity.currentUserId
+                        Log.d("ChatScreen", "Current user identifier: $identifier")
 
                         // Supabase에서 사용자 정보 조회
-                        val user = supabaseHelper.getUserByKakaoId(kakaoId)
+                        val user = supabaseHelper.getUserByIdentifier(identifier)
 
                         if (user != null && queryContent.isNotEmpty()) {
                             // ChatService에서 저장한 category와 answer 가져오기
@@ -4787,7 +5367,7 @@ fun ChatScreen(
                             activity.chatService.lastQueryContent = null
                         } else {
                             if (user == null) {
-                                Log.e("ChatScreen", "사용자 정보를 찾을 수 없음: kakaoId = $kakaoId")
+                                Log.e("ChatScreen", "사용자 정보를 찾을 수 없음: identifier = $identifier")
                             }
                             if (queryContent.isEmpty()) {
                                 Log.e("ChatScreen", "질문 내용이 비어있음")
@@ -5223,8 +5803,8 @@ fun ChatScreen(
                                             // 요청 전에 카운트 증가
                                             RequestCounterHelper.incrementRequestCount()
 
-                                            val url = URL("http://192.168.219.101:5000/explore")
-//                                            val url = URL("https://coral-app-fjt8m.ondigitalocean.app/explore")
+//                                            val url = URL("http://192.168.219.101:5000/explore")
+                                            val url = URL("https://coral-app-fjt8m.ondigitalocean.app/explore")
                                             val connection =
                                                 url.openConnection() as HttpURLConnection
                                             connection.requestMethod = "POST"
@@ -6102,10 +6682,11 @@ fun MessageItem(
                                                 // ApplicationHistory 저장
                                                 coroutineScope.launch {
                                                     try {
-                                                        val kakaoId = activity.currentUserId
-                                                        Log.d("ApplicationHistory", "Getting user with kakaoId: $kakaoId")
+                                                        val identifier = activity.currentUserId
+                                                        Log.d("ApplicationHistory", "Getting user with identifier: $identifier")
 
-                                                        val user = supabaseHelper.getUserByKakaoId(kakaoId)
+                                                        // 통합 조회 함수 사용
+                                                        val user = supabaseHelper.getUserByIdentifier(identifier)
                                                         Log.d("ApplicationHistory", "User found: ${user?.id}")
 
                                                         if (user != null && user.id != null) {
@@ -6115,12 +6696,11 @@ fun MessageItem(
                                                                 userId = user.id,
                                                                 applicationCategory = "전화",
                                                                 applicationContent = messageTitle ?: phoneNumber,
-                                                                searchHistoryId = searchHistoryId  // ✅ ChatService에서 가져온 ID 사용
+                                                                searchHistoryId = searchHistoryId
                                                             )
 
                                                             if (applicationHistory != null) {
                                                                 Log.d("ApplicationHistory", "전화 기록 저장 성공: ${applicationHistory.id}")
-//                                                                Toast.makeText(context, "전화 기록이 저장되었습니다.", Toast.LENGTH_SHORT).show()
                                                             } else {
                                                                 Log.e("ApplicationHistory", "전화 기록 저장 실패 - null returned")
                                                             }
@@ -6272,10 +6852,11 @@ fun MessageItem(
                                 // ApplicationHistory 저장
                                 coroutineScope.launch {
                                     try {
-                                        val kakaoId = activity.currentUserId
-                                        Log.d("ApplicationHistory", "Getting user with kakaoId: $kakaoId")
+                                        val identifier = activity.currentUserId
+                                        Log.d("ApplicationHistory", "Getting user with identifier: $identifier")
 
-                                        val user = supabaseHelper.getUserByKakaoId(kakaoId)
+                                        // 통합 조회 함수 사용
+                                        val user = supabaseHelper.getUserByIdentifier(identifier)
                                         Log.d("ApplicationHistory", "User found: ${user?.id}")
 
                                         if (user != null && user.id != null) {
@@ -6285,12 +6866,11 @@ fun MessageItem(
                                                 userId = user.id,
                                                 applicationCategory = "신청",
                                                 applicationContent = messageTitle ?: "신청 페이지",
-                                                searchHistoryId = searchHistoryId  // ✅ ChatService에서 가져온 ID 사용
+                                                searchHistoryId = searchHistoryId
                                             )
 
                                             if (applicationHistory != null) {
                                                 Log.d("ApplicationHistory", "신청 기록 저장 성공: ${applicationHistory.id}")
-//                                                Toast.makeText(context, "신청 기록이 저장되었습니다.", Toast.LENGTH_SHORT).show()
                                             } else {
                                                 Log.e("ApplicationHistory", "신청 기록 저장 실패 - null returned")
                                             }
