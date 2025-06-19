@@ -20,14 +20,14 @@ import java.util.Date
 class ChatService(private val context: Context) {
     private val TAG = "ChatService"
 
-//    private val url = "http://192.168.219.101:5000/query"
-    private val url = "https://coral-app-fjt8m.ondigitalocean.app/query"
+    private val url = "http://192.168.219.101:5000/query"
+//    private val url = "https://coral-app-fjt8m.ondigitalocean.app/query"
 
     // SharedPreferences for storing count and date
     private val sharedPrefs: SharedPreferences = context.getSharedPreferences("ChatPrefs", Context.MODE_PRIVATE)
     private val REQUEST_COUNT_KEY = "request_count"
     private val LAST_REQUEST_DATE_KEY = "last_request_date"
-    private val MAX_REQUESTS_PER_DAY = 20
+    private val MAX_REQUESTS_PER_DAY = 200
 
     // 최근 저장된 SearchHistory ID를 저장
     var lastSearchHistoryId: String? = null
@@ -309,11 +309,20 @@ class ChatService(private val context: Context) {
 
                         // namespace 추출 (category용)
                         categoryForHistory = jsonResponse.optString("namespace", null)
+                        val namespace = jsonResponse.optString("namespace", "")
 
                         if (jsonResponse.has("results")) {
                             val results = jsonResponse.getJSONArray("results")
 
                             if (results.length() > 0) {
+                                // workout namespace인 경우 results에 namespace 정보 추가
+                                if (namespace == "workout") {
+                                    for (i in 0 until results.length()) {
+                                        val result = results.getJSONObject(i)
+                                        result.put("namespace", namespace)
+                                    }
+                                }
+
                                 // 첫 번째 결과의 content에서 answer 추출
                                 val firstResult = results.getJSONObject(0)
                                 val content = firstResult.optString("content", "")
@@ -340,7 +349,7 @@ class ChatService(private val context: Context) {
                                 }
                                 return
                             }
-                        } else if (jsonResponse.has("error")) {
+                        }else if (jsonResponse.has("error")) {
                             // 오류 메시지가 있는 경우
                             val errorMessage = jsonResponse.getString("error")
                             Handler(Looper.getMainLooper()).post {
@@ -402,7 +411,8 @@ class ChatService(private val context: Context) {
         }
     }
 
-    // 현재 인덱스의 결과를 표시하는 함수
+// showCurrentResult() 함수를 다음과 같이 수정
+
     private fun showCurrentResult() {
         // 탐색 모드인 경우
         if (isExploreMode && exploreResults.isNotEmpty()) {
@@ -437,27 +447,61 @@ class ChatService(private val context: Context) {
             if (currentIndex >= 0 && currentIndex < results.length()) {
                 try {
                     val currentResult = results.getJSONObject(currentIndex)
-                    var content = currentResult.optString("content", "내용 없음")
 
-                    // 응답 포맷팅: | 를 줄바꿈으로 변경하고 가독성 개선
-                    content = formatResponse(content)
+                    // namespace 확인을 위해 전체 응답에서 namespace 가져오기
+                    val namespace = currentResult.optString("namespace", "")
 
-                    Log.d(TAG, "Showing result $currentIndex: $content")
+                    // workout namespace 특별 처리
+                    if (namespace == "workout" || currentResult.has("thumbnail_url")) {
+                        // workout 전용 포맷팅
+                        val title = currentResult.optString("title", "제목 없음")
+                        val thumbnailUrl = currentResult.optString("thumbnail_url", "")
+                        val videoUrl = currentResult.optString("url", "")
 
-                    Handler(Looper.getMainLooper()).post {
-                        // 일반 검색 모드에서는 항상 responseCallback 사용
-                        responseCallback?.invoke(content)
+                        // workout 결과 형식으로 포맷팅
+                        val formattedContent = StringBuilder()
+                        formattedContent.append("📋 $title")
 
-                        // 네비게이션 상태 업데이트
-                        val hasPrevious = currentIndex > 0
-                        val hasNext = currentIndex < results.length() - 1
-                        val currentPage = currentIndex + 1
-                        val totalPages = results.length()
+                        if (thumbnailUrl.isNotEmpty() && videoUrl.isNotEmpty()) {
+                            formattedContent.append("\n\n[THUMBNAIL_URL]$thumbnailUrl[/THUMBNAIL_URL]")
+                            formattedContent.append("\n[YOUTUBE_URL]$videoUrl[/YOUTUBE_URL]")
+                        }
 
-                        navigationCallback?.invoke(hasPrevious, hasNext, currentPage, totalPages)
+                        Log.d(TAG, "Showing workout result: $formattedContent")
 
-                        // 상태 저장
-                        savedNavigationState = NavigationState(hasPrevious, hasNext, currentPage, totalPages)
+                        Handler(Looper.getMainLooper()).post {
+                            responseCallback?.invoke(formattedContent.toString())
+
+                            // 네비게이션 상태 업데이트
+                            val hasPrevious = currentIndex > 0
+                            val hasNext = currentIndex < results.length() - 1
+                            val currentPage = currentIndex + 1
+                            val totalPages = results.length()
+
+                            navigationCallback?.invoke(hasPrevious, hasNext, currentPage, totalPages)
+                            savedNavigationState = NavigationState(hasPrevious, hasNext, currentPage, totalPages)
+                        }
+                    } else {
+                        // 기존 로직 (일반 content 처리)
+                        var content = currentResult.optString("content", "내용 없음")
+
+                        // 응답 포맷팅: | 를 줄바꿈으로 변경하고 가독성 개선
+                        content = formatResponse(content)
+
+                        Log.d(TAG, "Showing result $currentIndex: $content")
+
+                        Handler(Looper.getMainLooper()).post {
+                            responseCallback?.invoke(content)
+
+                            // 네비게이션 상태 업데이트
+                            val hasPrevious = currentIndex > 0
+                            val hasNext = currentIndex < results.length() - 1
+                            val currentPage = currentIndex + 1
+                            val totalPages = results.length()
+
+                            navigationCallback?.invoke(hasPrevious, hasNext, currentPage, totalPages)
+                            savedNavigationState = NavigationState(hasPrevious, hasNext, currentPage, totalPages)
+                        }
                     }
                 } catch (e: JSONException) {
                     Log.e(TAG, "Error parsing current result", e)
@@ -468,8 +512,6 @@ class ChatService(private val context: Context) {
             }
         }
     }
-// ChatService.kt의 formatResponse 함수 전체
-
     private fun formatResponse(content: String): String {
         var formatted = content
 
@@ -516,20 +558,68 @@ class ChatService(private val context: Context) {
         val jobPattern = Regex("\\n*Job\\s*\\n+", RegexOption.IGNORE_CASE)
         formatted = formatted.replace(jobPattern, "\n")
 
-        // Detail URL 추출
-        var detailUrl: String? = null
-        val detailPatterns = listOf(
-            Regex("Detail:\\s*([^\\n]+)", RegexOption.IGNORE_CASE),
-            Regex("detail:\\s*([^\\n]+)", RegexOption.IGNORE_CASE),
-            Regex("🔗 상세정보:\\s*([^\\n]+)", RegexOption.IGNORE_CASE)
+        // YouTube URL 추출 및 처리
+        var youtubeUrl: String? = null
+        var thumbnailUrl: String? = null
+
+        // YouTube URL 패턴들
+        val youtubePatterns = listOf(
+            Regex("(?:https?://)?(?:www\\.)?youtube\\.com/watch\\?v=([a-zA-Z0-9_-]{11})", RegexOption.IGNORE_CASE),
+            Regex("(?:https?://)?(?:www\\.)?youtu\\.be/([a-zA-Z0-9_-]{11})", RegexOption.IGNORE_CASE),
+            Regex("(?:https?://)?(?:www\\.)?youtube\\.com/embed/([a-zA-Z0-9_-]{11})", RegexOption.IGNORE_CASE),
+            Regex("YouTube:\\s*(https?://[^\\n\\s]+)", RegexOption.IGNORE_CASE),
+            Regex("youtube:\\s*(https?://[^\\n\\s]+)", RegexOption.IGNORE_CASE),
+            Regex("Video:\\s*(https?://[^\\n\\s]+youtube[^\\n\\s]+)", RegexOption.IGNORE_CASE)
         )
 
-        for (pattern in detailPatterns) {
+        // YouTube URL 찾기
+        for (pattern in youtubePatterns) {
             val match = pattern.find(formatted)
             if (match != null) {
-                detailUrl = match.groupValues[1].trim()
+                // 전체 URL 추출
+                youtubeUrl = when {
+                    match.groupValues.size > 1 && match.groupValues[1].startsWith("http") -> {
+                        match.groupValues[1]
+                    }
+                    match.groupValues.size > 1 -> {
+                        // Video ID만 있는 경우
+                        "https://www.youtube.com/watch?v=${match.groupValues[1]}"
+                    }
+                    else -> {
+                        match.value
+                    }
+                }
+
+                // Video ID 추출하여 썸네일 URL 생성
+                val videoIdMatch = Regex("(?:v=|/)([a-zA-Z0-9_-]{11})").find(youtubeUrl)
+                if (videoIdMatch != null) {
+                    val videoId = videoIdMatch.groupValues[1]
+                    // 항상 최고화질 썸네일부터 시도
+                    thumbnailUrl = "https://img.youtube.com/vi/$videoId/maxresdefault.jpg"
+                }
+
+                // 원본에서 YouTube URL 라인 제거
                 formatted = formatted.replace(match.value, "")
                 break
+            }
+        }
+
+        // Detail URL 추출 (YouTube가 아닌 경우)
+        var detailUrl: String? = null
+        if (youtubeUrl == null) {
+            val detailPatterns = listOf(
+                Regex("Detail:\\s*([^\\n]+)", RegexOption.IGNORE_CASE),
+                Regex("detail:\\s*([^\\n]+)", RegexOption.IGNORE_CASE),
+                Regex("🔗 상세정보:\\s*([^\\n]+)", RegexOption.IGNORE_CASE)
+            )
+
+            for (pattern in detailPatterns) {
+                val match = pattern.find(formatted)
+                if (match != null) {
+                    detailUrl = match.groupValues[1].trim()
+                    formatted = formatted.replace(match.value, "")
+                    break
+                }
             }
         }
 
@@ -630,12 +720,17 @@ class ChatService(private val context: Context) {
         // 최종적으로 시작 부분의 공백이나 줄바꿈 제거
         finalResult = finalResult.trim()
 
-        // Detail URL 정보를 특별한 마커로 저장
-        if (!detailUrl.isNullOrEmpty()) {
+        // YouTube URL과 썸네일 정보를 특별한 마커로 저장
+        if (!youtubeUrl.isNullOrEmpty() && !thumbnailUrl.isNullOrEmpty()) {
+            finalResult += "\n\n[THUMBNAIL_URL]$thumbnailUrl[/THUMBNAIL_URL]"
+            finalResult += "\n[YOUTUBE_URL]$youtubeUrl[/YOUTUBE_URL]"
+            Log.d("ChatService", "formatResponse - YouTube URL found: $youtubeUrl")
+            Log.d("ChatService", "formatResponse - Thumbnail URL: $thumbnailUrl")
+        } else if (!detailUrl.isNullOrEmpty()) {
+            // YouTube가 아닌 경우에만 Detail URL 추가
             finalResult += "\n\n[DETAIL_URL]$detailUrl[/DETAIL_URL]"
+            Log.d("ChatService", "formatResponse - Detail URL found: $detailUrl")
         }
-
-        Log.d("ChatService", "formatResponse - Detail URL found: $detailUrl")
 
         return finalResult
     }

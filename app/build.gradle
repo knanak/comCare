@@ -109,6 +109,7 @@ dependencies {
 
     implementation "com.kakao.sdk:v2-user:2.21.3"
 
+    implementation("io.coil-kt:coil-compose:2.5.0")
 
 
 

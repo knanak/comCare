@@ -4,6 +4,7 @@ package com.example.comcare
 import android.app.Application
 import android.util.Log
 import android.widget.Toast
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
@@ -44,6 +45,9 @@ import com.kakao.sdk.common.util.Utility
 class MyApplication : Application() {
     override fun onCreate() {
         super.onCreate()
+        // 다크 모드 강제 적용 - 이것만으로도 효과적
+        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
+
 
         // Kakao SDK 초기화
         KakaoSdk.init(this, KAKAO_KEY) // 실제 네이티브 앱 키로 변경
