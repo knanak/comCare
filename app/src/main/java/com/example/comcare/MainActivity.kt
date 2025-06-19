@@ -131,6 +131,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.material.icons.filled.PlayArrow
 
+import android.content.SharedPreferences
+
 
 // 사용자 정보 데이터 클래스
 data class UserInfo(
@@ -161,6 +163,60 @@ class MainActivity : ComponentActivity() {
     companion object {
         private const val LOCATION_PERMISSION_REQUEST_CODE = 1001
         private const val TAG = "Location"
+
+        // SharedPreferences 키 상수 추가
+        private const val KEY_IS_LOGGED_IN = "is_logged_in"
+        private const val KEY_CURRENT_USER_ID = "current_user_id"
+        private const val KEY_CURRENT_KAKAO_ID = "current_kakao_id"
+        private const val KEY_USER_CITY = "user_city"
+        private const val KEY_USER_DISTRICT = "user_district"
+    }
+
+    // SharedPreferences 추가
+    private val sharedPrefs: SharedPreferences by lazy {
+        getSharedPreferences("AppState", Context.MODE_PRIVATE)
+    }
+
+    // saveAppState 메서드를 public으로 추가
+    fun saveAppState() {
+        val editor = sharedPrefs.edit()
+
+        editor.putBoolean(KEY_IS_LOGGED_IN, userInfo != null)
+        editor.putString(KEY_CURRENT_USER_ID, currentUserId)
+        editor.putString(KEY_CURRENT_KAKAO_ID, currentUserKakaoId)
+        editor.putString(KEY_USER_CITY, userCity)
+        editor.putString(KEY_USER_DISTRICT, userDistrict)
+
+        // UserInfo 저장
+        userInfo?.let {
+            editor.putLong("user_info_id", it.id)
+            editor.putString("user_info_nickname", it.nickname)
+            editor.putString("user_info_profile_url", it.profileImageUrl)
+        }
+
+        editor.apply()
+
+        Log.d("MainActivity", "App state saved")
+    }
+
+    // 앱 상태 복원 메서드
+    private fun restoreAppState() {
+        currentUserId = sharedPrefs.getString(KEY_CURRENT_USER_ID, "guest") ?: "guest"
+        currentUserKakaoId = sharedPrefs.getString(KEY_CURRENT_KAKAO_ID, null)
+        userCity = sharedPrefs.getString(KEY_USER_CITY, "") ?: ""
+        userDistrict = sharedPrefs.getString(KEY_USER_DISTRICT, "") ?: ""
+
+        // UserInfo 복원
+        val userId = sharedPrefs.getLong("user_info_id", -1L)
+        if (userId != -1L) {
+            userInfo = UserInfo(
+                id = userId,
+                nickname = sharedPrefs.getString("user_info_nickname", "사용자") ?: "사용자",
+                profileImageUrl = sharedPrefs.getString("user_info_profile_url", null)
+            )
+        }
+
+        Log.d("MainActivity", "App state restored - userId: $currentUserId, city: $userCity")
     }
 
     fun onMessageSent(message: String, sessionId: String) {
@@ -188,25 +244,30 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // 저장된 상태 복원
+        restoreAppState()
+
         chatService = ChatService(this)
         RequestCounterHelper.init(this)
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
         val supabaseHelper = SupabaseDatabaseHelper(this)
 
         setContent {
-            var userCityState by remember { mutableStateOf("위치 확인 중...") }
-            var userDistrictState by remember { mutableStateOf("위치 확인 중...") }
+            // 저장된 상태로 초기화
+            var userCityState by remember { mutableStateOf(userCity.ifEmpty { "위치 확인 중..." }) }
+            var userDistrictState by remember { mutableStateOf(userDistrict.ifEmpty { "위치 확인 중..." }) }
             var locationPermissionGranted by remember { mutableStateOf(false) }
 
-            // 로그인 상태 관리
-            var isLoggedIn by remember { mutableStateOf(false) }
-            var currentUserInfo by remember { mutableStateOf<UserInfo?>(null) }
+            // 로그인 상태 관리 - 저장된 상태로 초기화
+            var isLoggedIn by remember {
+                mutableStateOf(sharedPrefs.getBoolean("is_logged_in", false) && userInfo != null)
+            }
+            var currentUserInfo by remember { mutableStateOf(userInfo) }
 
             // 네비게이션 컨트롤러 추가
             val loginNavController = rememberNavController()
 
             val viewModelFactory = remember { PlaceViewModelFactory(supabaseHelper) }
-
 
             // 위치 권한 런처
             val locationPermissionLauncher = rememberLauncherForActivityResult(
@@ -224,19 +285,14 @@ class MainActivity : ComponentActivity() {
                     getLastKnownLocation { city, district ->
                         Log.d(TAG, "getLastKnownLocation 콜백 받음 - city: $city, district: $district")
 
-                        // 변수 업데이트 전 현재 값 로그
-                        Log.d(TAG, "업데이트 전 - userCity: $userCity, userDistrict: $userDistrict")
-                        Log.d(TAG, "업데이트 전 - userCityState: $userCityState, userDistrictState: $userDistrictState")
-
                         // 변수 업데이트
                         userCity = city
                         userDistrict = district
                         userCityState = city
                         userDistrictState = district
 
-                        // 변수 업데이트 후 값 로그
-                        Log.d(TAG, "업데이트 후 - userCity: $userCity, userDistrict: $userDistrict")
-                        Log.d(TAG, "업데이트 후 - userCityState: $userCityState, userDistrictState: $userDistrictState")
+                        // 상태 저장
+                        saveAppState()
 
                         Log.d(TAG, "위치 정보 획득 완료 - city: $city, district: $district")
                         Log.d(TAG, "currentUserKakaoId 체크: $currentUserKakaoId")
@@ -289,8 +345,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-
-// 1. 로그인 후에만 위치 권한 확인
+            // 1. 로그인 후에만 위치 권한 확인
             LaunchedEffect(isLoggedIn) {
                 Log.d(TAG, "LaunchedEffect - isLoggedIn: $isLoggedIn")
 
@@ -313,6 +368,9 @@ class MainActivity : ComponentActivity() {
                                 userDistrictState = district
                                 Log.d(TAG, "위치 정보 획득 - city: $city, district: $district")
                                 Log.d(TAG, "currentUserKakaoId 체크: $currentUserKakaoId")
+
+                                // 상태 저장
+                                saveAppState()
 
                                 // 이미 위치 권한이 있는 경우에도 Supabase 업데이트
                                 if (!currentUserKakaoId.isNullOrEmpty() && city.isNotEmpty() && district.isNotEmpty()) {
@@ -364,7 +422,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-// 2. currentUserKakaoId가 변경될 때 위치 정보 업데이트
+            // 2. currentUserKakaoId가 변경될 때 위치 정보 업데이트
             LaunchedEffect(currentUserKakaoId) {
                 Log.d(TAG, "=== LaunchedEffect(currentUserKakaoId) 시작 ===")
                 Log.d(TAG, "currentUserKakaoId: '$currentUserKakaoId'")
@@ -393,6 +451,9 @@ class MainActivity : ComponentActivity() {
                                 userDistrict = district
                                 userCityState = city
                                 userDistrictState = district
+
+                                // 상태 저장
+                                saveAppState()
 
                                 // 위치 정보를 가져온 후 Supabase 업데이트
                                 if (city.isNotEmpty() && district.isNotEmpty()) {
@@ -453,7 +514,7 @@ class MainActivity : ComponentActivity() {
                 Log.d(TAG, "=== LaunchedEffect(currentUserKakaoId) 종료 ===")
             }
 
-// 3. 위치 정보가 변경될 때 Supabase 업데이트 (새로 추가)
+            // 3. 위치 정보가 변경될 때 Supabase 업데이트 (새로 추가)
             LaunchedEffect(userCity, userDistrict, currentUserKakaoId) {
                 Log.d(TAG, "=== LaunchedEffect(위치 정보 변경) 시작 ===")
                 Log.d(TAG, "userCity: '$userCity'")
@@ -524,6 +585,9 @@ class MainActivity : ComponentActivity() {
                                         currentUserKakaoId = if (userInfo.id > 0) userInfo.id.toString() else null
                                         this@MainActivity.userInfo = userInfo
                                         isLoggedIn = true
+
+                                        // 상태 저장
+                                        saveAppState()
                                     },
                                     onNavigateToNormalLogin = {
                                         loginNavController.navigate("normalLogin")
@@ -541,6 +605,9 @@ class MainActivity : ComponentActivity() {
                                         this@MainActivity.userInfo = userInfo
                                         isLoggedIn = true
 
+                                        // 상태 저장
+                                        saveAppState()
+
                                         Log.d("MainActivity", "Normal login successful")
                                         Log.d("MainActivity", "currentUserId: $currentUserId")
                                         Log.d("MainActivity", "currentUserKakaoId: $currentUserKakaoId")
@@ -556,6 +623,9 @@ class MainActivity : ComponentActivity() {
                                         currentUserId = userInfo.id.toString()
                                         this@MainActivity.userInfo = userInfo
                                         isLoggedIn = true
+
+                                        // 상태 저장
+                                        saveAppState()
                                     }
                                 )
                             }
@@ -686,6 +756,27 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    // Activity 생명주기 메서드들
+    override fun onPause() {
+        super.onPause()
+        // 앱이 백그라운드로 갈 때 상태 저장
+        saveAppState()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // 앱이 포그라운드로 돌아올 때 ChatService 재연결
+        if (::chatService.isInitialized) {
+            chatService.restoreNavigationState()
+        }
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        // singleTop으로 인해 새 인텐트가 올 때
+        Log.d("MainActivity", "onNewIntent called")
     }
 
     // 위치 정보를 가져오는 함수들은 그대로 유지
@@ -928,7 +1019,25 @@ class MainActivity : ComponentActivity() {
             callback("", "")
         }
     }
+
+
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        // 추가적인 상태 저장이 필요한 경우
+        outState.putBoolean(KEY_IS_LOGGED_IN, userInfo != null)
+        outState.putString(KEY_CURRENT_USER_ID, currentUserId)
+        outState.putString(KEY_CURRENT_KAKAO_ID, currentUserKakaoId)
+    }
+
+    override fun onRestoreInstanceState(savedInstanceState: Bundle) {
+        super.onRestoreInstanceState(savedInstanceState)
+        // 시스템에 의해 앱이 종료되었다가 재시작될 때
+        currentUserId = savedInstanceState.getString(KEY_CURRENT_USER_ID, "guest") ?: "guest"
+        currentUserKakaoId = savedInstanceState.getString(KEY_CURRENT_KAKAO_ID)
+    }
 }
+
 
 @Composable
 fun LoginScreen(
@@ -980,6 +1089,8 @@ fun LoginScreen(
                                 mainActivity.currentUserKakaoId = userInfo.id.toString()
                                 Log.d(TAG, "MainActivity.currentUserKakaoId 설정 완료: ${userInfo.id}")
 
+                                // 상태 저장 추가
+                                mainActivity.saveAppState()
                                 // 현재 위치 정보 확인
                                 Log.d(TAG, "현재 위치 정보 - city: '${mainActivity.userCity}', district: '${mainActivity.userDistrict}'")
 
@@ -1323,6 +1434,11 @@ fun NormalLoginScreen(
                                     val mainActivity = context as? MainActivity
                                     mainActivity?.currentUserId = user.user_id ?: ""  // ← 중요!
                                     mainActivity?.currentUserKakaoId = null
+
+
+                                    // 상태 저장 추가
+                                    mainActivity?.saveAppState()
+
                                     Log.d("NormalLogin", "Login successful - currentUserId set to: ${user.user_id}")
 
                                     onLoginSuccess(userInfo)
