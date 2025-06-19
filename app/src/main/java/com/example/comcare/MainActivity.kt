@@ -6732,6 +6732,39 @@ fun MessageItem(
                                 .fillMaxWidth()
                                 .aspectRatio(16f / 9f)
                                 .clickable {
+                                    // application_history 저장
+                                    val searchHistoryId = activity.chatService.lastSearchHistoryId
+
+                                    coroutineScope.launch {
+                                        try {
+                                            val identifier = activity.currentUserId
+                                            val user = supabaseHelper.getUserByIdentifier(identifier)
+
+                                            if (user != null && user.id != null) {
+                                                // YouTube 동영상의 경우 messageTitle이나 displayText에서 제목 추출
+                                                val videoTitle = messageTitle ?: displayText.split("\n").firstOrNull()?.trim() ?: "YouTube 동영상"
+
+                                                val applicationHistory = supabaseHelper.saveApplicationHistory(
+                                                    userId = user.id,
+                                                    applicationCategory = "동영상",  // YouTube 동영상을 위한 새로운 카테고리
+                                                    applicationContent = videoTitle,
+                                                    searchHistoryId = searchHistoryId
+                                                )
+
+                                                if (applicationHistory != null) {
+                                                    Log.d("ApplicationHistory", "YouTube 동영상 시청 기록 저장 성공: ${applicationHistory.id}")
+                                                    Log.d("ApplicationHistory", "동영상 제목: $videoTitle")
+                                                } else {
+                                                    Log.e("ApplicationHistory", "YouTube 동영상 시청 기록 저장 실패")
+                                                }
+                                            } else {
+                                                Log.e("ApplicationHistory", "사용자 정보를 찾을 수 없음: identifier = $identifier")
+                                            }
+                                        } catch (e: Exception) {
+                                            Log.e("ApplicationHistory", "YouTube 동영상 시청 기록 저장 중 오류: ${e.message}", e)
+                                        }
+                                    }
+
                                     // YouTube URL로 이동
                                     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(youtubeUrl))
                                     try {
