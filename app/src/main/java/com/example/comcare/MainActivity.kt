@@ -133,6 +133,9 @@ import androidx.compose.material.icons.filled.PlayArrow
 
 import android.content.SharedPreferences
 
+import org.json.JSONArray
+import org.json.JSONException
+
 
 // 사용자 정보 데이터 클래스
 data class UserInfo(
@@ -170,6 +173,9 @@ class MainActivity : ComponentActivity() {
         private const val KEY_CURRENT_KAKAO_ID = "current_kakao_id"
         private const val KEY_USER_CITY = "user_city"
         private const val KEY_USER_DISTRICT = "user_district"
+
+        private const val KEY_CHAT_MESSAGES = "chat_messages"
+        private const val KEY_CHAT_SESSION_ID = "chat_session_id"
     }
 
     // SharedPreferences 추가
@@ -218,6 +224,62 @@ class MainActivity : ComponentActivity() {
 
         Log.d("MainActivity", "App state restored - userId: $currentUserId, city: $userCity")
     }
+
+    // 채팅 메시지 저장
+    fun saveChatMessages(messages: List<ChatMessage>, sessionId: String) {
+        try {
+            val jsonArray = JSONArray()
+            messages.forEach { message ->
+                // isWaiting이 true인 메시지는 저장하지 않음
+                if (!message.isWaiting) {
+                    jsonArray.put(message.toJson())
+                }
+            }
+
+            sharedPrefs.edit().apply {
+                putString(KEY_CHAT_MESSAGES, jsonArray.toString())
+                putString(KEY_CHAT_SESSION_ID, sessionId)
+            }.apply()
+
+            Log.d("MainActivity", "Chat messages saved: ${messages.size}")
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error saving chat messages", e)
+        }
+    }
+
+    // 채팅 메시지 복원
+    fun loadChatMessages(): Pair<List<ChatMessage>, String> {
+        return try {
+            val messagesJson = sharedPrefs.getString(KEY_CHAT_MESSAGES, null)
+            val sessionId = sharedPrefs.getString(KEY_CHAT_SESSION_ID, null)
+
+            if (messagesJson != null) {
+                val jsonArray = JSONArray(messagesJson)
+                val messages = mutableListOf<ChatMessage>()
+
+                for (i in 0 until jsonArray.length()) {
+                    messages.add(ChatMessage.fromJson(jsonArray.getJSONObject(i)))
+                }
+
+                Log.d("MainActivity", "Chat messages loaded: ${messages.size}")
+                Pair(messages, sessionId ?: UUID.randomUUID().toString().replace("-", ""))
+            } else {
+                Pair(emptyList(), UUID.randomUUID().toString().replace("-", ""))
+            }
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error loading chat messages", e)
+            Pair(emptyList(), UUID.randomUUID().toString().replace("-", ""))
+        }
+    }
+
+    // 채팅 메시지 삭제
+    fun clearChatMessages() {
+        sharedPrefs.edit().apply {
+            remove(KEY_CHAT_MESSAGES)
+            remove(KEY_CHAT_SESSION_ID)
+        }.apply()
+    }
+
 
     fun onMessageSent(message: String, sessionId: String) {
         chatService.sendChatMessageToWorkflow(
@@ -5376,10 +5438,26 @@ fun ChatScreen(
     userDistrict: String = "",
     userInfo: UserInfo? = null
 ) {
+    val (savedMessages, savedSessionId) = remember { activity.loadChatMessages() }
+
     // Use rememberSaveable to persist state across recompositions
     var messageText by rememberSaveable { mutableStateOf("") }
-    var messages by rememberSaveable { mutableStateOf(listOf<ChatMessage>()) }
-    val sessionId = rememberSaveable { UUID.randomUUID().toString().replace("-", "") }
+    var messages by remember {
+        mutableStateOf(
+            if (savedMessages.isNotEmpty()) {
+                savedMessages
+            } else {
+                listOf(
+                    ChatMessage(
+                        text = "안녕하세요! 오비서입니다. 시니어에 관련된 정책, 일자리, 복지시설에 관해 무엇이든 물어보세요!",
+                        isFromUser = false
+                    )
+                )
+            }
+        )
+    }
+    val sessionId = rememberSaveable { savedSessionId }
+
 
     // Speech recognition state
     var isListening by remember { mutableStateOf(false) }
@@ -5760,6 +5838,7 @@ fun ChatScreen(
 // AI 응답이 도착했을 때 스크롤
     LaunchedEffect(messages) {
         if (messages.isNotEmpty()) {
+            activity.saveChatMessages(messages, sessionId)
             val lastMessage = messages.last()
             // AI 응답이고 waiting 상태가 아닐 때
             if (!lastMessage.isFromUser && !lastMessage.isWaiting) {
@@ -7166,10 +7245,32 @@ fun MessageItem(
     }
 }
 
-// Update ChatMessage class to include an isWaiting flag
+// ChatMessage를 JSON으로 변환하기 위한 함수 추가
 data class ChatMessage(
     val text: String,
     val isFromUser: Boolean,
     val timestamp: Long = System.currentTimeMillis(),
     val isWaiting: Boolean = false
-)
+) {
+    // JSON으로 변환
+    fun toJson(): JSONObject {
+        return JSONObject().apply {
+            put("text", text)
+            put("isFromUser", isFromUser)
+            put("timestamp", timestamp)
+            put("isWaiting", isWaiting)
+        }
+    }
+
+    companion object {
+        // JSON에서 ChatMessage로 변환
+        fun fromJson(json: JSONObject): ChatMessage {
+            return ChatMessage(
+                text = json.getString("text"),
+                isFromUser = json.getBoolean("isFromUser"),
+                timestamp = json.optLong("timestamp", System.currentTimeMillis()),
+                isWaiting = json.optBoolean("isWaiting", false)
+            )
+        }
+    }
+}
