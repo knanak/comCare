@@ -1959,6 +1959,14 @@ fun PlaceComparisonApp(
     userInfo: UserInfo? = null,
     startSection: String = "home"
 ) {
+
+    // 다크모드 상태 확인
+    val isDarkTheme = isSystemInDarkTheme()
+
+    // 텍스트 색상 정의
+    val textColor = if (isDarkTheme) Color.White else Color.Black
+    val secondaryTextColor = if (isDarkTheme) Color.Gray else Color.Gray
+
     Log.d("PlaceComparisonApp", "받은 위치 정보: City=$userCity, District=$userDistrict")
     var currentSection by remember { mutableStateOf(startSection) }  // startSection으로 초기화
     var selectedCity by remember { mutableStateOf("전체") }
@@ -2481,7 +2489,7 @@ fun PlaceComparisonApp(
                         "위치:",
                         style = MaterialTheme.typography.headlineSmall, // 크게 증가
                         fontWeight = FontWeight.Bold,  // 더 두껍게
-                        color = Color(0xFFffffff)  // 더 어둡게
+                        color = textColor,  // 더 어둡게
                     )
 
                     Spacer(modifier = Modifier.height(8.dp))  // 간격 증가
@@ -2504,13 +2512,13 @@ fun PlaceComparisonApp(
                                     Text(
                                         "$selectedCity",
                                         style = MaterialTheme.typography.titleLarge, // 크기 증가
-                                        color = Color(0xFFffffff), // 더 어둡게
+                                        color = textColor, // 더 어둡게
                                         fontWeight = FontWeight.Bold // 두껍게
                                     )
                                     Text(
                                         "▼",
                                         style = MaterialTheme.typography.titleLarge, // 크기 증가
-                                        color = Color(0xFFffffff) // 더 어둡게
+                                        color = textColor, // 더 어둡게
                                     )
                                 }
                             }
@@ -2525,7 +2533,7 @@ fun PlaceComparisonApp(
                                             Text(
                                                 city,
                                                 style = MaterialTheme.typography.titleLarge, // 크기 증가
-                                                color = Color(0xFFffffff), // 더 어둡게
+                                                color = textColor, // 더 어둡게
                                                 fontWeight = FontWeight.Medium
                                             )
                                         },
@@ -2552,13 +2560,13 @@ fun PlaceComparisonApp(
                                     Text(
                                         "$selectedDistrict",
                                         style = MaterialTheme.typography.titleLarge, // 크기 증가
-                                        color = Color(0xFFffffff), // 더 어둡게
+                                        color = textColor, // 더 어둡게
                                         fontWeight = FontWeight.Bold // 두껍게
                                     )
                                     Text(
                                         "▼",
                                         style = MaterialTheme.typography.titleLarge, // 크기 증가
-                                        color = Color(0xFFffffff) // 더 어둡게
+                                        color = textColor, // 더 어둡게
                                     )
                                 }
                             }
@@ -2573,7 +2581,7 @@ fun PlaceComparisonApp(
                                             Text(
                                                 district,
                                                 style = MaterialTheme.typography.titleLarge, // 크기 증가
-                                                color = Color(0xFFffffff), // 더 어둡게
+                                                color = textColor, // 더 어둡게
                                                 fontWeight = FontWeight.Medium
                                             )
                                         },
@@ -2595,7 +2603,7 @@ fun PlaceComparisonApp(
                         "서비스:",
                         style = MaterialTheme.typography.headlineSmall, // 크게 증가
                         fontWeight = FontWeight.Bold,  // 더 두껍게
-                        color = Color(0xFFffffff)  // 더 어둡게
+                        color = textColor,  // 더 어둡게
                     )
 
                     Spacer(modifier = Modifier.height(8.dp))  // 간격 증가
@@ -2618,13 +2626,13 @@ fun PlaceComparisonApp(
                                     Text(
                                         "$selectedServiceCategory",
                                         style = MaterialTheme.typography.titleLarge, // 크기 증가
-                                        color = Color(0xFFffffff), // 더 어둡게
+                                        color = textColor, // 더 어둡게
                                         fontWeight = FontWeight.Bold // 두껍게
                                     )
                                     Text(
                                         "▼",
                                         style = MaterialTheme.typography.titleLarge, // 크기 증가
-                                        color = Color(0xFFffffff) // 더 어둡게
+                                        color = textColor, // 더 어둡게
                                     )
                                 }
                             }
@@ -2639,7 +2647,7 @@ fun PlaceComparisonApp(
                                             Text(
                                                 category,
                                                 style = MaterialTheme.typography.titleLarge, // 크기 증가
-                                                color = Color(0xFFffffff), // 더 어둡게
+                                                color = textColor, // 더 어둡게
                                                 fontWeight = FontWeight.Medium
                                             )
                                         },
@@ -2666,13 +2674,13 @@ fun PlaceComparisonApp(
                                     Text(
                                         "$selectedServiceSubcategory",
                                         style = MaterialTheme.typography.titleLarge, // 크기 증가
-                                        color = Color(0xFFffffff), // 더 어둡게
+                                        color = textColor, // 더 어둡게
                                         fontWeight = FontWeight.Bold // 두껍게
                                     )
                                     Text(
                                         "▼",
                                         style = MaterialTheme.typography.titleLarge, // 크기 증가
-                                        color = Color(0xFFffffff) // 더 어둡게
+                                        color = textColor, // 더 어둡게
                                     )
                                 }
                             }
@@ -2687,7 +2695,7 @@ fun PlaceComparisonApp(
                                             Text(
                                                 subcategory,
                                                 style = MaterialTheme.typography.titleLarge, // 크기 증가
-                                                color = Color(0xFFffffff), // 더 어둡게
+                                                color = textColor, // 더 어둡게
                                                 fontWeight = FontWeight.Medium
                                             )
                                         },
@@ -2768,7 +2776,7 @@ fun PlaceComparisonApp(
                                         "오늘의 시설",
                                         style = MaterialTheme.typography.titleLarge,
                                         fontWeight = FontWeight.Bold,
-                                        color = Color.Black,
+                                        color = textColor,
                                     )
 
                                     Spacer(modifier = Modifier.height(12.dp))
@@ -2784,14 +2792,16 @@ fun PlaceComparisonApp(
                                         Text(
                                             randomPlace.name,
                                             style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold
+                                            fontWeight = FontWeight.Bold,
+                                            color = textColor
                                         )
 
                                         Spacer(modifier = Modifier.height(4.dp))
 
                                         Text(
                                             "주소: ${randomPlace.address}",
-                                            style = MaterialTheme.typography.bodyLarge
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            color = textColor
                                         )
 
                                         Spacer(modifier = Modifier.height(4.dp))
@@ -2799,7 +2809,8 @@ fun PlaceComparisonApp(
                                         if (randomPlace.service1.isNotEmpty()) {
                                             Text(
                                                 "시설 종류: ${randomPlace.service1.joinToString(", ")}",
-                                                style = MaterialTheme.typography.bodyMedium
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = textColor
                                             )
                                         }
 
@@ -2850,7 +2861,8 @@ fun PlaceComparisonApp(
                                                     "$userCity $userDistrict 지역의 시설 정보가 없습니다."
                                                 }
                                             },
-                                            style = MaterialTheme.typography.bodyLarge
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            color = textColor
                                         )
                                     }
                                 }
@@ -2870,7 +2882,7 @@ fun PlaceComparisonApp(
                                         "오늘의 일자리",
                                         style = MaterialTheme.typography.titleLarge,
                                         fontWeight = FontWeight.Bold,
-                                        color = Color.Black,
+                                        color = textColor
                                     )
 
                                     Spacer(modifier = Modifier.height(12.dp))
@@ -2889,6 +2901,7 @@ fun PlaceComparisonApp(
                                                     randomJob.Title ?: "제목 없음",
                                                     style = MaterialTheme.typography.titleMedium,
                                                     fontWeight = FontWeight.Bold,
+                                                    color = textColor
                                                 )
 
                                                 Spacer(modifier = Modifier.height(4.dp))
@@ -2897,11 +2910,13 @@ fun PlaceComparisonApp(
                                                     Text(
                                                         "근무형태: ",
                                                         style = MaterialTheme.typography.bodyLarge,
-                                                        fontWeight = FontWeight.Bold
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = textColor
                                                     )
                                                     Text(
                                                         randomJob.WorkingType ?: "정보 없음",
-                                                        style = MaterialTheme.typography.bodyLarge
+                                                        style = MaterialTheme.typography.bodyLarge,
+                                                        color = textColor
                                                     )
                                                 }
 
@@ -2911,11 +2926,13 @@ fun PlaceComparisonApp(
                                                     Text(
                                                         "급여: ",
                                                         style = MaterialTheme.typography.bodyLarge,
-                                                        fontWeight = FontWeight.Bold
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = textColor
                                                     )
                                                     Text(
                                                         randomJob.Salary ?: "정보 없음",
-                                                        style = MaterialTheme.typography.bodyLarge
+                                                        style = MaterialTheme.typography.bodyLarge,
+                                                        color = textColor
                                                     )
                                                 }
                                             }
@@ -2924,13 +2941,15 @@ fun PlaceComparisonApp(
                                                     randomJob.Title ?: "제목 없음",
                                                     style = MaterialTheme.typography.titleMedium,
                                                     fontWeight = FontWeight.Bold,
+                                                    color = textColor
                                                 )
 
                                                 Spacer(modifier = Modifier.height(4.dp))
 
                                                 Text(
                                                     "위치: ${randomJob.Address ?: "정보 없음"}",
-                                                    style = MaterialTheme.typography.bodyLarge
+                                                    style = MaterialTheme.typography.bodyLarge,
+                                                    color = textColor
                                                 )
 
                                                 Spacer(modifier = Modifier.height(4.dp))
@@ -2940,11 +2959,13 @@ fun PlaceComparisonApp(
                                                         Text(
                                                             "근무시간: ",
                                                             style = MaterialTheme.typography.bodyLarge,
-                                                            fontWeight = FontWeight.Bold
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = textColor
                                                         )
                                                         Text(
                                                             randomJob.WorkingHours,
-                                                            style = MaterialTheme.typography.bodyLarge
+                                                            style = MaterialTheme.typography.bodyLarge,
+                                                            color = textColor
                                                         )
                                                     }
                                                 }
@@ -2954,13 +2975,15 @@ fun PlaceComparisonApp(
                                                     randomJob.Title ?: "제목 없음",
                                                     style = MaterialTheme.typography.titleMedium,
                                                     fontWeight = FontWeight.Bold,
+                                                    color = textColor
                                                 )
 
                                                 Spacer(modifier = Modifier.height(4.dp))
 
                                                 Text(
                                                     "위치: ${randomJob.Address ?: "정보 없음"}",
-                                                    style = MaterialTheme.typography.bodyLarge
+                                                    style = MaterialTheme.typography.bodyLarge,
+                                                    color = textColor
                                                 )
 
                                                 Spacer(modifier = Modifier.height(4.dp))
@@ -2970,11 +2993,13 @@ fun PlaceComparisonApp(
                                                         Text(
                                                             "근무시간: ",
                                                             style = MaterialTheme.typography.bodyLarge,
-                                                            fontWeight = FontWeight.Bold
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = textColor
                                                         )
                                                         Text(
                                                             randomJob.WorkingHours,
-                                                            style = MaterialTheme.typography.bodyLarge
+                                                            style = MaterialTheme.typography.bodyLarge,
+                                                            color = textColor
                                                         )
                                                     }
                                                 }
@@ -3010,7 +3035,8 @@ fun PlaceComparisonApp(
                                             } else {
                                                 "일자리 정보를 불러오는 중..."
                                             },
-                                            style = MaterialTheme.typography.bodyLarge
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            color = textColor
                                         )
                                     }
                                 }
@@ -3030,7 +3056,7 @@ fun PlaceComparisonApp(
                                         "오늘의 문화",
                                         style = MaterialTheme.typography.titleLarge,
                                         fontWeight = FontWeight.Bold,
-                                        color = Color.Black,
+                                        color = textColor
                                     )
 
                                     Spacer(modifier = Modifier.height(12.dp))
@@ -3051,6 +3077,7 @@ fun PlaceComparisonApp(
                                                     randomCulture.Title ?: "강좌명 없음",
                                                     style = MaterialTheme.typography.titleMedium,
                                                     fontWeight = FontWeight.Bold,
+                                                    color = textColor
                                                 )
 
                                                 Spacer(modifier = Modifier.height(4.dp))
@@ -3067,7 +3094,8 @@ fun PlaceComparisonApp(
 
                                                 Text(
                                                     "기관: $institutionText",
-                                                    style = MaterialTheme.typography.bodyLarge
+                                                    style = MaterialTheme.typography.bodyLarge,
+                                                    color = textColor
                                                 )
 
                                                 Spacer(modifier = Modifier.height(4.dp))
@@ -3076,11 +3104,13 @@ fun PlaceComparisonApp(
                                                     Text(
                                                         "수강료: ",
                                                         style = MaterialTheme.typography.bodyLarge,
-                                                        fontWeight = FontWeight.Bold
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = textColor
                                                     )
                                                     Text(
                                                         randomCulture.Fee ?: "무료",
-                                                        style = MaterialTheme.typography.bodyLarge
+                                                        style = MaterialTheme.typography.bodyLarge,
+                                                        color = textColor
                                                     )
                                                 }
                                             }
@@ -3090,13 +3120,15 @@ fun PlaceComparisonApp(
                                                     randomCulture.Title ?: "강좌명 없음",
                                                     style = MaterialTheme.typography.titleMedium,
                                                     fontWeight = FontWeight.Bold,
+                                                    color = textColor
                                                 )
 
                                                 Spacer(modifier = Modifier.height(4.dp))
 
                                                 Text(
                                                     "기관: ${randomCulture.Institution ?: "정보 없음"}",
-                                                    style = MaterialTheme.typography.bodyLarge
+                                                    style = MaterialTheme.typography.bodyLarge,
+                                                    color = textColor
                                                 )
 
                                                 Spacer(modifier = Modifier.height(4.dp))
@@ -3105,7 +3137,8 @@ fun PlaceComparisonApp(
                                                 randomCulture.Category?.let { category ->
                                                     Text(
                                                         "지역: 경기도 $category",
-                                                        style = MaterialTheme.typography.bodyLarge
+                                                        style = MaterialTheme.typography.bodyLarge,
+                                                        color = textColor
                                                     )
                                                     Spacer(modifier = Modifier.height(4.dp))
                                                 }
@@ -3114,11 +3147,13 @@ fun PlaceComparisonApp(
                                                     Text(
                                                         "수강료: ",
                                                         style = MaterialTheme.typography.bodyLarge,
-                                                        fontWeight = FontWeight.Bold
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = textColor
                                                     )
                                                     Text(
                                                         randomCulture.Fee ?: "무료",
-                                                        style = MaterialTheme.typography.bodyLarge
+                                                        style = MaterialTheme.typography.bodyLarge,
+                                                        color = textColor
                                                     )
                                                 }
                                             }
@@ -3128,13 +3163,15 @@ fun PlaceComparisonApp(
                                                     randomCulture.Title ?: "강좌명 없음",
                                                     style = MaterialTheme.typography.titleMedium,
                                                     fontWeight = FontWeight.Bold,
+                                                    color = textColor
                                                 )
 
                                                 Spacer(modifier = Modifier.height(4.dp))
 
                                                 Text(
                                                     "기관: ${randomCulture.Institution ?: "정보 없음"}",
-                                                    style = MaterialTheme.typography.bodyLarge
+                                                    style = MaterialTheme.typography.bodyLarge,
+                                                    color = textColor
                                                 )
 
                                                 Spacer(modifier = Modifier.height(4.dp))
@@ -3143,7 +3180,8 @@ fun PlaceComparisonApp(
                                                 randomCulture.Category?.let { category ->
                                                     Text(
                                                         "지역: 인천광역시 $category",
-                                                        style = MaterialTheme.typography.bodyLarge
+                                                        style = MaterialTheme.typography.bodyLarge,
+                                                        color = textColor
                                                     )
                                                     Spacer(modifier = Modifier.height(4.dp))
                                                 }
@@ -3152,11 +3190,13 @@ fun PlaceComparisonApp(
                                                     Text(
                                                         "수강료: ",
                                                         style = MaterialTheme.typography.bodyLarge,
-                                                        fontWeight = FontWeight.Bold
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = textColor
                                                     )
                                                     Text(
                                                         randomCulture.Fee ?: "무료",
-                                                        style = MaterialTheme.typography.bodyLarge
+                                                        style = MaterialTheme.typography.bodyLarge,
+                                                        color = textColor
                                                     )
                                                 }
                                             }
@@ -3196,7 +3236,8 @@ fun PlaceComparisonApp(
                                             } else {
                                                 "문화 강좌 정보를 불러오는 중..."
                                             },
-                                            style = MaterialTheme.typography.bodyLarge
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            color = textColor
                                         )
                                     }
                                 }
@@ -3274,7 +3315,7 @@ fun PlaceComparisonApp(
                                 "위치:",
                                 style = MaterialTheme.typography.headlineSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFFffffff)
+                                color = textColor
                             )
 
                             Spacer(modifier = Modifier.height(8.dp))
@@ -3312,13 +3353,13 @@ fun PlaceComparisonApp(
                                             Text(
                                                 selectedCity,
                                                 style = MaterialTheme.typography.titleLarge,
-                                                color = Color(0xFFffffff),
+                                                color = textColor,
                                                 fontWeight = FontWeight.Bold
                                             )
                                             Text(
                                                 "▼",
                                                 style = MaterialTheme.typography.titleLarge,
-                                                color = Color(0xFFffffff)
+                                                color = textColor
                                             )
                                         }
                                     }
@@ -3333,7 +3374,7 @@ fun PlaceComparisonApp(
                                                     Text(
                                                         city,
                                                         style = MaterialTheme.typography.titleLarge,
-                                                        color = Color(0xFFffffff),
+                                                        color = textColor,
                                                         fontWeight = FontWeight.Medium
                                                     )
                                                 },
@@ -3360,13 +3401,13 @@ fun PlaceComparisonApp(
                                             Text(
                                                 selectedDistrict,
                                                 style = MaterialTheme.typography.titleLarge,
-                                                color = Color(0xFFffffff),
+                                                color = textColor ,
                                                 fontWeight = FontWeight.Bold
                                             )
                                             Text(
                                                 "▼",
                                                 style = MaterialTheme.typography.titleLarge,
-                                                color = Color(0xFFffffff)
+                                                color = textColor
                                             )
                                         }
                                     }
@@ -3381,7 +3422,7 @@ fun PlaceComparisonApp(
                                                     Text(
                                                         district,
                                                         style = MaterialTheme.typography.titleLarge,
-                                                        color = Color(0xFFffffff),
+                                                        color = textColor,
                                                         fontWeight = FontWeight.Medium
                                                     )
                                                 },
@@ -3443,7 +3484,7 @@ fun PlaceComparisonApp(
                                 "위치:",
                                 style = MaterialTheme.typography.headlineSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFFffffff)
+                                color = textColor
                             )
 
                             Spacer(modifier = Modifier.height(8.dp))
@@ -3482,13 +3523,13 @@ fun PlaceComparisonApp(
                                             Text(
                                                 selectedCity,
                                                 style = MaterialTheme.typography.titleLarge,
-                                                color = Color(0xFFffffff),
+                                                color = textColor,
                                                 fontWeight = FontWeight.Bold
                                             )
                                             Text(
                                                 "▼",
                                                 style = MaterialTheme.typography.titleLarge,
-                                                color = Color(0xFFffffff)
+                                                color = textColor
                                             )
                                         }
                                     }
@@ -3503,7 +3544,7 @@ fun PlaceComparisonApp(
                                                     Text(
                                                         city,
                                                         style = MaterialTheme.typography.titleLarge,
-                                                        color = Color(0xFFffffff),
+                                                        color = textColor,
                                                         fontWeight = FontWeight.Medium
                                                     )
                                                 },
@@ -3530,13 +3571,13 @@ fun PlaceComparisonApp(
                                             Text(
                                                 selectedDistrict,
                                                 style = MaterialTheme.typography.titleLarge,
-                                                color = Color(0xFFffffff),
+                                                color = textColor ,
                                                 fontWeight = FontWeight.Bold
                                             )
                                             Text(
                                                 "▼",
                                                 style = MaterialTheme.typography.titleLarge,
-                                                color = Color(0xFFffffff)
+                                                color = textColor
                                             )
                                         }
                                     }
@@ -3551,7 +3592,7 @@ fun PlaceComparisonApp(
                                                     Text(
                                                         district,
                                                         style = MaterialTheme.typography.titleLarge,
-                                                        color = Color(0xFFffffff),
+                                                        color = textColor ,
                                                         fontWeight = FontWeight.Medium
                                                     )
                                                 },
@@ -4158,6 +4199,10 @@ fun CultureSearchResultsScreen(
 
 @Composable
 fun PlaceCard(place: Place) {
+
+    val isDarkTheme = isSystemInDarkTheme()
+    val textColor = if (isDarkTheme) Color.White else Color.Black
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -4281,7 +4326,7 @@ fun JobCard(job: SupabaseDatabaseHelper.Job) {
                 text = job.Title ?: "제목 없음",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                color = Color.Yellow,
+                color = Color.Black,
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -4346,7 +4391,7 @@ fun JobCard(job: SupabaseDatabaseHelper.Job) {
                         }
                     },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.Yellow,
+                        containerColor = Color(0xFFc6f584),
                         contentColor = Color.Black
                     ),
                     shape = RoundedCornerShape(8.dp)
@@ -4378,7 +4423,7 @@ fun KKJobCard(kkJob: SupabaseDatabaseHelper.KKJob) {
                 text = kkJob.Title ?: "제목 없음",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                color = Color.Yellow,
+                color = Color(0xFFc6f584),
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -4446,7 +4491,7 @@ fun KKJobCard(kkJob: SupabaseDatabaseHelper.KKJob) {
                         }
                     },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.Yellow,
+                        Color(0xFFc6f584),
                         contentColor = Color.Black
                     ),
                     shape = RoundedCornerShape(8.dp)
@@ -4478,7 +4523,7 @@ fun ICHJobCard(ichJob: SupabaseDatabaseHelper.ICHJob) {
                 text = ichJob.Title ?: "제목 없음",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                color = Color.Yellow,
+                color = Color.Black,
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -4547,7 +4592,7 @@ fun ICHJobCard(ichJob: SupabaseDatabaseHelper.ICHJob) {
                         }
                     },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.Yellow,
+                        containerColor = Color(0xFFc6f584),
                         contentColor = Color.Black
                     ),
                     shape = RoundedCornerShape(8.dp)
@@ -4581,7 +4626,7 @@ fun BSJobCard(bsJob: SupabaseDatabaseHelper.BSJob) {
                 text = bsJob.Title ?: "제목 없음",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                color = Color.Yellow,
+                color = Color(0xFFc6f584),
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -4649,7 +4694,7 @@ fun BSJobCard(bsJob: SupabaseDatabaseHelper.BSJob) {
                         }
                     },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.Yellow,
+                        containerColor = Color(0xFFc6f584),
                         contentColor = Color.Black
                     ),
                     shape = RoundedCornerShape(8.dp)
@@ -4681,7 +4726,7 @@ fun KBJobCard(kbJob: SupabaseDatabaseHelper.KBJob) {
                 text = kbJob.Title ?: "제목 없음",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                color = Color.Yellow,
+                color = Color(0xFFc6f584),
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -4749,7 +4794,7 @@ fun KBJobCard(kbJob: SupabaseDatabaseHelper.KBJob) {
                         }
                     },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.Yellow,
+                        containerColor = Color(0xFFc6f584),
                         contentColor = Color.Black
                     ),
                     shape = RoundedCornerShape(8.dp)
@@ -4802,7 +4847,7 @@ fun LectureCard(lecture: SupabaseDatabaseHelper.Lecture) {
                 text = lecture.Title ?: "강좌명 없음",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                color = Color.Yellow,
+                color = Color.Black,
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -4880,7 +4925,7 @@ fun LectureCard(lecture: SupabaseDatabaseHelper.Lecture) {
                         }
                     },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.Yellow,
+                        containerColor = Color(0xFFc6f584),
                         contentColor = Color.Black
                     ),
                     shape = RoundedCornerShape(8.dp)
@@ -4912,7 +4957,7 @@ fun KKCultureCard(kkCulture: SupabaseDatabaseHelper.KKCulture) {
                 text = kkCulture.Title ?: "강좌명 없음",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                color = Color.Yellow,
+                color = Color.Black,
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -5010,7 +5055,7 @@ fun KKCultureCard(kkCulture: SupabaseDatabaseHelper.KKCulture) {
                         }
                     },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.Yellow,
+                        containerColor = Color(0xFFc6f584),
                         contentColor = Color.Black
                     ),
                     shape = RoundedCornerShape(8.dp)
@@ -5042,7 +5087,7 @@ fun ICHCultureCard(ichCulture: SupabaseDatabaseHelper.ICHCulture) {
                 text = ichCulture.Title ?: "강좌명 없음",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                color = Color.Yellow,
+                color = Color.Black,
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -5156,7 +5201,7 @@ fun ICHCultureCard(ichCulture: SupabaseDatabaseHelper.ICHCulture) {
                         }
                     },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.Yellow,
+                        containerColor = Color(0xFFc6f584),
                         contentColor = Color.Black
                     ),
                     shape = RoundedCornerShape(8.dp)
@@ -5192,7 +5237,7 @@ fun BSCultureCard(bsCulture: SupabaseDatabaseHelper.BSCulture) {
                 text = bsCulture.Title ?: "강좌명 없음",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                color = Color.Yellow,
+                color = Color.Black,
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -5305,7 +5350,7 @@ fun BSCultureCard(bsCulture: SupabaseDatabaseHelper.BSCulture) {
                         }
                     },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.Yellow,
+                        containerColor = Color(0xFFc6f584),
                         contentColor = Color.Black
                     ),
                     shape = RoundedCornerShape(8.dp)
@@ -5337,7 +5382,7 @@ fun KBCultureCard(kbCulture: SupabaseDatabaseHelper.KBCulture) {
                 text = kbCulture.Title ?: "강좌명 없음",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                color = Color.Yellow,
+                color = Color.Black,
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -5424,7 +5469,7 @@ fun KBCultureCard(kbCulture: SupabaseDatabaseHelper.KBCulture) {
                         }
                     },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.Yellow,
+                        containerColor = Color(0xFFc6f584),
                         contentColor = Color.Black
                     ),
                     shape = RoundedCornerShape(8.dp)
