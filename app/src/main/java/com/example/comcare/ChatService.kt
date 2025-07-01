@@ -261,6 +261,9 @@ class ChatService(private val context: Context) {
             }
 
 
+// ChatService.kt의 sendChatMessageToWorkflow 함수 내부
+// onResponse 메서드의 응답 파싱 부분을 다음과 같이 수정:
+
             override fun onResponse(call: Call, response: Response) {
                 try {
                     Log.d(TAG, "==== RECEIVED RESPONSE ====")
@@ -302,19 +305,39 @@ class ChatService(private val context: Context) {
                     // 응답 파싱 및 SearchHistory용 데이터 추출
                     var categoryForHistory: String? = null
                     var answerForHistory: String? = null
+                    var queryCategory: String? = null  // Query_Category를 위한 별도 변수
 
                     // Pinecone 응답 처리 로직
                     try {
                         val jsonResponse = JSONObject(responseBody)
 
-                        // namespace 추출 (category용)
+                        // namespace와 Query_Category를 각각 별도로 처리
                         categoryForHistory = jsonResponse.optString("namespace", null)
+                        queryCategory = jsonResponse.optString("Query_Category", null)
+
+                        // 디버그 로그 추가
+                        Log.d(TAG, "Query_Category: ${queryCategory ?: "없음"}")
+                        Log.d(TAG, "namespace: ${categoryForHistory ?: "없음"}")
+
                         val namespace = jsonResponse.optString("namespace", "")
 
                         if (jsonResponse.has("results")) {
                             val results = jsonResponse.getJSONArray("results")
 
                             if (results.length() > 0) {
+                                // Query_Category가 있는 경우 특별 처리
+                                if (!queryCategory.isNullOrEmpty()) {
+                                    Log.d(TAG, "Query_Category 감지: $queryCategory")
+
+                                    // 체육시설 소득공제인 경우 특별 마커 추가
+                                    if (queryCategory == "체육시설 소득공제") {
+                                        // 첫 번째 결과에 Query_Category 정보 추가
+                                        val firstResult = results.getJSONObject(0)
+                                        firstResult.put("query_category", queryCategory)
+                                        Log.d(TAG, "체육시설 소득공제 마커 추가")
+                                    }
+                                }
+
                                 // workout namespace인 경우 results에 namespace 정보 추가
                                 if (namespace == "workout") {
                                     for (i in 0 until results.length()) {
@@ -349,7 +372,7 @@ class ChatService(private val context: Context) {
                                 }
                                 return
                             }
-                        }else if (jsonResponse.has("error")) {
+                        } else if (jsonResponse.has("error")) {
                             // 오류 메시지가 있는 경우
                             val errorMessage = jsonResponse.getString("error")
                             Handler(Looper.getMainLooper()).post {
@@ -367,7 +390,7 @@ class ChatService(private val context: Context) {
 
                         // SearchHistory에 저장할 데이터를 ChatService에 저장
                         // MainActivity에서 접근할 수 있도록 함
-                        lastSearchCategory = categoryForHistory
+                        lastSearchCategory = categoryForHistory  // namespace 값만 저장
                         lastSearchAnswer = answerForHistory
 
                     } catch (e: JSONException) {

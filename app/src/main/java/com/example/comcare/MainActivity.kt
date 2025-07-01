@@ -315,6 +315,18 @@ class MainActivity : ComponentActivity() {
         val supabaseHelper = SupabaseDatabaseHelper(this)
 
         setContent {
+
+            // 다크모드 확인
+            val isDarkTheme = isSystemInDarkTheme()
+
+            // 다크모드 상태 로그
+            LaunchedEffect(isDarkTheme) {
+                Log.d("ThemeMode", "=== 테마 모드 확인 ===")
+                Log.d("ThemeMode", "현재 다크모드 상태: ${if (isDarkTheme) "다크모드" else "라이트모드"}")
+                Log.d("ThemeMode", "isDarkTheme = $isDarkTheme")
+                Log.d("ThemeMode", "===================")
+            }
+
             // 저장된 상태로 초기화
             var userCityState by remember { mutableStateOf(userCity.ifEmpty { "위치 확인 중..." }) }
             var userDistrictState by remember { mutableStateOf(userDistrict.ifEmpty { "위치 확인 중..." }) }
@@ -2732,7 +2744,7 @@ fun PlaceComparisonApp(
         // Content based on the current section
         when (currentSection) {
             "home" -> {
-                val highlightColor = Color(0xFFf3f04d)
+                val highlightColor = Color(0xFFc6f584)
 
                 Box(
                     modifier = Modifier.fillMaxSize()
@@ -2756,7 +2768,7 @@ fun PlaceComparisonApp(
                                         "오늘의 시설",
                                         style = MaterialTheme.typography.titleLarge,
                                         fontWeight = FontWeight.Bold,
-                                        color = highlightColor,
+                                        color = Color.Black,
                                     )
 
                                     Spacer(modifier = Modifier.height(12.dp))
@@ -2858,7 +2870,7 @@ fun PlaceComparisonApp(
                                         "오늘의 일자리",
                                         style = MaterialTheme.typography.titleLarge,
                                         fontWeight = FontWeight.Bold,
-                                        color = highlightColor,
+                                        color = Color.Black,
                                     )
 
                                     Spacer(modifier = Modifier.height(12.dp))
@@ -3018,7 +3030,7 @@ fun PlaceComparisonApp(
                                         "오늘의 문화",
                                         style = MaterialTheme.typography.titleLarge,
                                         fontWeight = FontWeight.Bold,
-                                        color = highlightColor,
+                                        color = Color.Black,
                                     )
 
                                     Spacer(modifier = Modifier.height(12.dp))
@@ -6828,9 +6840,12 @@ fun MessageItem(
     val thumbnailMatch = thumbnailPattern.find(message.text)
     val youtubeUrlMatch = youtubeUrlPattern.find(message.text)
 
-    // 메시지에서 Title 추출 - 기존 코드 유지
+    // 체육시설 소득공제 URL 패턴 확인
+    val sportsDeductionUrlPattern = """\[SPORTS_DEDUCTION_URL\](.+?)\[/SPORTS_DEDUCTION_URL\]""".toRegex()
+    val sportsDeductionMatch = sportsDeductionUrlPattern.find(message.text)
+
+    // 메시지에서 Title 추출
     LaunchedEffect(message.text) {
-        // 기존 Title 추출 로직 유지...
         var titlePattern = """📋\s*(.+?)(?:\n|$)""".toRegex()
         var titleMatch = titlePattern.find(message.text)
 
@@ -6894,348 +6909,433 @@ fun MessageItem(
                 }
             } else {
                 Column(modifier = Modifier.padding(12.dp)) {
+                    when {
+                        // 1. 체육시설 소득공제 메시지 처리
+                        sportsDeductionMatch != null && !message.isFromUser -> {
+                            val sportsDeductionUrl = sportsDeductionMatch.groupValues[1]
 
-                    // YouTube 썸네일이 있는 경우
-                    if (thumbnailMatch != null && youtubeUrlMatch != null && !message.isFromUser) {
-                        val thumbnailUrl = thumbnailMatch.groupValues[1]
-                        val youtubeUrl = youtubeUrlMatch.groupValues[1]
+                            // URL 마커를 제거한 텍스트 표시
+                            val displayText = message.text
+                                .replace(sportsDeductionUrlPattern, "")
+                                .trim()
 
-                        // Video ID 추출
-                        val videoIdMatch = Regex("(?:v=|/)([a-zA-Z0-9_-]{11})").find(youtubeUrl)
-                        val videoId = videoIdMatch?.groupValues?.get(1) ?: ""
+                            // 텍스트 표시
+                            if (displayText.isNotEmpty()) {
+                                Text(
+                                    text = displayText,
+                                    color = Color.Black,
+                                    fontSize = 24.sp,
+                                    lineHeight = 29.sp
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                            }
 
-                        // 썸네일과 URL 패턴을 제거한 텍스트 표시
-                        val displayText = message.text
-                            .replace(thumbnailPattern, "")
-                            .replace(youtubeUrlPattern, "")
-                            .trim()
-
-                        // 텍스트 표시 (있는 경우)
-                        if (displayText.isNotEmpty()) {
-                            Text(
-                                text = displayText,
-                                color = Color.Black,
-                                fontSize = 24.sp,
-                                lineHeight = 29.sp
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                        }
-
-                        // YouTube 썸네일 표시
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .aspectRatio(16f / 9f)
-                                .clickable {
-                                    // application_history 저장
-                                    val searchHistoryId = activity.chatService.lastSearchHistoryId
-
-                                    coroutineScope.launch {
-                                        try {
-                                            val identifier = activity.currentUserId
-                                            val user = supabaseHelper.getUserByIdentifier(identifier)
-
-                                            if (user != null && user.id != null) {
-                                                // YouTube 동영상의 경우 messageTitle이나 displayText에서 제목 추출
-                                                val videoTitle = messageTitle ?: displayText.split("\n").firstOrNull()?.trim() ?: "YouTube 동영상"
-
-                                                val applicationHistory = supabaseHelper.saveApplicationHistory(
-                                                    userId = user.id,
-                                                    applicationCategory = "동영상",  // YouTube 동영상을 위한 새로운 카테고리
-                                                    applicationContent = videoTitle,
-                                                    searchHistoryId = searchHistoryId
-                                                )
-
-                                                if (applicationHistory != null) {
-                                                    Log.d("ApplicationHistory", "YouTube 동영상 시청 기록 저장 성공: ${applicationHistory.id}")
-                                                    Log.d("ApplicationHistory", "동영상 제목: $videoTitle")
-                                                } else {
-                                                    Log.e("ApplicationHistory", "YouTube 동영상 시청 기록 저장 실패")
-                                                }
-                                            } else {
-                                                Log.e("ApplicationHistory", "사용자 정보를 찾을 수 없음: identifier = $identifier")
-                                            }
-                                        } catch (e: Exception) {
-                                            Log.e("ApplicationHistory", "YouTube 동영상 시청 기록 저장 중 오류: ${e.message}", e)
-                                        }
-                                    }
-
-                                    // YouTube URL로 이동
-                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(youtubeUrl))
+                            // 클릭 가능한 버튼
+                            Button(
+                                onClick = {
+                                    // 웹 브라우저로 URL 열기
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(sportsDeductionUrl))
                                     try {
                                         context.startActivity(intent)
+
+                                        // 클릭 기록 저장
+                                        coroutineScope.launch {
+                                            try {
+                                                val identifier = activity.currentUserId
+                                                val user = supabaseHelper.getUserByIdentifier(identifier)
+
+                                                if (user != null && user.id != null) {
+                                                    val applicationHistory = supabaseHelper.saveApplicationHistory(
+                                                        userId = user.id,
+                                                        applicationCategory = "체육시설 소득공제",
+                                                        applicationContent = "소득공제 체육시설 조회",
+                                                        searchHistoryId = activity.chatService.lastSearchHistoryId
+                                                    )
+
+                                                    if (applicationHistory != null) {
+                                                        Log.d("ApplicationHistory", "체육시설 소득공제 조회 기록 저장 성공")
+                                                    }
+                                                }
+                                            } catch (e: Exception) {
+                                                Log.e("ApplicationHistory", "기록 저장 실패: ${e.message}", e)
+                                            }
+                                        }
                                     } catch (e: Exception) {
                                         Toast.makeText(
                                             context,
-                                            "동영상을 열 수 없습니다.",
+                                            "웹 브라우저를 열 수 없습니다.",
                                             Toast.LENGTH_SHORT
                                         ).show()
                                     }
                                 },
-                            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Box {
-                                // 썸네일 URL 상태를 추적
-                                var currentThumbnailUrl by remember { mutableStateOf(thumbnailUrl) }
-                                var thumbnailAttempt by remember { mutableStateOf(0) }
-
-                                AsyncImage(
-                                    model = ImageRequest.Builder(context)
-                                        .data(currentThumbnailUrl)
-                                        .crossfade(true)
-                                        .listener(
-                                            onError = { _, _ ->
-                                                // 현재 URL이 실패했을 때 다음 URL 시도
-                                                when (thumbnailAttempt) {
-                                                    0 -> {
-                                                        // maxresdefault 실패 시 hqdefault 시도
-                                                        if (videoId.isNotEmpty()) {
-                                                            currentThumbnailUrl = "https://img.youtube.com/vi/$videoId/hqdefault.jpg"
-                                                            thumbnailAttempt = 1
-                                                        }
-                                                    }
-                                                    1 -> {
-                                                        // hqdefault 실패 시 0.jpg 시도
-                                                        if (videoId.isNotEmpty()) {
-                                                            currentThumbnailUrl = "https://img.youtube.com/vi/$videoId/0.jpg"
-                                                            thumbnailAttempt = 2
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        )
-                                        .build(),
-                                    contentDescription = "YouTube 썸네일",
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentScale = ContentScale.Crop
-                                )
-
-                                // YouTube 재생 아이콘 오버레이
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .background(Color.Black.copy(alpha = 0.3f)),
-                                    contentAlignment = Alignment.Center
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF4CAF50),  // 녹색 버튼
+                                    contentColor = Color.White
+                                ),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Default.PlayArrow,
-                                        contentDescription = "재생",
-                                        tint = Color.White,
-                                        modifier = Modifier
-                                            .size(64.dp)
-                                            .background(
-                                                Color.Red,
-                                                shape = CircleShape
-                                            )
-                                            .padding(12.dp)
+                                        imageVector = Icons.Default.OpenInNew,
+                                        contentDescription = "웹사이트 열기",
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "소득공제 체육시설 조회하기",
+                                        fontSize = 18.sp,
+                                        fontWeight = FontWeight.Bold
                                     )
                                 }
                             }
                         }
-                    } else {
-                        // 기존 메시지 처리 로직
-                        val detailUrlPattern = """\[DETAIL_URL\](.+?)\[/DETAIL_URL\]""".toRegex()
-                        val detailUrlMatch = detailUrlPattern.find(message.text)
 
-                        // Detail URL이 있는 경우 제거한 텍스트 표시
-                        val displayText = if (detailUrlMatch != null) {
-                            message.text.replace(detailUrlPattern, "").trim()
-                        } else {
-                            message.text
+                        // 2. YouTube 썸네일이 있는 경우
+                        thumbnailMatch != null && youtubeUrlMatch != null && !message.isFromUser -> {
+                            val thumbnailUrl = thumbnailMatch.groupValues[1]
+                            val youtubeUrl = youtubeUrlMatch.groupValues[1]
+
+                            // Video ID 추출
+                            val videoIdMatch = Regex("(?:v=|/)([a-zA-Z0-9_-]{11})").find(youtubeUrl)
+                            val videoId = videoIdMatch?.groupValues?.get(1) ?: ""
+
+                            // 썸네일과 URL 패턴을 제거한 텍스트 표시
+                            val displayText = message.text
+                                .replace(thumbnailPattern, "")
+                                .replace(youtubeUrlPattern, "")
+                                .trim()
+
+                            // 텍스트 표시 (있는 경우)
+                            if (displayText.isNotEmpty()) {
+                                Text(
+                                    text = displayText,
+                                    color = Color.Black,
+                                    fontSize = 24.sp,
+                                    lineHeight = 29.sp
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                            }
+
+                            // YouTube 썸네일 표시
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .aspectRatio(16f / 9f)
+                                    .clickable {
+                                        // application_history 저장
+                                        val searchHistoryId = activity.chatService.lastSearchHistoryId
+
+                                        coroutineScope.launch {
+                                            try {
+                                                val identifier = activity.currentUserId
+                                                val user = supabaseHelper.getUserByIdentifier(identifier)
+
+                                                if (user != null && user.id != null) {
+                                                    // YouTube 동영상의 경우 messageTitle이나 displayText에서 제목 추출
+                                                    val videoTitle = messageTitle ?: displayText.split("\n").firstOrNull()?.trim() ?: "YouTube 동영상"
+
+                                                    val applicationHistory = supabaseHelper.saveApplicationHistory(
+                                                        userId = user.id,
+                                                        applicationCategory = "동영상",
+                                                        applicationContent = videoTitle,
+                                                        searchHistoryId = searchHistoryId
+                                                    )
+
+                                                    if (applicationHistory != null) {
+                                                        Log.d("ApplicationHistory", "YouTube 동영상 시청 기록 저장 성공: ${applicationHistory.id}")
+                                                        Log.d("ApplicationHistory", "동영상 제목: $videoTitle")
+                                                    } else {
+                                                        Log.e("ApplicationHistory", "YouTube 동영상 시청 기록 저장 실패")
+                                                    }
+                                                } else {
+                                                    Log.e("ApplicationHistory", "사용자 정보를 찾을 수 없음: identifier = $identifier")
+                                                }
+                                            } catch (e: Exception) {
+                                                Log.e("ApplicationHistory", "YouTube 동영상 시청 기록 저장 중 오류: ${e.message}", e)
+                                            }
+                                        }
+
+                                        // YouTube URL로 이동
+                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(youtubeUrl))
+                                        try {
+                                            context.startActivity(intent)
+                                        } catch (e: Exception) {
+                                            Toast.makeText(
+                                                context,
+                                                "동영상을 열 수 없습니다.",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
+                                    },
+                                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Box {
+                                    // 썸네일 URL 상태를 추적
+                                    var currentThumbnailUrl by remember { mutableStateOf(thumbnailUrl) }
+                                    var thumbnailAttempt by remember { mutableStateOf(0) }
+
+                                    AsyncImage(
+                                        model = ImageRequest.Builder(context)
+                                            .data(currentThumbnailUrl)
+                                            .crossfade(true)
+                                            .listener(
+                                                onError = { _, _ ->
+                                                    // 현재 URL이 실패했을 때 다음 URL 시도
+                                                    when (thumbnailAttempt) {
+                                                        0 -> {
+                                                            // maxresdefault 실패 시 hqdefault 시도
+                                                            if (videoId.isNotEmpty()) {
+                                                                currentThumbnailUrl = "https://img.youtube.com/vi/$videoId/hqdefault.jpg"
+                                                                thumbnailAttempt = 1
+                                                            }
+                                                        }
+                                                        1 -> {
+                                                            // hqdefault 실패 시 0.jpg 시도
+                                                            if (videoId.isNotEmpty()) {
+                                                                currentThumbnailUrl = "https://img.youtube.com/vi/$videoId/0.jpg"
+                                                                thumbnailAttempt = 2
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            )
+                                            .build(),
+                                        contentDescription = "YouTube 썸네일",
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Crop
+                                    )
+
+                                    // YouTube 재생 아이콘 오버레이
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(Color.Black.copy(alpha = 0.3f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.PlayArrow,
+                                            contentDescription = "재생",
+                                            tint = Color.White,
+                                            modifier = Modifier
+                                                .size(64.dp)
+                                                .background(
+                                                    Color.Red,
+                                                    shape = CircleShape
+                                                )
+                                                .padding(12.dp)
+                                        )
+                                    }
+                                }
+                            }
                         }
 
-                        // 기존 전화번호 처리 로직 유지...
-                        val telPattern = """(?:📞\s*)?전화:\s*(.+?)(?=\n|$)""".toRegex()
-                        val telMatches = telPattern.findAll(displayText)
+                        // 3. 기본 메시지 처리
+                        else -> {
+                            val detailUrlPattern = """\[DETAIL_URL\](.+?)\[/DETAIL_URL\]""".toRegex()
+                            val detailUrlMatch = detailUrlPattern.find(message.text)
 
-                        if (!message.isFromUser && telMatches.count() > 0) {
-                            // 기존 전화번호 처리 코드 유지...
-                            var currentIndex = 0
+                            // Detail URL이 있는 경우 제거한 텍스트 표시
+                            val displayText = if (detailUrlMatch != null) {
+                                message.text.replace(detailUrlPattern, "").trim()
+                            } else {
+                                message.text
+                            }
 
-                            telMatches.forEach { telMatch ->
-                                val telContent = telMatch.groupValues[1].trim()
-                                val beforePhone = displayText.substring(currentIndex, telMatch.range.first)
+                            // 전화번호 처리 로직
+                            val telPattern = """(?:📞\s*)?전화:\s*(.+?)(?=\n|$)""".toRegex()
+                            val telMatches = telPattern.findAll(displayText)
 
-                                if (beforePhone.isNotEmpty()) {
-                                    Text(
-                                        text = beforePhone,
-                                        color = Color.Black,
-                                        fontSize = 24.sp,
-                                        lineHeight = 29.sp
-                                    )
-                                }
+                            if (!message.isFromUser && telMatches.count() > 0) {
+                                var currentIndex = 0
 
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(vertical = 4.dp)
-                                ) {
-                                    Text(
-                                        text = "📞 전화: ",
-                                        color = Color.Black,
-                                        fontSize = 24.sp,
-                                        lineHeight = 29.sp
-                                    )
+                                telMatches.forEach { telMatch ->
+                                    val telContent = telMatch.groupValues[1].trim()
+                                    val beforePhone = displayText.substring(currentIndex, telMatch.range.first)
 
-                                    val phonePattern = """(\d{2,4}[).\s-]?\d{3,4}[-.\s]?\d{4})""".toRegex()
-                                    val phoneMatches = phonePattern.findAll(telContent)
+                                    if (beforePhone.isNotEmpty()) {
+                                        Text(
+                                            text = beforePhone,
+                                            color = Color.Black,
+                                            fontSize = 24.sp,
+                                            lineHeight = 29.sp
+                                        )
+                                    }
 
-                                    if (phoneMatches.count() > 0) {
-                                        var phoneIndex = 0
-                                        phoneMatches.forEach { phoneMatch ->
-                                            val phoneNumber = phoneMatch.value
-                                            val beforePhoneText = telContent.substring(phoneIndex, phoneMatch.range.first)
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(vertical = 4.dp)
+                                    ) {
+                                        Text(
+                                            text = "📞 전화: ",
+                                            color = Color.Black,
+                                            fontSize = 24.sp,
+                                            lineHeight = 29.sp
+                                        )
 
-                                            if (beforePhoneText.isNotEmpty()) {
+                                        val phonePattern = """(\d{2,4}[).\s-]?\d{3,4}[-.\s]?\d{4})""".toRegex()
+                                        val phoneMatches = phonePattern.findAll(telContent)
+
+                                        if (phoneMatches.count() > 0) {
+                                            var phoneIndex = 0
+                                            phoneMatches.forEach { phoneMatch ->
+                                                val phoneNumber = phoneMatch.value
+                                                val beforePhoneText = telContent.substring(phoneIndex, phoneMatch.range.first)
+
+                                                if (beforePhoneText.isNotEmpty()) {
+                                                    Text(
+                                                        text = beforePhoneText,
+                                                        color = Color.Black,
+                                                        fontSize = 24.sp,
+                                                        lineHeight = 29.sp
+                                                    )
+                                                }
+
                                                 Text(
-                                                    text = beforePhoneText,
+                                                    text = phoneNumber,
+                                                    color = Color.Blue,
+                                                    fontSize = 24.sp,
+                                                    lineHeight = 29.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    modifier = Modifier.clickable {
+                                                        val searchHistoryId = activity.chatService.lastSearchHistoryId
+
+                                                        coroutineScope.launch {
+                                                            try {
+                                                                val identifier = activity.currentUserId
+                                                                val user = supabaseHelper.getUserByIdentifier(identifier)
+
+                                                                if (user != null && user.id != null) {
+                                                                    val applicationHistory = supabaseHelper.saveApplicationHistory(
+                                                                        userId = user.id,
+                                                                        applicationCategory = "전화",
+                                                                        applicationContent = messageTitle ?: phoneNumber,
+                                                                        searchHistoryId = searchHistoryId
+                                                                    )
+
+                                                                    if (applicationHistory != null) {
+                                                                        Log.d("ApplicationHistory", "전화 기록 저장 성공: ${applicationHistory.id}")
+                                                                    }
+                                                                }
+                                                            } catch (e: Exception) {
+                                                                Log.e("ApplicationHistory", "전화 기록 저장 실패: ${e.message}", e)
+                                                            }
+                                                        }
+
+                                                        val cleanNumber = phoneNumber.replace("[^0-9]".toRegex(), "")
+                                                        val intent = Intent(Intent.ACTION_DIAL).apply {
+                                                            data = Uri.parse("tel:$cleanNumber")
+                                                        }
+                                                        try {
+                                                            context.startActivity(intent)
+                                                        } catch (e: Exception) {
+                                                            Toast.makeText(
+                                                                context,
+                                                                "전화 앱을 열 수 없습니다.",
+                                                                Toast.LENGTH_SHORT
+                                                            ).show()
+                                                        }
+                                                    }
+                                                )
+
+                                                phoneIndex = phoneMatch.range.last + 1
+                                            }
+
+                                            if (phoneIndex < telContent.length) {
+                                                Text(
+                                                    text = telContent.substring(phoneIndex),
                                                     color = Color.Black,
                                                     fontSize = 24.sp,
                                                     lineHeight = 29.sp
                                                 )
                                             }
-
+                                        } else {
                                             Text(
-                                                text = phoneNumber,
+                                                text = telContent,
                                                 color = Color.Blue,
                                                 fontSize = 24.sp,
                                                 lineHeight = 29.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 modifier = Modifier.clickable {
-                                                    val searchHistoryId = activity.chatService.lastSearchHistoryId
-
-                                                    coroutineScope.launch {
-                                                        try {
-                                                            val identifier = activity.currentUserId
-                                                            val user = supabaseHelper.getUserByIdentifier(identifier)
-
-                                                            if (user != null && user.id != null) {
-                                                                val applicationHistory = supabaseHelper.saveApplicationHistory(
-                                                                    userId = user.id,
-                                                                    applicationCategory = "전화",
-                                                                    applicationContent = messageTitle ?: phoneNumber,
-                                                                    searchHistoryId = searchHistoryId
-                                                                )
-
-                                                                if (applicationHistory != null) {
-                                                                    Log.d("ApplicationHistory", "전화 기록 저장 성공: ${applicationHistory.id}")
-                                                                }
-                                                            }
-                                                        } catch (e: Exception) {
-                                                            Log.e("ApplicationHistory", "전화 기록 저장 실패: ${e.message}", e)
-                                                        }
-                                                    }
-
-                                                    val cleanNumber = phoneNumber.replace("[^0-9]".toRegex(), "")
-                                                    val intent = Intent(Intent.ACTION_DIAL).apply {
-                                                        data = Uri.parse("tel:$cleanNumber")
-                                                    }
-                                                    try {
-                                                        context.startActivity(intent)
-                                                    } catch (e: Exception) {
-                                                        Toast.makeText(
-                                                            context,
-                                                            "전화 앱을 열 수 없습니다.",
-                                                            Toast.LENGTH_SHORT
-                                                        ).show()
-                                                    }
+                                                    // 전화 클릭 처리 코드...
                                                 }
                                             )
-
-                                            phoneIndex = phoneMatch.range.last + 1
                                         }
-
-                                        if (phoneIndex < telContent.length) {
-                                            Text(
-                                                text = telContent.substring(phoneIndex),
-                                                color = Color.Black,
-                                                fontSize = 24.sp,
-                                                lineHeight = 29.sp
-                                            )
-                                        }
-                                    } else {
-                                        Text(
-                                            text = telContent,
-                                            color = Color.Blue,
-                                            fontSize = 24.sp,
-                                            lineHeight = 29.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.clickable {
-                                                // 기존 전화 클릭 처리 코드...
-                                            }
-                                        )
                                     }
+
+                                    currentIndex = telMatch.range.last + 1
                                 }
 
-                                currentIndex = telMatch.range.last + 1
-                            }
-
-                            if (currentIndex < displayText.length) {
+                                if (currentIndex < displayText.length) {
+                                    Text(
+                                        text = displayText.substring(currentIndex),
+                                        color = Color.Black,
+                                        fontSize = 24.sp,
+                                        lineHeight = 29.sp
+                                    )
+                                }
+                            } else {
                                 Text(
-                                    text = displayText.substring(currentIndex),
+                                    text = displayText,
                                     color = Color.Black,
                                     fontSize = 24.sp,
                                     lineHeight = 29.sp
                                 )
                             }
-                        } else {
-                            Text(
-                                text = displayText,
-                                color = Color.Black,
-                                fontSize = 24.sp,
-                                lineHeight = 29.sp
-                            )
-                        }
 
-                        // Detail URL이 있는 경우 신청 버튼 추가
-                        if (detailUrlMatch != null && !message.isFromUser) {
-                            val detailUrl = detailUrlMatch.groupValues[1]
+                            // Detail URL이 있는 경우 신청 버튼 추가
+                            if (detailUrlMatch != null && !message.isFromUser) {
+                                val detailUrl = detailUrlMatch.groupValues[1]
 
-                            Spacer(modifier = Modifier.height(12.dp))
+                                Spacer(modifier = Modifier.height(12.dp))
 
-                            Button(
-                                onClick = {
-                                    // 기존 신청 버튼 클릭 처리 코드...
-                                    val searchHistoryId = activity.chatService.lastSearchHistoryId
+                                Button(
+                                    onClick = {
+                                        val searchHistoryId = activity.chatService.lastSearchHistoryId
 
-                                    coroutineScope.launch {
-                                        try {
-                                            val identifier = activity.currentUserId
-                                            val user = supabaseHelper.getUserByIdentifier(identifier)
+                                        coroutineScope.launch {
+                                            try {
+                                                val identifier = activity.currentUserId
+                                                val user = supabaseHelper.getUserByIdentifier(identifier)
 
-                                            if (user != null && user.id != null) {
-                                                val applicationHistory = supabaseHelper.saveApplicationHistory(
-                                                    userId = user.id,
-                                                    applicationCategory = "신청",
-                                                    applicationContent = messageTitle ?: "신청 페이지",
-                                                    searchHistoryId = searchHistoryId
-                                                )
+                                                if (user != null && user.id != null) {
+                                                    val applicationHistory = supabaseHelper.saveApplicationHistory(
+                                                        userId = user.id,
+                                                        applicationCategory = "신청",
+                                                        applicationContent = messageTitle ?: "신청 페이지",
+                                                        searchHistoryId = searchHistoryId
+                                                    )
 
-                                                if (applicationHistory != null) {
-                                                    Log.d("ApplicationHistory", "신청 기록 저장 성공: ${applicationHistory.id}")
+                                                    if (applicationHistory != null) {
+                                                        Log.d("ApplicationHistory", "신청 기록 저장 성공: ${applicationHistory.id}")
+                                                    }
                                                 }
+                                            } catch (e: Exception) {
+                                                Log.e("ApplicationHistory", "신청 기록 저장 실패: ${e.message}", e)
                                             }
-                                        } catch (e: Exception) {
-                                            Log.e("ApplicationHistory", "신청 기록 저장 실패: ${e.message}", e)
                                         }
-                                    }
 
-                                    activity.chatService.saveNavigationState()
-                                    val encodedUrl = Uri.encode(detailUrl)
-                                    navController.navigate("webview/$encodedUrl")
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFFc6f584),
-                                    contentColor = Color.Black
-                                ),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Text(
-                                    text = "신청하기",
-                                    fontSize = 20.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
+                                        activity.chatService.saveNavigationState()
+                                        val encodedUrl = Uri.encode(detailUrl)
+                                        navController.navigate("webview/$encodedUrl")
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFFc6f584),
+                                        contentColor = Color.Black
+                                    ),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text(
+                                        text = "신청하기",
+                                        fontSize = 20.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
                             }
                         }
                     }
@@ -7244,7 +7344,6 @@ fun MessageItem(
         }
     }
 }
-
 // ChatMessage를 JSON으로 변환하기 위한 함수 추가
 data class ChatMessage(
     val text: String,

@@ -1,6 +1,7 @@
 package com.example.comcare
 
 import android.app.Application
+import android.util.Base64
 import android.util.Log
 import androidx.appcompat.app.AppCompatDelegate
 import com.kakao.sdk.common.KakaoSdk
@@ -13,6 +14,8 @@ class MyApplication : Application() {
         lateinit var instance: MyApplication
             private set
     }
+
+
 
     override fun onCreate() {
         super.onCreate()
@@ -32,5 +35,16 @@ class MyApplication : Application() {
             val keyHash = com.kakao.sdk.common.util.Utility.getKeyHash(this)
             Log.d("MyApplication", "Kakao Key Hash: $keyHash")
         }
+
+        fun getKeyHash(sha1: String) {
+            val sha1Arr = sha1.split(':')
+            var byteArr =byteArrayOf()
+            for (hex in sha1Arr) {
+                byteArr += Integer.parseInt(hex, 16).toByte()
+            }
+
+            Log.d("getKeyHash", "key hash: ${Base64.encodeToString(byteArr, Base64.NO_WRAP)}")
+        }
+        getKeyHash("4D:5D:4F:87:90:8C:61:90:D9:2C:F0:F7:4D:08:A8:23:84:A1:17:B3")
     }
 }
