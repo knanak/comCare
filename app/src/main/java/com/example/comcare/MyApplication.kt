@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.appcompat.app.AppCompatDelegate
 import com.kakao.sdk.common.KakaoSdk
 
+
 class MyApplication : Application() {
 
     companion object {
@@ -31,10 +32,10 @@ class MyApplication : Application() {
         Log.d("MyApplication", "Application initialized - Kakao SDK ready")
 
         // 디버그용 키 해시 출력 (개발 시에만 사용)
-        if (BuildConfig.DEBUG) {
-            val keyHash = com.kakao.sdk.common.util.Utility.getKeyHash(this)
-            Log.d("MyApplication", "Kakao Key Hash: $keyHash")
-        }
+//        if (BuildConfig.DEBUG) {
+//            val keyHash = com.kakao.sdk.common.util.Utility.getKeyHash(this)
+//            Log.d("MyApplication", "Kakao Key Hash: $keyHash")
+//        }
 
         fun getKeyHash(sha1: String) {
             val sha1Arr = sha1.split(':')
