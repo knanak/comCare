@@ -30,6 +30,7 @@ import javax.crypto.spec.PBEKeySpec
 import java.security.SecureRandom
 import android.util.Base64
 import java.security.MessageDigest
+import java.util.Objects.isNull
 
 
 class SupabaseDatabaseHelper(private val context: Context) {
@@ -75,6 +76,7 @@ class SupabaseDatabaseHelper(private val context: Context) {
         val birth_date: String? = null, // 추가
         val address: String? = null,
         val tel: String? = null,
+        val resume: String? = null,     // 이력서 필드 추가
         val created_at: String? = null,
         val updated_at: String? = null
     )
@@ -4190,6 +4192,189 @@ class SupabaseDatabaseHelper(private val context: Context) {
         } catch (e: Exception) {
             Log.e(TAG, "Error fetching filtered kb_facility2s: ${e.message}")
             emptyList()
+        }
+    }
+
+    // SupabaseDatabaseHelper.kt에 추가할 이력서 관련 함수들
+
+    /**
+     * 사용자의 이력서를 업데이트하는 함수 (사용자 ID로)
+     */
+    suspend fun updateUserResume(userId: String, resumeContent: String): User? {
+        return try {
+            withContext(Dispatchers.IO) {
+                Log.d(TAG, "=== 이력서 업데이트 시작 ===")
+                Log.d(TAG, "사용자 ID: $userId")
+                Log.d(TAG, "이력서 내용 길이: ${resumeContent.length}자")
+
+                // Supabase users 테이블에서 해당 사용자의 resume 열 업데이트
+                val updateData = buildJsonObject {
+                    put("resume", JsonPrimitive(resumeContent))
+                    put("updated_at", JsonPrimitive(getCurrentTimestampIso8601()))
+                }
+
+                Log.d(TAG, "업데이트 데이터 준비 완료")
+
+                // UPDATE 쿼리 실행
+                val updateResponse = supabase.postgrest["users"]
+                    .update(updateData) {
+                        eq("id", userId)
+                    }
+
+                Log.d(TAG, "UPDATE 쿼리 실행 완료")
+
+                // 업데이트된 데이터 다시 조회
+                val updatedUser = supabase.postgrest["users"]
+                    .select(filter = {
+                        eq("id", userId)
+                    })
+                    .decodeSingleOrNull<User>()
+
+                if (updatedUser != null) {
+                    Log.d(TAG, "이력서 업데이트 성공")
+                    Log.d(TAG, "업데이트된 사용자: ${updatedUser.user_id ?: updatedUser.kakao_id}")
+                    Log.d(TAG, "이력서 길이: ${updatedUser.resume?.length ?: 0}자")
+                } else {
+                    Log.e(TAG, "이력서 업데이트 후 사용자 조회 실패")
+                }
+
+                updatedUser
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "이력서 업데이트 실패: ${e.message}", e)
+            e.printStackTrace()
+            null
+        }
+    }
+
+    /**
+     * 사용자의 이력서를 조회하는 함수
+     */
+    suspend fun getUserResume(userId: String): String? {
+        return try {
+            withContext(Dispatchers.IO) {
+                Log.d(TAG, "=== 사용자 이력서 조회 ===")
+                Log.d(TAG, "사용자 ID: $userId")
+
+                val user = supabase.postgrest["users"]
+                    .select(filter = {
+                        eq("id", userId)
+                    })
+                    .decodeSingleOrNull<User>()
+
+                if (user != null) {
+                    Log.d(TAG, "이력서 조회 성공")
+                    Log.d(TAG, "이력서 내용 길이: ${user.resume?.length ?: 0}자")
+                    user.resume
+                } else {
+                    Log.d(TAG, "사용자를 찾을 수 없음")
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "이력서 조회 실패: ${e.message}", e)
+            e.printStackTrace()
+            null
+        }
+    }
+
+    /**
+     * 사용자 ID로 이력서 유무 확인
+     */
+    suspend fun hasUserResume(userId: String): Boolean {
+        return try {
+            val resume = getUserResume(userId)
+            !resume.isNullOrEmpty()
+        } catch (e: Exception) {
+            Log.e(TAG, "이력서 유무 확인 실패: ${e.message}", e)
+            false
+        }
+    }
+
+    /**
+     * 통합 사용자 조회 후 이력서 업데이트 (kakao_id 또는 user_id로 조회)
+     */
+    suspend fun updateResumeByIdentifier(identifier: String, resumeContent: String): User? {
+        return try {
+            withContext(Dispatchers.IO) {
+                Log.d(TAG, "=== 식별자로 이력서 업데이트 ===")
+                Log.d(TAG, "식별자: $identifier")
+
+                // 먼저 사용자 찾기
+                val user = getUserByIdentifier(identifier)
+
+                if (user?.id != null) {
+                    Log.d(TAG, "사용자 찾음: ${user.user_id ?: user.kakao_id}")
+
+                    // 이력서 업데이트
+                    updateUserResume(user.id, resumeContent)
+                } else {
+                    Log.e(TAG, "식별자로 사용자를 찾을 수 없음: $identifier")
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "식별자로 이력서 업데이트 실패: ${e.message}", e)
+            null
+        }
+
+    }
+
+    suspend fun getResumeByIdentifier(identifier: String): String? {
+        return try {
+            withContext(Dispatchers.IO) {
+                Log.d(TAG, "=== 식별자로 이력서 조회 ===")
+                Log.d(TAG, "식별자: $identifier")
+
+                val user = getUserByIdentifier(identifier)
+
+                if (user != null) {
+                    Log.d(TAG, "사용자 찾음: ${user.user_id ?: user.kakao_id}")
+                    Log.d(TAG, "이력서 길이: ${user.resume?.length ?: 0}자")
+                    user.resume
+                } else {
+                    Log.d(TAG, "식별자로 사용자를 찾을 수 없음: $identifier")
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "식별자로 이력서 조회 실패: ${e.message}", e)
+            null
+        }
+    }
+
+    /**
+     * 이력서 삭제 함수
+     */
+    suspend fun deleteResumeByIdentifier(identifier: String): Boolean {
+        return try {
+            withContext(Dispatchers.IO) {
+                Log.d(TAG, "=== 이력서 삭제 ===")
+                Log.d(TAG, "식별자: $identifier")
+
+                val user = getUserByIdentifier(identifier)
+
+                if (user?.id != null) {
+                    val updateData = buildJsonObject {
+                        put("resume", JsonPrimitive(null as String?))
+                        put("updated_at", JsonPrimitive(getCurrentTimestampIso8601()))
+                    }
+
+                    val updateResponse = supabase.postgrest["users"]
+                        .update(updateData) {
+                            eq("id", user.id)
+                        }
+
+                    Log.d(TAG, "이력서 삭제 성공")
+                    true
+                } else {
+                    Log.e(TAG, "사용자를 찾을 수 없어 이력서 삭제 실패")
+                    false
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "이력서 삭제 실패: ${e.message}", e)
+            false
         }
     }
 

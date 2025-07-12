@@ -5,6 +5,7 @@ import android.util.Base64
 import android.util.Log
 import androidx.appcompat.app.AppCompatDelegate
 import com.kakao.sdk.common.KakaoSdk
+import com.kakao.sdk.v2.user.BuildConfig
 
 
 class MyApplication : Application() {
@@ -31,11 +32,11 @@ class MyApplication : Application() {
 
         Log.d("MyApplication", "Application initialized - Kakao SDK ready")
 
-        // 디버그용 키 해시 출력 (개발 시에만 사용)
-//        if (BuildConfig.DEBUG) {
-//            val keyHash = com.kakao.sdk.common.util.Utility.getKeyHash(this)
-//            Log.d("MyApplication", "Kakao Key Hash: $keyHash")
-//        }
+//         디버그용 키 해시 출력 (개발 시에만 사용)
+        if (BuildConfig.DEBUG) {
+            val keyHash = com.kakao.sdk.common.util.Utility.getKeyHash(this)
+            Log.d("MyApplication", "Kakao Key Hash: $keyHash")
+        }
 
         fun getKeyHash(sha1: String) {
             val sha1Arr = sha1.split(':')
@@ -46,6 +47,7 @@ class MyApplication : Application() {
 
             Log.d("getKeyHash", "key hash: ${Base64.encodeToString(byteArr, Base64.NO_WRAP)}")
         }
-        getKeyHash("4D:5D:4F:87:90:8C:61:90:D9:2C:F0:F7:4D:08:A8:23:84:A1:17:B3")
+//        getKeyHash("4D:5D:4F:87:90:8C:61:90:D9:2C:F0:F7:4D:08:A8:23:84:A1:17:B3")
+//        getKeyHash("9C:2F:D1:FE:DA:68:32:A8:A5:E2:34:47:CE:E8:F7:49:1B:C4:DA:F6")
     }
 }

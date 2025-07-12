@@ -132,9 +132,13 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.material.icons.filled.PlayArrow
 
 import android.content.SharedPreferences
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 import org.json.JSONArray
-import org.json.JSONException
+
 
 
 // 사용자 정보 데이터 클래스
@@ -1959,6 +1963,7 @@ fun PlaceComparisonApp(
     userInfo: UserInfo? = null,
     startSection: String = "home"
 ) {
+    val coroutineScope = rememberCoroutineScope()
 
     // 다크모드 상태 확인
     val isDarkTheme = isSystemInDarkTheme()
@@ -2376,7 +2381,6 @@ fun PlaceComparisonApp(
 
                 // 드롭다운 메뉴
                 val context = LocalContext.current
-// PlaceComparisonApp 내부의 DropdownMenu 부분 수정
                 DropdownMenu(
                     expanded = showUserMenu,
                     onDismissRequest = { showUserMenu = false },
@@ -2429,8 +2433,110 @@ fun PlaceComparisonApp(
                         }
                     )
 
-                    // 게스트가 아닌 경우에만 회원 탈퇴 메뉴 표시
+                    // 게스트가 아닌 경우에만 이력서 메뉴 표시
                     if (userInfo?.id != -1L) {
+                        Divider()
+
+                        // 내 이력서 보기 - 수정된 버전
+                        DropdownMenuItem(
+                            text = {
+                                Text("내 이력서 보기")
+                            },
+                            onClick = {
+                                showUserMenu = false
+
+                                // ✅ 이미 선언된 coroutineScope 사용
+                                coroutineScope.launch {
+                                    try {
+                                        val supabaseHelper = SupabaseDatabaseHelper(context)
+                                        // MainActivity 인스턴스를 통해 currentUserId 접근
+                                        val mainActivity = context as? MainActivity
+                                        val identifier = mainActivity?.currentUserId ?: ""
+
+                                        if (identifier.isEmpty()) {
+                                            withContext(Dispatchers.Main) {
+                                                Toast.makeText(
+                                                    context,
+                                                    "사용자 정보를 확인할 수 없습니다.",
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+                                            }
+                                            return@launch
+                                        }
+
+                                        val resume = supabaseHelper.getResumeByIdentifier(identifier)
+
+                                        withContext(Dispatchers.Main) {
+                                            if (!resume.isNullOrEmpty()) {
+                                                // 이력서가 있는 경우 - 다이얼로그로 표시
+                                                androidx.appcompat.app.AlertDialog.Builder(context)
+                                                    .setTitle("내 이력서")
+                                                    .setMessage(resume)
+                                                    .setPositiveButton("확인") { dialog, _ ->
+                                                        dialog.dismiss()
+                                                    }
+                                                    .setNeutralButton("삭제") { dialog, _ ->
+                                                        // 이력서 삭제 확인
+                                                        androidx.appcompat.app.AlertDialog.Builder(context)
+                                                            .setTitle("이력서 삭제")
+                                                            .setMessage("정말로 이력서를 삭제하시겠습니까?")
+                                                            .setPositiveButton("삭제") { _, _ ->
+                                                                coroutineScope.launch {
+                                                                    try {
+                                                                        val deleted = supabaseHelper.deleteResumeByIdentifier(identifier)
+                                                                        withContext(Dispatchers.Main) {
+                                                                            Toast.makeText(
+                                                                                context,
+                                                                                if (deleted) "이력서가 삭제되었습니다." else "이력서 삭제에 실패했습니다.",
+                                                                                Toast.LENGTH_SHORT
+                                                                            ).show()
+                                                                        }
+                                                                    } catch (e: Exception) {
+                                                                        Log.e("ResumeDelete", "삭제 중 오류: ${e.message}", e)
+                                                                        withContext(Dispatchers.Main) {
+                                                                            Toast.makeText(
+                                                                                context,
+                                                                                "이력서 삭제 중 오류가 발생했습니다.",
+                                                                                Toast.LENGTH_SHORT
+                                                                            ).show()
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                            .setNegativeButton("취소", null)
+                                                            .show()
+                                                        dialog.dismiss()
+                                                    }
+                                                    .show()
+                                            } else {
+                                                // 이력서가 없는 경우
+                                                Toast.makeText(
+                                                    context,
+                                                    "저장된 이력서가 없습니다. 오비서에게 이력서 작성을 요청해보세요!",
+                                                    Toast.LENGTH_LONG
+                                                ).show()
+                                            }
+                                        }
+                                    } catch (e: Exception) {
+                                        Log.e("ResumeView", "이력서 조회 중 오류: ${e.message}", e)
+                                        withContext(Dispatchers.Main) {
+                                            Toast.makeText(
+                                                context,
+                                                "이력서 조회 중 오류가 발생했습니다.",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
+                                    }
+                                }
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Description,
+                                    contentDescription = "Resume"
+                                )
+                            }
+                        )
+
                         Divider()
 
                         // 회원 탈퇴
@@ -5485,6 +5591,156 @@ fun KBCultureCard(kbCulture: SupabaseDatabaseHelper.KBCulture) {
     }
 }
 
+// 🔥 대안: 완전히 메인 스레드에서 실행 후 suspend 함수로 처리
+private fun collectAndSaveResume(activity: MainActivity, context: Context) {
+    // ✅ 메인 스레드의 lifecycleScope 사용
+    activity.lifecycleScope.launch {
+        try {
+            val identifier = activity.currentUserId
+            Log.d("ResumeUpdate", "Current user identifier: $identifier")
+
+            if (identifier.isEmpty()) {
+                Log.e("ResumeUpdate", "사용자 식별자가 비어있음")
+                return@launch
+            }
+
+            // ✅ IO 디스패처에서 데이터 처리
+            val resumeContent = withContext(Dispatchers.IO) {
+                val (chatMessages, _) = activity.loadChatMessages()
+                extractResumeFromChat(chatMessages)
+            }
+
+            if (resumeContent.isNotEmpty()) {
+                // ✅ 메인 스레드에서 SupabaseHelper 생성
+                val supabaseHelper = SupabaseDatabaseHelper(context)
+
+                // ✅ IO 디스패처에서 DB 작업
+                val updatedUser = withContext(Dispatchers.IO) {
+                    supabaseHelper.updateResumeByIdentifier(
+                        identifier = identifier,
+                        resumeContent = resumeContent
+                    )
+                }
+
+                // ✅ 메인 스레드에서 UI 업데이트
+                if (updatedUser != null) {
+                    Log.d("ResumeUpdate", "텍스트 기반 이력서 저장 성공")
+                    Log.d("ResumeUpdate", "저장된 이력서 길이: ${updatedUser.resume?.length ?: 0}자")
+
+                    Toast.makeText(
+                        context,
+                        "이력서가 성공적으로 저장되었습니다!",
+                        Toast.LENGTH_LONG
+                    ).show()
+                } else {
+                    Log.e("ResumeUpdate", "텍스트 기반 이력서 저장 실패")
+                    Toast.makeText(
+                        context,
+                        "이력서 저장에 실패했습니다.",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            } else {
+                Log.w("ResumeUpdate", "추출할 이력서 내용이 없음")
+            }
+        } catch (e: Exception) {
+            Log.e("ResumeUpdate", "텍스트 기반 이력서 저장 중 오류: ${e.message}", e)
+            Toast.makeText(
+                context,
+                "이력서 저장 중 오류가 발생했습니다.",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+}
+
+// 🔥 새로 추가: 채팅에서 이력서 정보 추출
+private fun extractResumeFromChat(chatMessages: List<ChatMessage>): String {
+    val resumeBuilder = StringBuilder()
+    var isResumeSection = false
+
+    // 이력서 관련 키워드들
+    val resumeKeywords = listOf("이름", "나이", "연락처", "주소", "경력", "학력", "희망", "자격", "기술", "경험")
+
+    for (message in chatMessages) {
+        val text = message.text
+
+        // 이력서 작성 시작 감지
+        if (text.contains("이력서") && (text.contains("작성") || text.contains("만들") || text.contains("생성"))) {
+            isResumeSection = true
+            continue
+        }
+
+        // 이력서 완성 감지
+        if (text.contains("이력서가 성공적으로 생성되었습니다") ||
+            text.contains("이력서 작성이 완료되었습니다")) {
+            break
+        }
+
+        // 이력서 관련 정보 수집
+        if (isResumeSection) {
+            // 사용자 입력 메시지
+            if (message.isFromUser) {
+                resumeBuilder.append("${text}\n")
+            }
+            // AI 응답에서 이력서 관련 정보 추출
+            else {
+                for (keyword in resumeKeywords) {
+                    if (text.contains(keyword)) {
+                        // 해당 키워드가 포함된 라인들 추출
+                        val lines = text.split("\n")
+                        for (line in lines) {
+                            if (line.contains(keyword) && line.length < 100) { // 너무 긴 라인 제외
+                                resumeBuilder.append("${line.trim()}\n")
+                            }
+                        }
+                        break
+                    }
+                }
+            }
+        }
+    }
+
+    val result = resumeBuilder.toString().trim()
+    Log.d("ResumeUpdate", "추출된 이력서 내용 길이: ${result.length}자")
+
+    return if (result.isNotEmpty()) {
+        "=== 이력서 ===\n\n$result"
+    } else {
+        // 만약 추출 실패 시 기본 이력서 생성
+        "=== 이력서 ===\n\n채팅을 통해 작성된 이력서입니다.\n생성 시간: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.KOREA).format(java.util.Date())}"
+    }
+}
+
+// 🔥 기존 JSON 기반 저장 로직을 함수로 분리
+private fun saveResumeContent(resumeContent: String, activity: MainActivity, context: Context) {
+    kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+        try {
+            val identifier = activity.currentUserId
+            val supabaseHelper = SupabaseDatabaseHelper(context)
+
+            val updatedUser = supabaseHelper.updateResumeByIdentifier(
+                identifier = identifier,
+                resumeContent = resumeContent
+            )
+
+            if (updatedUser != null) {
+                Log.d("ResumeUpdate", "JSON 기반 이력서 저장 성공")
+                activity.runOnUiThread {
+                    Toast.makeText(
+                        context,
+                        "이력서가 성공적으로 저장되었습니다!",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("ResumeUpdate", "JSON 기반 이력서 저장 오류: ${e.message}", e)
+        }
+    }
+}
+
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
@@ -5655,6 +5911,34 @@ fun ChatScreen(
         // 일반 응답 콜백 - 통합 처리
         activity.chatService.responseCallback = { aiResponse ->
             Log.d("ChatScreen", "Received response: $aiResponse")
+
+            // 1. 기존 JSON 형태 이력서 완성 감지 (유지)
+            try {
+                val jsonResponse = org.json.JSONObject(aiResponse)
+
+                if (jsonResponse.has("resume_action") &&
+                    jsonResponse.getString("resume_action") == "completed" &&
+                    jsonResponse.has("resume_content")) {
+
+                    val resumeContent = jsonResponse.getString("resume_content")
+
+                    // 기존 JSON 기반 저장 로직
+                    saveResumeContent(resumeContent, activity, context)
+                }
+            } catch (e: Exception) {
+                Log.d("ChatScreen", "Not a resume JSON response: ${e.message}")
+            }
+
+            // 🔥 2. 새로 추가: 텍스트 기반 이력서 완성 감지
+            if (aiResponse.contains("이력서가 성공적으로 생성되었습니다") ||
+                aiResponse.contains("이력서 작성이 완료되었습니다") ||
+                aiResponse.contains("이력서가 완성되었습니다")) {
+
+                Log.d("ResumeUpdate", "=== 텍스트 기반 이력서 완성 감지 ===")
+
+                // ChatService에서 이전 대화 내용들을 수집해서 이력서 생성
+                collectAndSaveResume(activity, context)
+            }
 
             // "AI가 검색중..." 메시지가 아닌 경우에만 SearchHistory 저장
             if (aiResponse != "AI가 검색중...") {
@@ -6157,8 +6441,8 @@ fun ChatScreen(
                                             // 요청 전에 카운트 증가
                                             RequestCounterHelper.incrementRequestCount()
 
-//                                            val url = URL("http://192.168.219.101:5000/explore")
-                                            val url = URL("https://coral-app-fjt8m.ondigitalocean.app/explore")
+                                            val url = URL("http://192.168.219.101:5000/explore")
+//                                            val url = URL("https://coral-app-fjt8m.ondigitalocean.app/explore")
                                             val connection =
                                                 url.openConnection() as HttpURLConnection
                                             connection.requestMethod = "POST"

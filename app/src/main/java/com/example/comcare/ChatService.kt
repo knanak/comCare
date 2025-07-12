@@ -20,14 +20,14 @@ import java.util.Date
 class ChatService(private val context: Context) {
     private val TAG = "ChatService"
 
-//    private val url = "http://192.168.219.101:5000/query"
-    private val url = "https://coral-app-fjt8m.ondigitalocean.app/query"
+        private val url = "http://192.168.219.101:5000/query"
+//    private val url = "https://coral-app-fjt8m.ondigitalocean.app/query"
 
     // SharedPreferences for storing count and date
     private val sharedPrefs: SharedPreferences = context.getSharedPreferences("ChatPrefs", Context.MODE_PRIVATE)
     private val REQUEST_COUNT_KEY = "request_count"
     private val LAST_REQUEST_DATE_KEY = "last_request_date"
-    private val MAX_REQUESTS_PER_DAY = 20
+    private val MAX_REQUESTS_PER_DAY = 100
 
     // 최근 저장된 SearchHistory ID를 저장
     var lastSearchHistoryId: String? = null

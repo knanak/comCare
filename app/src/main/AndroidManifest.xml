@@ -34,10 +34,22 @@
             android:launchMode="singleTop"
             android:configChanges="orientation|keyboardHidden|screenSize|smallestScreenSize|screenLayout|uiMode"
             android:taskAffinity="">
+
+            <!-- 기존 런처 intent-filter -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- 🆕 딥링크용 intent-filter 추가 -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="comcare"
+                    android:host="Android App Links' `host` attributes must be valid web domainsjob-search" />
+            </intent-filter>
+
         </activity>
 
         <activity
