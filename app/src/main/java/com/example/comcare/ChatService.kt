@@ -20,7 +20,7 @@ import java.util.Date
 class ChatService(private val context: Context) {
     private val TAG = "ChatService"
 
-        private val url = "http://192.168.219.101:5000/query"
+    private val url = "http://192.168.219.101:5000/query"
 //    private val url = "https://coral-app-fjt8m.ondigitalocean.app/query"
 
     // SharedPreferences for storing count and date
@@ -44,6 +44,91 @@ class ChatService(private val context: Context) {
     var lastSearchCategory: String? = null
     var lastSearchAnswer: String? = null
     var lastQueryContent: String? = null  // 마지막 질문 저장용 추가
+
+    private var resumeData = mutableMapOf<String, String>()
+    private var isResumeInProgress = false
+    private var currentResumeStep = ""
+
+    // 이력서 데이터 초기화
+    private fun initializeResumeData() {
+        resumeData.clear()
+        resumeData["name"] = ""
+        resumeData["gender"] = ""
+        resumeData["birthDate"] = ""
+        resumeData["address"] = ""
+        resumeData["phone"] = ""
+        resumeData["school"] = ""
+        resumeData["major"] = ""
+        resumeData["company"] = ""
+        resumeData["workPeriod"] = ""
+        resumeData["workDuties"] = ""
+        resumeData["certificate"] = ""
+        resumeData["driving"] = ""
+        resumeData["vehicle"] = ""
+        resumeData["strength"] = ""
+        resumeData["weakness"] = ""
+        isResumeInProgress = false
+        currentResumeStep = ""
+    }
+
+    // 이력서 단계별 데이터 저장
+    private fun saveResumeStep(step: String, userInput: String) {
+        when (step) {
+            "personal_name" -> resumeData["name"] = userInput
+            "personal_gender" -> resumeData["gender"] = userInput
+            "personal_birth" -> resumeData["birthDate"] = userInput
+            "personal_address" -> resumeData["address"] = userInput
+            "personal_phone" -> resumeData["phone"] = userInput
+            "education_school" -> resumeData["school"] = userInput
+            "education_major" -> resumeData["major"] = userInput
+            "career_company" -> resumeData["company"] = userInput
+            "career_period" -> resumeData["workPeriod"] = userInput
+            "career_duties" -> resumeData["workDuties"] = userInput
+            "skill_certificate" -> resumeData["certificate"] = userInput
+            "skill_driving" -> resumeData["driving"] = userInput
+            "skill_vehicle" -> resumeData["vehicle"] = userInput
+            "strength" -> resumeData["strength"] = userInput
+            "weakness" -> resumeData["weakness"] = userInput
+        }
+
+        Log.d(TAG, "Resume step saved: $step = $userInput")
+    }
+
+    // 완성된 이력서 생성
+    private fun generateFormattedResume(): String {
+        val formattedResume = StringBuilder()
+        formattedResume.append("📋 완성된 이력서\n\n")
+
+        // (1) 인적 사항
+        formattedResume.append("(1) 인적 사항\n")
+        formattedResume.append("1. 이름: ${resumeData["name"]?.ifEmpty { "미입력" } ?: "미입력"}\n")
+        formattedResume.append("2. 성별: ${resumeData["gender"]?.ifEmpty { "미입력" } ?: "미입력"}\n")
+        formattedResume.append("3. 생년월일: ${resumeData["birthDate"]?.ifEmpty { "미입력" } ?: "미입력"}\n")
+        formattedResume.append("4. 주소: ${resumeData["address"]?.ifEmpty { "미입력" } ?: "미입력"}\n")
+        formattedResume.append("5. 연락처: ${resumeData["phone"]?.ifEmpty { "미입력" } ?: "미입력"}\n\n")
+
+        // (2) 최종 학력
+        formattedResume.append("(2) 최종 학력\n")
+        formattedResume.append("1. 학교명: ${resumeData["school"]?.ifEmpty { "미입력" } ?: "미입력"}\n")
+        formattedResume.append("2. 전공명: ${resumeData["major"]?.ifEmpty { "미입력" } ?: "미입력"}\n\n")
+
+        // (3) 경력 사항
+        formattedResume.append("(3) 경력 사항\n")
+        formattedResume.append("1. 회사명: ${resumeData["company"]?.ifEmpty { "미입력" } ?: "미입력"}\n")
+        formattedResume.append("2. 근무기간: ${resumeData["workPeriod"]?.ifEmpty { "미입력" } ?: "미입력"}\n")
+        formattedResume.append("3. 담당 업무: ${resumeData["workDuties"]?.ifEmpty { "미입력" } ?: "미입력"}\n\n")
+
+        // (4) 보유 역량
+        formattedResume.append("(4) 보유 역량\n")
+        formattedResume.append("1. 자격증: ${resumeData["certificate"]?.ifEmpty { "미입력" } ?: "미입력"}\n")
+        formattedResume.append("2. 운전: ${resumeData["driving"]?.ifEmpty { "미입력" } ?: "미입력"}\n")
+        formattedResume.append("3. 차량 소유: ${resumeData["vehicle"]?.ifEmpty { "미입력" } ?: "미입력"}\n")
+        formattedResume.append("4. 장점: ${resumeData["strength"]?.ifEmpty { "미입력" } ?: "미입력"}\n")
+        formattedResume.append("5. 단점: ${resumeData["weakness"]?.ifEmpty { "미입력" } ?: "미입력"}\n")
+
+        return formattedResume.toString()
+    }
+
 
     // 탐색 모드 상태 확인 및 설정
     fun setExploreMode(enabled: Boolean) {
@@ -194,6 +279,11 @@ class ChatService(private val context: Context) {
 // ChatService.kt의 sendChatMessageToWorkflow 함수 전체 수정
 
     fun sendChatMessageToWorkflow(userId: String, message: String, sessionId: String, userCity: String = "", userDistrict: String = "") {
+        // 이력서 진행 중인 경우 사용자 입력 저장
+        if (isResumeInProgress && currentResumeStep.isNotEmpty()) {
+            saveResumeStep(currentResumeStep, message)
+        }
+
         // 채팅 횟수 확인
         if (!canSendMessage()) {
             Log.d(TAG, "Daily chat limit reached")
@@ -260,10 +350,6 @@ class ChatService(private val context: Context) {
                 }
             }
 
-
-// ChatService.kt의 sendChatMessageToWorkflow 함수 내부
-// onResponse 메서드의 응답 파싱 부분을 다음과 같이 수정:
-
             override fun onResponse(call: Call, response: Response) {
                 try {
                     Log.d(TAG, "==== RECEIVED RESPONSE ====")
@@ -305,9 +391,8 @@ class ChatService(private val context: Context) {
                     // 응답 파싱 및 SearchHistory용 데이터 추출
                     var categoryForHistory: String? = null
                     var answerForHistory: String? = null
-                    var queryCategory: String? = null  // Query_Category를 위한 별도 변수
+                    var queryCategory: String? = null
 
-                    // Pinecone 응답 처리 로직
                     try {
                         val jsonResponse = JSONObject(responseBody)
 
@@ -315,12 +400,96 @@ class ChatService(private val context: Context) {
                         categoryForHistory = jsonResponse.optString("namespace", null)
                         queryCategory = jsonResponse.optString("Query_Category", null)
 
-                        // 디버그 로그 추가
                         Log.d(TAG, "Query_Category: ${queryCategory ?: "없음"}")
                         Log.d(TAG, "namespace: ${categoryForHistory ?: "없음"}")
 
                         val namespace = jsonResponse.optString("namespace", "")
 
+                        // 🔥 resume_builder namespace 특별 처리
+                        if (namespace == "resume_builder") {
+                            Log.d(TAG, "Resume builder namespace detected")
+
+                            val resumeAction = jsonResponse.optString("resume_action", "")
+                            val resumeStep = jsonResponse.optString("resume_step", "")
+                            val resumeContent = jsonResponse.optString("resume_content", "")
+
+                            Log.d(TAG, "Resume action: $resumeAction")
+                            Log.d(TAG, "Resume step: $resumeStep")
+                            Log.d(TAG, "Resume content length: ${resumeContent.length}")
+
+                            if (jsonResponse.has("results")) {
+                                val results = jsonResponse.getJSONArray("results")
+
+                                if (results.length() > 0) {
+                                    val firstResult = results.getJSONObject(0)
+                                    val content = firstResult.optString("content", "")
+
+                                    when (resumeAction) {
+                                        "started" -> {
+                                            Log.d(TAG, "Resume creation started")
+                                            initializeResumeData()
+                                            isResumeInProgress = true
+                                            currentResumeStep = resumeStep
+
+                                            Handler(Looper.getMainLooper()).post {
+                                                responseCallback?.invoke(content)
+                                                navigationCallback?.invoke(false, false, 1, 1)
+                                            }
+                                        }
+                                        "completed" -> {
+                                            Log.d(TAG, "Resume creation completed")
+                                            isResumeInProgress = false
+                                            currentResumeStep = ""
+
+                                            // 완료 메시지 먼저 표시
+                                            Handler(Looper.getMainLooper()).post {
+                                                responseCallback?.invoke(content)
+                                                navigationCallback?.invoke(false, false, 1, 1)
+                                            }
+
+                                            // 1초 후 완성된 이력서 표시
+                                            Handler(Looper.getMainLooper()).postDelayed({
+                                                val formattedResume = generateFormattedResume()
+                                                responseCallback?.invoke(formattedResume)
+                                            }, 1000)
+                                        }
+                                        "next_question" -> {
+                                            Log.d(TAG, "Resume next question")
+                                            currentResumeStep = resumeStep
+
+                                            Handler(Looper.getMainLooper()).post {
+                                                responseCallback?.invoke(content)
+                                                navigationCallback?.invoke(false, false, 1, 1)
+                                            }
+                                        }
+                                        else -> {
+                                            Log.d(TAG, "Resume default action")
+                                            currentResumeStep = resumeStep
+
+                                            Handler(Looper.getMainLooper()).post {
+                                                responseCallback?.invoke(content)
+                                                navigationCallback?.invoke(false, false, 1, 1)
+                                            }
+                                        }
+                                    }
+
+                                    // SearchHistory용 데이터 설정
+                                    answerForHistory = if (content.length > 100) {
+                                        content.substring(0, 100)
+                                    } else {
+                                        content
+                                    }
+
+                                    // SearchHistory에 저장할 데이터를 ChatService에 저장
+                                    lastSearchCategory = categoryForHistory
+                                    lastSearchAnswer = answerForHistory
+
+                                    return
+                                }
+                            }
+                        }
+
+                        // 일반 Pinecone 응답 처리 (기존 코드 그대로)
                         if (jsonResponse.has("results")) {
                             val results = jsonResponse.getJSONArray("results")
 
@@ -389,8 +558,7 @@ class ChatService(private val context: Context) {
                         }
 
                         // SearchHistory에 저장할 데이터를 ChatService에 저장
-                        // MainActivity에서 접근할 수 있도록 함
-                        lastSearchCategory = categoryForHistory  // namespace 값만 저장
+                        lastSearchCategory = categoryForHistory
                         lastSearchAnswer = answerForHistory
 
                     } catch (e: JSONException) {
@@ -409,6 +577,53 @@ class ChatService(private val context: Context) {
                     }
                 } finally {
                     response.close()
+                }
+            }
+
+            private fun formatResumeContent(resumeContent: String): String {
+                return try {
+                    Log.d(TAG, "Original resume content: $resumeContent")
+
+                    // 간단한 템플릿 방식으로 변경
+                    // 서버에서 받은 복잡한 마크다운 대신 기본 템플릿 사용
+                    val formattedResume = StringBuilder()
+                    formattedResume.append("📋 완성된 이력서\n\n")
+
+                    // (1) 인적 사항
+                    formattedResume.append("(1) 인적 사항\n")
+                    formattedResume.append("1. 이름: 미입력\n")
+                    formattedResume.append("2. 성별: 미입력\n")
+                    formattedResume.append("3. 생년월일: 미입력\n")
+                    formattedResume.append("4. 주소: 미입력\n")
+                    formattedResume.append("5. 연락처: 미입력\n\n")
+
+                    // (2) 최종 학력
+                    formattedResume.append("(2) 최종 학력\n")
+                    formattedResume.append("1. 학교명: 미입력\n")
+                    formattedResume.append("2. 전공명: 미입력\n\n")
+
+                    // (3) 경력 사항
+                    formattedResume.append("(3) 경력 사항\n")
+                    formattedResume.append("1. 회사명: 미입력\n")
+                    formattedResume.append("2. 근무기간: 미입력\n")
+                    formattedResume.append("3. 담당 업무: 미입력\n\n")
+
+                    // (4) 보유 역량
+                    formattedResume.append("(4) 보유 역량\n")
+                    formattedResume.append("1. 자격증: 미입력\n")
+                    formattedResume.append("2. 운전: 미입력\n")
+                    formattedResume.append("3. 차량 소유: 미입력\n")
+                    formattedResume.append("4. 장점: 미입력\n")
+                    formattedResume.append("5. 단점: 미입력\n")
+
+                    val result = formattedResume.toString().trim()
+                    Log.d(TAG, "Formatted resume: $result")
+
+                    return result
+
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error formatting resume content", e)
+                    "📋 이력서 작성이 완료되었습니다.\n\n$resumeContent"
                 }
             }
 
@@ -433,8 +648,6 @@ class ChatService(private val context: Context) {
             )
         }
     }
-
-// showCurrentResult() 함수를 다음과 같이 수정
 
     private fun showCurrentResult() {
         // 탐색 모드인 경우
@@ -465,16 +678,79 @@ class ChatService(private val context: Context) {
             return
         }
 
-        // 일반 검색 모드 (기존 코드 유지)
+        // 일반 검색 모드
         currentResults?.let { results ->
             if (currentIndex >= 0 && currentIndex < results.length()) {
                 try {
                     val currentResult = results.getJSONObject(currentIndex)
 
-                    // namespace 확인을 위해 전체 응답에서 namespace 가져오기
+                    // namespace 확인
                     val namespace = currentResult.optString("namespace", "")
 
-                    // workout namespace 특별 처리
+                    // 🔥 resume_builder namespace 특별 처리
+                    if (namespace == "resume_builder") {
+                        Log.d(TAG, "Resume builder namespace detected")
+
+                        // 전체 응답에서 resume_action 확인
+                        val parentResponse = currentResults?.toString()
+                        var resumeAction: String? = null
+                        var resumeContent: String? = null
+
+                        try {
+                            // currentResults는 JSONArray이므로 전체 응답을 다시 파싱해야 함
+                            // 이를 위해 원본 응답을 저장하거나 다른 방법 사용
+
+                            // 일단 currentResult에서 확인 (개별 result 객체에는 resume_action이 없을 수 있음)
+                            val content = currentResult.optString("content", "")
+
+                            // 로그에서 보면 전체 응답 구조를 확인할 수 있음
+                            Log.d(TAG, "Resume result content: $content")
+
+                            // 이력서 작성 완료 메시지 감지
+                            if (content.contains("이력서가 성공적으로 생성되었습니다") ||
+                                content.contains("이력서 생성 완료") ||
+                                content.contains("이력서 작성이 완료되었습니다")) {
+
+                                Log.d(TAG, "Resume completion detected in content")
+
+                                // 이력서 완료 메시지 표시
+                                Handler(Looper.getMainLooper()).post {
+                                    responseCallback?.invoke(content)
+
+                                    // 네비게이션 상태 업데이트
+                                    val hasPrevious = currentIndex > 0
+                                    val hasNext = currentIndex < results.length() - 1
+                                    val currentPage = currentIndex + 1
+                                    val totalPages = results.length()
+
+                                    navigationCallback?.invoke(hasPrevious, hasNext, currentPage, totalPages)
+                                    savedNavigationState = NavigationState(hasPrevious, hasNext, currentPage, totalPages)
+                                }
+                            } else {
+                                // 일반 이력서 작성 과정 메시지
+                                Handler(Looper.getMainLooper()).post {
+                                    responseCallback?.invoke(content)
+
+                                    // 네비게이션 상태 업데이트
+                                    val hasPrevious = currentIndex > 0
+                                    val hasNext = currentIndex < results.length() - 1
+                                    val currentPage = currentIndex + 1
+                                    val totalPages = results.length()
+
+                                    navigationCallback?.invoke(hasPrevious, hasNext, currentPage, totalPages)
+                                    savedNavigationState = NavigationState(hasPrevious, hasNext, currentPage, totalPages)
+                                }
+                            }
+
+                            return
+
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error processing resume builder response", e)
+                            // 오류 발생 시 일반 처리로 fallback
+                        }
+                    }
+
+                    // workout namespace인 경우 특별 처리
                     if (namespace == "workout" || currentResult.has("thumbnail_url")) {
                         // workout 전용 포맷팅
                         val title = currentResult.optString("title", "제목 없음")
@@ -535,6 +811,7 @@ class ChatService(private val context: Context) {
             }
         }
     }
+
     private fun formatResponse(content: String): String {
         var formatted = content
 
