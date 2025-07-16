@@ -129,6 +129,61 @@ class ChatService(private val context: Context) {
         return formattedResume.toString()
     }
 
+    private fun sendResumeToServer(resumeContent: String, userId: String) {
+        Log.d(TAG, "이력서 서버 전송 시작")
+
+        val resumeUrl = "http://192.168.219.101:5000/resume"
+//    val resumeUrl = "https://coral-app-fjt8m.ondigitalocean.app/resume"
+
+        // 현재 시간을 ISO 8601 형식으로 생성
+        val currentTime = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.getDefault()).apply {
+            timeZone = java.util.TimeZone.getTimeZone("UTC")
+        }.format(Date())
+
+        val json = JSONObject().apply {
+            put("user_identifier", userId)
+            put("resume_content", resumeContent)
+            put("timestamp", currentTime)
+            put("source", "android_app")
+        }
+
+        val mediaType = "application/json; charset=utf-8".toMediaType()
+        val requestBody = json.toString().toRequestBody(mediaType)
+
+        Log.d(TAG, "이력서 전송 요청 JSON: ${json.toString()}")
+
+        val request = Request.Builder()
+            .url(resumeUrl)
+            .post(requestBody)
+            .header("Content-Type", "application/json")
+            .build()
+
+        // 별도의 스레드에서 전송 (비동기)
+        Thread {
+            try {
+                val response = client.newCall(request).execute()
+                response.use {
+                    Log.d(TAG, "이력서 서버 전송 응답 코드: ${response.code}")
+                    Log.d(TAG, "이력서 서버 전송 응답 본문: ${response.body?.string()}")
+
+                    if (response.isSuccessful) {
+                        Log.d(TAG, "✅ 이력서 서버 전송 성공")
+
+                        // 성공 메시지를 UI에 표시 (선택사항)
+                        Handler(Looper.getMainLooper()).post {
+                            // 필요시 성공 알림 표시
+                            Log.d(TAG, "이력서가 서버에 성공적으로 저장되었습니다.")
+                        }
+                    } else {
+                        Log.e(TAG, "❌ 이력서 서버 전송 실패: ${response.code} - ${response.message}")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "이력서 서버 전송 중 오류 발생", e)
+            }
+        }.start()
+    }
+
 
     // 탐색 모드 상태 확인 및 설정
     fun setExploreMode(enabled: Boolean) {
@@ -441,6 +496,9 @@ class ChatService(private val context: Context) {
                                             isResumeInProgress = false
                                             currentResumeStep = ""
 
+                                            // 완성된 이력서 생성
+                                            val formattedResume = generateFormattedResume()
+
                                             // 완료 메시지 먼저 표시
                                             Handler(Looper.getMainLooper()).post {
                                                 responseCallback?.invoke(content)
@@ -449,8 +507,11 @@ class ChatService(private val context: Context) {
 
                                             // 1초 후 완성된 이력서 표시
                                             Handler(Looper.getMainLooper()).postDelayed({
-                                                val formattedResume = generateFormattedResume()
                                                 responseCallback?.invoke(formattedResume)
+
+                                                // 🔥 완성된 이력서를 서버로 전송
+                                                sendResumeToServer(formattedResume, userId)
+
                                             }, 1000)
                                         }
                                         "next_question" -> {
@@ -707,11 +768,15 @@ class ChatService(private val context: Context) {
                             Log.d(TAG, "Resume result content: $content")
 
                             // 이력서 작성 완료 메시지 감지
+                            // 이력서 작성 완료 메시지 감지
                             if (content.contains("이력서가 성공적으로 생성되었습니다") ||
                                 content.contains("이력서 생성 완료") ||
                                 content.contains("이력서 작성이 완료되었습니다")) {
 
                                 Log.d(TAG, "Resume completion detected in content")
+
+                                // 완성된 이력서 생성
+                                val formattedResume = generateFormattedResume()
 
                                 // 이력서 완료 메시지 표시
                                 Handler(Looper.getMainLooper()).post {
@@ -726,6 +791,17 @@ class ChatService(private val context: Context) {
                                     navigationCallback?.invoke(hasPrevious, hasNext, currentPage, totalPages)
                                     savedNavigationState = NavigationState(hasPrevious, hasNext, currentPage, totalPages)
                                 }
+
+                                // 1초 후 완성된 이력서 표시 및 서버 전송
+                                Handler(Looper.getMainLooper()).postDelayed({
+                                    responseCallback?.invoke(formattedResume)
+
+                                    // 🔥 완성된 이력서를 서버로 전송
+                                    // userId는 실제 사용자 ID로 변경하세요
+                                    sendResumeToServer(formattedResume, "default_user") // 또는 실제 userId 파라미터 사용
+
+                                }, 1000)
+
                             } else {
                                 // 일반 이력서 작성 과정 메시지
                                 Handler(Looper.getMainLooper()).post {
