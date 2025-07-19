@@ -59,12 +59,11 @@ class SupabaseDatabaseHelper(private val context: Context) {
 
     // Helper function to get ISO 8601 formatted timestamp
     private fun getCurrentTimestampIso8601(): String {
-        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
-        sdf.timeZone = TimeZone.getTimeZone("UTC")
+        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", Locale.KOREA)
+        sdf.timeZone = TimeZone.getTimeZone("Asia/Seoul")
         return sdf.format(Date())
     }
 
-// SupabaseDatabaseHelper.kt에 추가할 내용
 
     // Users 테이블 데이터 클래스
     @Serializable
@@ -76,7 +75,8 @@ class SupabaseDatabaseHelper(private val context: Context) {
         val birth_date: String? = null, // 추가
         val address: String? = null,
         val tel: String? = null,
-        val resume: String? = null,     // 이력서 필드 추가
+        val resume: String? = null,     // 기존 이력서 필드
+        val resume_completed: String? = null,
         val created_at: String? = null,
         val updated_at: String? = null
     )
@@ -313,15 +313,22 @@ class SupabaseDatabaseHelper(private val context: Context) {
             withContext(Dispatchers.IO) {
                 Log.d(TAG, "Getting user by identifier: $identifier")
 
-                // 먼저 kakao_id로 조회
-                var user = supabase.postgrest["users"]
-                    .select(filter = {
-                        eq("kakao_id", identifier)
-                    })
-                    .decodeSingleOrNull<User>()
+                var user: User? = null
 
-                // kakao_id로 못 찾으면 user_id로 조회
-                if (user == null) {
+                // ✅ 카카오 사용자인지 확인 (identifier가 "kakao_"로 시작하는지 확인)
+                if (identifier.startsWith("kakao_")) {
+                    val kakaoId = identifier.removePrefix("kakao_")
+                    Log.d(TAG, "Searching by kakao_id: $kakaoId")
+
+                    user = supabase.postgrest["users"]
+                        .select(filter = {
+                            eq("kakao_id", kakaoId)
+                        })
+                        .decodeSingleOrNull<User>()
+                } else {
+                    // 일반 사용자 - user_id로 조회
+                    Log.d(TAG, "Searching by user_id: $identifier")
+
                     user = supabase.postgrest["users"]
                         .select(filter = {
                             eq("user_id", identifier)
@@ -342,6 +349,7 @@ class SupabaseDatabaseHelper(private val context: Context) {
             null
         }
     }
+
     // user_id로 사용자 정보 가져오기
     suspend fun getUserByUserId(userId: String): User? {
         return try {
@@ -449,14 +457,15 @@ class SupabaseDatabaseHelper(private val context: Context) {
 
                 Log.d(TAG, "기존 사용자 존재 여부: ${existingUser != null}")
                 if (existingUser != null) {
-                    Log.d(TAG, "기존 사용자 정보: id=${existingUser.id}, kakao_id=${existingUser.kakao_id}, address=${existingUser.address}")
+                    Log.d(TAG, "기존 사용자 정보: id=${existingUser.id}, kakao_id=${existingUser.kakao_id}")
                 }
 
                 if (existingUser != null) {
-                    // 기존 사용자 업데이트
+                    // 기존 사용자 업데이트 (로그인 시마다 updated_at 갱신)
                     Log.d(TAG, "기존 사용자 업데이트 시작")
 
                     val updateData = buildJsonObject {
+                        // address와 tel이 제공된 경우에만 업데이트
                         address?.let {
                             put("address", JsonPrimitive(it))
                             Log.d(TAG, "업데이트할 address: $it")
@@ -465,6 +474,7 @@ class SupabaseDatabaseHelper(private val context: Context) {
                             put("tel", JsonPrimitive(it))
                             Log.d(TAG, "업데이트할 tel: $it")
                         }
+                        // 항상 updated_at은 갱신
                         put("updated_at", JsonPrimitive(getCurrentTimestampIso8601()))
                     }
 
@@ -494,7 +504,7 @@ class SupabaseDatabaseHelper(private val context: Context) {
 
                     updatedUser
                 } else {
-                    // 새 사용자 생성
+                    // 새 사용자 생성 (첫 가입)
                     Log.d(TAG, "새 사용자 생성 시작")
 
                     val newUser = buildJsonObject {
@@ -507,6 +517,8 @@ class SupabaseDatabaseHelper(private val context: Context) {
                             put("tel", JsonPrimitive(it))
                             Log.d(TAG, "새 사용자 tel: $it")
                         }
+                        put("created_at", JsonPrimitive(getCurrentTimestampIso8601()))
+                        put("updated_at", JsonPrimitive(getCurrentTimestampIso8601()))
                     }
 
                     Log.d(TAG, "새 사용자 데이터: $newUser")
@@ -4377,5 +4389,197 @@ class SupabaseDatabaseHelper(private val context: Context) {
             false
         }
     }
+
+    suspend fun getResumeCompletedByIdentifier(identifier: String): String? {
+        return try {
+            withContext(Dispatchers.IO) {
+                Log.d(TAG, "Getting resume_completed for identifier: $identifier")
+
+                val user = if (identifier.matches(Regex("\\d+"))) {
+                    // 숫자만 있으면 kakao_id로 검색
+                    Log.d(TAG, "Searching by kakao_id: $identifier")
+                    supabase.postgrest["users"]
+                        .select(filter = {
+                            eq("kakao_id", identifier)
+                        })
+                        .decodeSingleOrNull<User>()
+                } else {
+                    // 그 외에는 user_id로 검색
+                    Log.d(TAG, "Searching by user_id: $identifier")
+                    supabase.postgrest["users"]
+                        .select(filter = {
+                            eq("user_id", identifier)
+                        })
+                        .decodeSingleOrNull<User>()
+                }
+
+                Log.d(TAG, "User found: ${user != null}")
+                if (user != null) {
+                    Log.d(TAG, "User details: id=${user.id}, kakao_id=${user.kakao_id}, user_id=${user.user_id}")
+                    Log.d(TAG, "resume_completed is null: ${user.resume_completed == null}")
+                    Log.d(TAG, "resume_completed value: ${user.resume_completed}")
+
+                    if (user.resume_completed != null) {
+                        Log.d(TAG, "resume_completed length: ${user.resume_completed.length}")
+
+                        try {
+                            // JSON 문자열을 파싱하여 content 추출
+                            val jsonObject = org.json.JSONObject(user.resume_completed)
+                            val content = jsonObject.optString("content", null)
+
+                            Log.d(TAG, "Parsed content length: ${content?.length ?: 0}")
+                            Log.d(TAG, "Content preview: ${content?.take(100)}")
+
+                            if (content.isNullOrEmpty()) {
+                                Log.d(TAG, "Content is empty in resume_completed")
+                                null
+                            } else {
+                                content
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error parsing resume_completed JSON: ${e.message}")
+                            Log.d(TAG, "Raw resume_completed data: ${user.resume_completed}")
+                            // JSON 파싱 실패 시 원본 문자열 반환
+                            user.resume_completed
+                        }
+                    } else {
+                        Log.d(TAG, "resume_completed field is null for user")
+                        null
+                    }
+                } else {
+                    Log.d(TAG, "No user found for identifier: $identifier")
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting resume_completed: ${e.message}", e)
+            null
+        }
+    }
+
+    // resume_completed 삭제 함수
+    suspend fun deleteResumeCompletedByIdentifier(identifier: String): Boolean {
+        return try {
+            withContext(Dispatchers.IO) {
+                Log.d(TAG, "Deleting resume_completed for identifier: $identifier")
+
+                val updateData = buildJsonObject {
+                    put("resume_completed", JsonPrimitive(null as String?))
+                    put("updated_at", JsonPrimitive(getCurrentTimestampIso8601()))
+                }
+
+                val result = if (identifier.matches(Regex("\\d+"))) {
+                    // 숫자만 있으면 kakao_id로 업데이트
+                    supabase.postgrest["users"]
+                        .update(updateData) {
+                            eq("kakao_id", identifier)
+                        }
+                } else {
+                    // 그 외에는 user_id로 업데이트
+                    supabase.postgrest["users"]
+                        .update(updateData) {
+                            eq("user_id", identifier)
+                        }
+                }
+
+                Log.d(TAG, "Resume completed deleted successfully for identifier: $identifier")
+                true
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error deleting resume_completed: ${e.message}", e)
+            false
+        }
+    }
+
+    /**
+     * 일반 사용자의 updated_at만 업데이트하는 함수
+     */
+    suspend fun updateUserTimestamp(userId: String): User? {
+        return try {
+            withContext(Dispatchers.IO) {
+                Log.d(TAG, "=== 사용자 타임스탬프 업데이트 ===")
+                Log.d(TAG, "사용자 ID: $userId")
+
+                val updateData = buildJsonObject {
+                    put("updated_at", JsonPrimitive(getCurrentTimestampIso8601()))
+                }
+
+                Log.d(TAG, "업데이트 데이터: $updateData")
+
+                // UPDATE 쿼리 실행
+                val updateResponse = supabase.postgrest["users"]
+                    .update(updateData) {
+                        eq("id", userId)
+                    }
+
+                Log.d(TAG, "UPDATE 쿼리 실행 완료")
+
+                // 업데이트된 데이터 다시 조회
+                val updatedUser = supabase.postgrest["users"]
+                    .select(filter = {
+                        eq("id", userId)
+                    })
+                    .decodeSingleOrNull<User>()
+
+                if (updatedUser != null) {
+                    Log.d(TAG, "타임스탬프 업데이트 성공")
+                    Log.d(TAG, "업데이트된 시간: ${updatedUser.updated_at}")
+                } else {
+                    Log.e(TAG, "타임스탬프 업데이트 후 사용자 조회 실패")
+                }
+
+                updatedUser
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "타임스탬프 업데이트 실패: ${e.message}", e)
+            e.printStackTrace()
+            null
+        }
+    }
+
+    /**
+     * 일반 로그인 시 updated_at 업데이트
+     */
+    suspend fun updateLoginTimestamp(userId: String): User? {
+        return try {
+            withContext(Dispatchers.IO) {
+                Log.d(TAG, "=== 로그인 타임스탬프 업데이트 ===")
+                Log.d(TAG, "user_id: $userId")
+
+                val updateData = buildJsonObject {
+                    put("updated_at", JsonPrimitive(getCurrentTimestampIso8601()))
+                }
+
+                // user_id로 업데이트
+                val updateResponse = supabase.postgrest["users"]
+                    .update(updateData) {
+                        eq("user_id", userId)
+                    }
+
+                Log.d(TAG, "UPDATE 쿼리 실행 완료")
+
+                // 업데이트된 데이터 다시 조회
+                val updatedUser = supabase.postgrest["users"]
+                    .select(filter = {
+                        eq("user_id", userId)
+                    })
+                    .decodeSingleOrNull<User>()
+
+                if (updatedUser != null) {
+                    Log.d(TAG, "로그인 타임스탬프 업데이트 성공")
+                    Log.d(TAG, "업데이트된 시간: ${updatedUser.updated_at}")
+                } else {
+                    Log.e(TAG, "로그인 타임스탬프 업데이트 후 사용자 조회 실패")
+                }
+
+                updatedUser
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "로그인 타임스탬프 업데이트 실패: ${e.message}", e)
+            e.printStackTrace()
+            null
+        }
+    }
+
 
 }

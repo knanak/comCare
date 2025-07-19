@@ -318,6 +318,8 @@ class MainActivity : ComponentActivity() {
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
         val supabaseHelper = SupabaseDatabaseHelper(this)
 
+        checkAndUpdateLoginStatus(supabaseHelper)
+
         setContent {
 
             // 다크모드 확인
@@ -659,8 +661,8 @@ class MainActivity : ComponentActivity() {
                                 LoginScreen(
                                     onLoginSuccess = { userInfo ->
                                         currentUserInfo = userInfo
-                                        currentUserId = userInfo.id.toString()
-                                        currentUserKakaoId = if (userInfo.id > 0) userInfo.id.toString() else null
+                                        currentUserKakaoId = userInfo.id.toString()  // 카카오 ID는 currentUserKakaoId에 저장
+                                        currentUserId = "kakao_${userInfo.id}"       // currentUserId는 구분 가능한 형태로 저장
                                         this@MainActivity.userInfo = userInfo
                                         isLoggedIn = true
 
@@ -855,6 +857,71 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         // singleTop으로 인해 새 인텐트가 올 때
         Log.d("MainActivity", "onNewIntent called")
+    }
+
+    // 자동 로그인 체크 및 updated_at 업데이트 함수
+    private fun checkAndUpdateLoginStatus(supabaseHelper: SupabaseDatabaseHelper) {
+        // 이미 로그인된 상태인지 확인
+        val isLoggedIn = sharedPrefs.getBoolean(KEY_IS_LOGGED_IN, false)
+        val savedUserId = sharedPrefs.getString(KEY_CURRENT_USER_ID, null)
+        val savedKakaoId = sharedPrefs.getString(KEY_CURRENT_KAKAO_ID, null)
+
+        if (isLoggedIn && !savedUserId.isNullOrEmpty()) {
+            Log.d("MainActivity", "=== 자동 로그인 감지 ===")
+            Log.d("MainActivity", "저장된 사용자 ID: $savedUserId")
+            Log.d("MainActivity", "저장된 카카오 ID: $savedKakaoId")
+
+            lifecycleScope.launch {
+                try {
+                    // ✅ 수정: currentUserId를 사용해서 사용자 조회
+                    val user = supabaseHelper.getUserByIdentifier(savedUserId)
+
+                    if (user != null) {
+                        Log.d("MainActivity", "기존 사용자 확인: ${user.user_id ?: user.kakao_id}")
+
+                        // updated_at만 업데이트
+                        val updatedUser = if (user.kakao_id != null) {
+                            // 카카오 사용자의 경우
+                            supabaseHelper.upsertUser(
+                                kakaoId = user.kakao_id,
+                                address = user.address, // 기존 주소 유지
+                                tel = user.tel // 기존 전화번호 유지
+                            )
+                        } else {
+                            // 일반 사용자의 경우
+                            supabaseHelper.updateUserTimestamp(user.id!!)
+                        }
+
+                        if (updatedUser != null) {
+                            Log.d("MainActivity", "자동 로그인 - updated_at 업데이트 성공")
+                            Log.d("MainActivity", "업데이트 시간: ${updatedUser.updated_at}")
+                        }
+                    } else {
+                        Log.w("MainActivity", "저장된 사용자 정보를 찾을 수 없음 - 로그아웃 처리")
+                        // 사용자 정보가 없으면 로그아웃 처리
+                        clearLoginState()
+                    }
+                } catch (e: Exception) {
+                    Log.e("MainActivity", "자동 로그인 처리 중 오류: ${e.message}", e)
+                }
+            }
+        }
+    }
+
+    // 로그인 상태 초기화 함수
+    private fun clearLoginState() {
+        val editor = sharedPrefs.edit()
+        editor.remove(KEY_IS_LOGGED_IN)
+        editor.remove(KEY_CURRENT_USER_ID)
+        editor.remove(KEY_CURRENT_KAKAO_ID)
+        editor.remove("user_info_id")
+        editor.remove("user_info_nickname")
+        editor.remove("user_info_profile_url")
+        editor.apply()
+
+        userInfo = null
+        currentUserId = "guest"
+        currentUserKakaoId = null
     }
 
     // 위치 정보를 가져오는 함수들은 그대로 유지
@@ -1120,16 +1187,15 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun LoginScreen(
     onLoginSuccess: (UserInfo) -> Unit,
-    onNavigateToNormalLogin: () -> Unit  // navController 대신 콜백 사용
+    onNavigateToNormalLogin: () -> Unit
 ) {
     val context = LocalContext.current
     val TAG = "KakaoLogin"
 
-    // Supabase 헬퍼 인스턴스 생성
     val supabaseHelper = remember { SupabaseDatabaseHelper(context) }
     val coroutineScope = rememberCoroutineScope()
 
-    // 카카오 로그인 콜백
+    // 카카오 로그인 콜백 수정
     val callback: (OAuthToken?, Throwable?) -> Unit = { token, error ->
         if (error != null) {
             Log.e(TAG, "카카오 로그인 실패", error)
@@ -1137,7 +1203,6 @@ fun LoginScreen(
         } else if (token != null) {
             Log.i(TAG, "카카오 로그인 성공 ${token.accessToken}")
 
-            // 사용자 정보 가져오기
             UserApiClient.instance.me { user, error ->
                 if (error != null) {
                     Log.e(TAG, "사용자 정보 요청 실패", error)
@@ -1154,58 +1219,46 @@ fun LoginScreen(
                         profileImageUrl = user.kakaoAccount?.profile?.thumbnailImageUrl
                     )
 
-
-                    // Supabase에 사용자 정보 저장/업데이트 부분
-
                     coroutineScope.launch {
                         try {
-                            Log.d(TAG, "=== LoginScreen Supabase 저장 시작 ===")
+                            Log.d(TAG, "=== 카카오 로그인 Supabase 저장 시작 ===")
 
-                            // MainActivity의 currentUserKakaoId를 먼저 설정
                             val mainActivity = context as? MainActivity
                             if (mainActivity != null) {
                                 mainActivity.currentUserKakaoId = userInfo.id.toString()
                                 Log.d(TAG, "MainActivity.currentUserKakaoId 설정 완료: ${userInfo.id}")
 
-                                // 상태 저장 추가
                                 mainActivity.saveAppState()
+
                                 // 현재 위치 정보 확인
-                                Log.d(TAG, "현재 위치 정보 - city: '${mainActivity.userCity}', district: '${mainActivity.userDistrict}'")
-
                                 var userAddress: String? = null
-
-                                // 위치 정보가 있으면 주소 생성
                                 if (mainActivity.userCity.isNotEmpty() &&
                                     mainActivity.userDistrict.isNotEmpty() &&
                                     mainActivity.userCity != "위치 확인 중..." &&
                                     mainActivity.userCity != "위치 권한 없음") {
                                     userAddress = "${mainActivity.userCity} ${mainActivity.userDistrict}"
                                     Log.d(TAG, "저장할 주소: '$userAddress'")
-                                } else {
-                                    Log.d(TAG, "위치 정보가 아직 없음")
                                 }
 
-                                // Supabase에 사용자 정보 저장/업데이트 (주소는 null일 수 있음)
+                                // Supabase에 사용자 정보 저장/업데이트
                                 val savedUser = supabaseHelper.upsertUser(
                                     kakaoId = userInfo.id.toString(),
-                                    address = userAddress  // null일 수 있음
+                                    address = userAddress
                                 )
 
                                 if (savedUser != null) {
-                                    Log.d(TAG, "Supabase에 사용자 정보 저장 성공: ${savedUser.id}")
+                                    Log.d(TAG, "Supabase에 사용자 정보 저장/업데이트 성공: ${savedUser.id}")
                                     Log.d(TAG, "저장된 주소: ${savedUser.address}")
+                                    Log.d(TAG, "업데이트 시간: ${savedUser.updated_at}")
                                 } else {
-                                    Log.e(TAG, "Supabase에 사용자 정보 저장 실패")
+                                    Log.e(TAG, "Supabase에 사용자 정보 저장/업데이트 실패")
                                 }
                             }
 
-                            // 로그인 성공 처리
                             onLoginSuccess(userInfo)
-
 
                         } catch (e: Exception) {
                             Log.e(TAG, "사용자 정보 저장 중 오류: ${e.message}", e)
-                            // 오류가 발생해도 로그인은 진행
                             onLoginSuccess(userInfo)
                         }
                     }
@@ -1501,23 +1554,24 @@ fun NormalLoginScreen(
                                 // Supabase에서 사용자 확인
                                 val user = supabaseHelper.loginUser(userId, password)
                                 if (user != null) {
-                                    // 로그인 성공
+                                    Log.d("NormalLogin", "로그인 성공: ${user.user_id}")
+
+                                    // 로그인 시간 업데이트
+                                    val updatedUser = supabaseHelper.updateLoginTimestamp(user.user_id!!)
+                                    if (updatedUser != null) {
+                                        Log.d("NormalLogin", "로그인 시간 업데이트 성공: ${updatedUser.updated_at}")
+                                    }
+
                                     val userInfo = UserInfo(
-                                        id = user.id?.hashCode()?.toLong() ?: -1L,  // ID는 고유값으로
+                                        id = user.id?.hashCode()?.toLong() ?: -1L,
                                         nickname = user.user_id ?: "사용자",
                                         profileImageUrl = null
                                     )
 
-                                    // MainActivity의 currentUserId 설정
                                     val mainActivity = context as? MainActivity
-                                    mainActivity?.currentUserId = user.user_id ?: ""  // ← 중요!
+                                    mainActivity?.currentUserId = user.user_id ?: ""
                                     mainActivity?.currentUserKakaoId = null
-
-
-                                    // 상태 저장 추가
                                     mainActivity?.saveAppState()
-
-                                    Log.d("NormalLogin", "Login successful - currentUserId set to: ${user.user_id}")
 
                                     onLoginSuccess(userInfo)
                                 } else {
@@ -2438,105 +2492,104 @@ fun PlaceComparisonApp(
                         Divider()
 
                         // 내 이력서 보기 - 수정된 버전
-                        DropdownMenuItem(
-                            text = {
-                                Text("내 이력서 보기")
-                            },
-                            onClick = {
-                                showUserMenu = false
+                                DropdownMenuItem(
+                                    text = {
+                                        Text("내 이력서")
+                                    },
+                                    onClick = {
+                                        showUserMenu = false
 
-                                // ✅ 이미 선언된 coroutineScope 사용
-                                coroutineScope.launch {
-                                    try {
-                                        val supabaseHelper = SupabaseDatabaseHelper(context)
-                                        // MainActivity 인스턴스를 통해 currentUserId 접근
-                                        val mainActivity = context as? MainActivity
-                                        val identifier = mainActivity?.currentUserId ?: ""
+                                        coroutineScope.launch {
+                                            try {
+                                                val supabaseHelper = SupabaseDatabaseHelper(context)
+                                                val mainActivity = context as? MainActivity
+                                                val identifier = mainActivity?.currentUserId ?: ""
 
-                                        if (identifier.isEmpty()) {
-                                            withContext(Dispatchers.Main) {
-                                                Toast.makeText(
-                                                    context,
-                                                    "사용자 정보를 확인할 수 없습니다.",
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
-                                            }
-                                            return@launch
-                                        }
-
-                                        val resume = supabaseHelper.getResumeByIdentifier(identifier)
-
-                                        withContext(Dispatchers.Main) {
-                                            if (!resume.isNullOrEmpty()) {
-                                                // 이력서가 있는 경우 - 다이얼로그로 표시
-                                                androidx.appcompat.app.AlertDialog.Builder(context)
-                                                    .setTitle("내 이력서")
-                                                    .setMessage(resume)
-                                                    .setPositiveButton("확인") { dialog, _ ->
-                                                        dialog.dismiss()
+                                                if (identifier.isEmpty()) {
+                                                    withContext(Dispatchers.Main) {
+                                                        Toast.makeText(
+                                                            context,
+                                                            "사용자 정보를 확인할 수 없습니다.",
+                                                            Toast.LENGTH_SHORT
+                                                        ).show()
                                                     }
-                                                    .setNeutralButton("삭제") { dialog, _ ->
-                                                        // 이력서 삭제 확인
+                                                    return@launch
+                                                }
+
+                                                // resume_completed에서 content 가져오기
+                                                val resumeContent = supabaseHelper.getResumeCompletedByIdentifier(identifier)
+
+                                                withContext(Dispatchers.Main) {
+                                                    if (!resumeContent.isNullOrEmpty()) {
+                                                        // 이력서가 있는 경우 - 다이얼로그로 표시
                                                         androidx.appcompat.app.AlertDialog.Builder(context)
-                                                            .setTitle("이력서 삭제")
-                                                            .setMessage("정말로 이력서를 삭제하시겠습니까?")
-                                                            .setPositiveButton("삭제") { _, _ ->
-                                                                coroutineScope.launch {
-                                                                    try {
-                                                                        val deleted = supabaseHelper.deleteResumeByIdentifier(identifier)
-                                                                        withContext(Dispatchers.Main) {
-                                                                            Toast.makeText(
-                                                                                context,
-                                                                                if (deleted) "이력서가 삭제되었습니다." else "이력서 삭제에 실패했습니다.",
-                                                                                Toast.LENGTH_SHORT
-                                                                            ).show()
-                                                                        }
-                                                                    } catch (e: Exception) {
-                                                                        Log.e("ResumeDelete", "삭제 중 오류: ${e.message}", e)
-                                                                        withContext(Dispatchers.Main) {
-                                                                            Toast.makeText(
-                                                                                context,
-                                                                                "이력서 삭제 중 오류가 발생했습니다.",
-                                                                                Toast.LENGTH_SHORT
-                                                                            ).show()
+                                                            .setTitle("내 이력서")
+                                                            .setMessage(resumeContent)
+                                                            .setPositiveButton("확인") { dialog, _ ->
+                                                                dialog.dismiss()
+                                                            }
+                                                            .setNeutralButton("삭제") { dialog, _ ->
+                                                                // 이력서 삭제 확인
+                                                                androidx.appcompat.app.AlertDialog.Builder(context)
+                                                                    .setTitle("이력서 삭제")
+                                                                    .setMessage("정말로 이력서를 삭제하시겠습니까?")
+                                                                    .setPositiveButton("삭제") { _, _ ->
+                                                                        coroutineScope.launch {
+                                                                            try {
+                                                                                // resume_completed 삭제
+                                                                                val deleted = supabaseHelper.deleteResumeCompletedByIdentifier(identifier)
+                                                                                withContext(Dispatchers.Main) {
+                                                                                    Toast.makeText(
+                                                                                        context,
+                                                                                        if (deleted) "이력서가 삭제되었습니다." else "이력서 삭제에 실패했습니다.",
+                                                                                        Toast.LENGTH_SHORT
+                                                                                    ).show()
+                                                                                }
+                                                                            } catch (e: Exception) {
+                                                                                Log.e("ResumeDelete", "삭제 중 오류: ${e.message}", e)
+                                                                                withContext(Dispatchers.Main) {
+                                                                                    Toast.makeText(
+                                                                                        context,
+                                                                                        "이력서 삭제 중 오류가 발생했습니다.",
+                                                                                        Toast.LENGTH_SHORT
+                                                                                    ).show()
+                                                                                }
+                                                                            }
                                                                         }
                                                                     }
-                                                                }
+                                                                    .setNegativeButton("취소", null)
+                                                                    .show()
+                                                                dialog.dismiss()
                                                             }
-                                                            .setNegativeButton("취소", null)
                                                             .show()
-                                                        dialog.dismiss()
+                                                    } else {
+                                                        // 이력서가 없는 경우
+                                                        Toast.makeText(
+                                                            context,
+                                                            "저장된 이력서가 없습니다. 오비서에게 이력서 작성을 요청해보세요!",
+                                                            Toast.LENGTH_LONG
+                                                        ).show()
                                                     }
-                                                    .show()
-                                            } else {
-                                                // 이력서가 없는 경우
-                                                Toast.makeText(
-                                                    context,
-                                                    "저장된 이력서가 없습니다. 오비서에게 이력서 작성을 요청해보세요!",
-                                                    Toast.LENGTH_LONG
-                                                ).show()
+                                                }
+                                            } catch (e: Exception) {
+                                                Log.e("ResumeView", "이력서 조회 중 오류: ${e.message}", e)
+                                                withContext(Dispatchers.Main) {
+                                                    Toast.makeText(
+                                                        context,
+                                                        "이력서 조회 중 오류가 발생했습니다.",
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
+                                                }
                                             }
                                         }
-                                    } catch (e: Exception) {
-                                        Log.e("ResumeView", "이력서 조회 중 오류: ${e.message}", e)
-                                        withContext(Dispatchers.Main) {
-                                            Toast.makeText(
-                                                context,
-                                                "이력서 조회 중 오류가 발생했습니다.",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                        }
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Default.Description,
+                                            contentDescription = "Resume"
+                                        )
                                     }
-                                }
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Default.Description,
-                                    contentDescription = "Resume"
                                 )
-                            }
-                        )
-
                         Divider()
 
                         // 회원 탈퇴

@@ -135,16 +135,45 @@ class ChatService(private val context: Context) {
         val resumeUrl = "http://192.168.219.101:5000/resume"
 //    val resumeUrl = "https://coral-app-fjt8m.ondigitalocean.app/resume"
 
+        // MainActivity에서 kakao_id 정보 가져오기
+        val mainActivity = context as? MainActivity
+        val kakaoId = mainActivity?.currentUserKakaoId
+
+        // userId 분석 및 실제 사용자 ID 추출
+        val (actualKakaoId, actualUserId) = if (userId.startsWith("kakao_")) {
+            val extractedKakaoId = userId.removePrefix("kakao_")
+            Pair(extractedKakaoId, null)
+        } else {
+            Pair(kakaoId, userId) // kakaoId가 있으면 함께 전송
+        }
+
         // 현재 시간을 ISO 8601 형식으로 생성
         val currentTime = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.getDefault()).apply {
             timeZone = java.util.TimeZone.getTimeZone("UTC")
         }.format(Date())
 
         val json = JSONObject().apply {
-            put("user_identifier", userId)
+            // ✅ kakao_id와 user_id 모두 전송
+            if (actualKakaoId != null) {
+                put("kakao_id", actualKakaoId)
+                Log.d(TAG, "카카오 ID 설정: $actualKakaoId")
+            } else {
+                put("kakao_id", JSONObject.NULL)
+            }
+
+            if (actualUserId != null) {
+                put("user_id", actualUserId)
+                Log.d(TAG, "사용자 ID 설정: $actualUserId")
+            } else {
+                put("user_id", JSONObject.NULL)
+            }
+
             put("resume_content", resumeContent)
             put("timestamp", currentTime)
             put("source", "android_app")
+
+            // 기존 user_identifier도 호환성을 위해 유지
+            put("user_identifier", userId)
         }
 
         val mediaType = "application/json; charset=utf-8".toMediaType()
@@ -164,18 +193,39 @@ class ChatService(private val context: Context) {
                 val response = client.newCall(request).execute()
                 response.use {
                     Log.d(TAG, "이력서 서버 전송 응답 코드: ${response.code}")
-                    Log.d(TAG, "이력서 서버 전송 응답 본문: ${response.body?.string()}")
+                    val responseBody = response.body?.string()
+                    Log.d(TAG, "이력서 서버 전송 응답 본문: $responseBody")
 
                     if (response.isSuccessful) {
                         Log.d(TAG, "✅ 이력서 서버 전송 성공")
 
-                        // 성공 메시지를 UI에 표시 (선택사항)
-                        Handler(Looper.getMainLooper()).post {
-                            // 필요시 성공 알림 표시
-                            Log.d(TAG, "이력서가 서버에 성공적으로 저장되었습니다.")
+                        // 응답 파싱하여 결과 확인
+                        try {
+                            val responseJson = JSONObject(responseBody ?: "{}")
+                            val success = responseJson.optBoolean("success", false)
+                            val message = responseJson.optString("message", "")
+                            val kakaoIdFromResponse = responseJson.optString("kakao_id", "")
+                            val userIdFromResponse = responseJson.optString("user_id", "")
+
+                            Log.d(TAG, "서버 응답 - success: $success")
+                            Log.d(TAG, "서버 응답 - message: $message")
+                            Log.d(TAG, "서버 응답 - kakao_id: $kakaoIdFromResponse")
+                            Log.d(TAG, "서버 응답 - user_id: $userIdFromResponse")
+
+                            if (success) {
+                                // 성공 메시지를 UI에 표시
+                                Handler(Looper.getMainLooper()).post {
+                                    Log.d(TAG, "이력서가 서버에 성공적으로 저장되었습니다.")
+                                }
+                            } else {
+                                Log.e(TAG, "서버에서 실패 응답: $message")
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "응답 JSON 파싱 오류: ${e.message}")
                         }
                     } else {
                         Log.e(TAG, "❌ 이력서 서버 전송 실패: ${response.code} - ${response.message}")
+                        Log.e(TAG, "응답 본문: $responseBody")
                     }
                 }
             } catch (e: Exception) {
@@ -331,7 +381,6 @@ class ChatService(private val context: Context) {
         return MAX_REQUESTS_PER_DAY - currentCount
     }
 
-// ChatService.kt의 sendChatMessageToWorkflow 함수 전체 수정
 
     fun sendChatMessageToWorkflow(userId: String, message: String, sessionId: String, userCity: String = "", userDistrict: String = "") {
         // 이력서 진행 중인 경우 사용자 입력 저장
@@ -356,11 +405,41 @@ class ChatService(private val context: Context) {
         Log.d(TAG, "message: $message")
         Log.d(TAG, "userCity: $userCity")
         Log.d(TAG, "userDistrict: $userDistrict")
+        Log.d(TAG, "userId: $userId")
 
+        // ✅ MainActivity에서 kakao_id 정보 가져오기
+        val mainActivity = context as? MainActivity
+        val kakaoId = mainActivity?.currentUserKakaoId
+
+        // userId 분석 및 실제 사용자 ID 추출
+        val (actualKakaoId, actualUserId) = if (userId.startsWith("kakao_")) {
+            // 카카오 사용자인 경우
+            val extractedKakaoId = userId.removePrefix("kakao_")
+            Pair(extractedKakaoId, null)
+        } else {
+            // 일반 사용자인 경우
+            Pair(null, userId)
+        }
+
+        Log.d(TAG, "Extracted - kakaoId: $actualKakaoId, userId: $actualUserId")
+
+        // ✅ JSON 객체에 kakao_id와 user_id 구분해서 추가
         val json = JSONObject().apply {
             put("query", message)
             put("userCity", userCity)
             put("userDistrict", userDistrict)
+
+            // kakao_id와 user_id 구분해서 전송
+            if (actualKakaoId != null) {
+                put("kakao_id", actualKakaoId)
+                put("user_id", JSONObject.NULL)  // null 값 명시적 전송
+            } else {
+                put("kakao_id", JSONObject.NULL)  // null 값 명시적 전송
+                put("user_id", actualUserId)
+            }
+
+            // 세션 ID도 추가
+            put("session_id", sessionId)
         }
 
         val mediaType = "application/json; charset=utf-8".toMediaType()
